@@ -162,3 +162,29 @@ def test_camcorder_mpeg_ps_trim_starts_timecode_and_sound_at_zero(tmp_path: Path
     assert all(abs(float(x)) < 0.03 for x in starts)
     out = probe(r.output)
     assert (out.width, out.height) == (1440, 1080)  # true 4:3, upscaled
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_preview_at_the_very_end_never_hangs(tmp_path: Path):
+    """The looped burn-in images have an end, and previews stay clear of the last moment
+    (camera files can hold sound past their last picture: no frame there, endless images)."""
+    import subprocess
+    import time
+
+    from listo.core.video import preview_plan
+
+    clip = tmp_path / "end.mpg"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:r=30000/1001:d=2", "-f", "lavfi", "-i", "sine=d=3",
+       "-c:v", "mpeg2video", "-c:a", "mp2", "-f", "vob", str(clip))  # fmt: skip
+    info = probe(clip)
+    s = Settings(video_preset="h264", burn_timecode=True, burn_datetime=True, burn_style="vhs")
+    args, plan = preview_plan(str(clip), info, s, capabilities(), info.duration, str(tmp_path / "p.png"))
+    try:
+        for i, a in enumerate(args):
+            if a == "-loop":
+                assert "-t" in args[i : args.index("-i", i)]  # every looped image stops
+        t = time.monotonic()
+        subprocess.run([capabilities().ffmpeg, *args], capture_output=True, timeout=20)
+        assert time.monotonic() - t < 10
+    finally:
+        plan.cleanup()

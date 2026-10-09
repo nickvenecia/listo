@@ -442,7 +442,8 @@ def build(
     if not burn.empty:
         # Burn-in / caption images are extra inputs, so the picture goes through a filter graph.
         first = args.index("-i") + 2
-        args[first:first] = burn.input_args(_out_rate(info, s, doubled) or "25")
+        length = (trim[1] - trim[0]) if trim else info.duration
+        args[first:first] = burn.input_args(_out_rate(info, s, doubled) or "25", length)
         # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
         # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
         pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
@@ -532,7 +533,9 @@ def preview_plan(
         s = s.copy()
         s.video_preset = "h264"  # same look; a GIF's palette step needs the whole clip
     length = max(info.duration, 0.1)
-    at = min(max(0.0, at), max(0.0, length - 0.05))
+    # Stay half a second clear of the end: camera files often hold sound past their last picture
+    # (MPEG program streams start the picture later), so "the last moment" can have no frame.
+    at = min(max(0.0, at), max(0.0, length - min(0.5, length / 4)))
     plan = build(src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)), captions=captions)
     a = plan.args
     first_map = a.index("-map")

@@ -52,11 +52,14 @@ class BurnPlan:
     def empty(self) -> bool:
         return not self.layers and self.captions is None
 
-    def input_args(self, rate: str) -> list[str]:
-        """ffmpeg input options for the images (in the order graph() numbers them)."""
+    def input_args(self, rate: str, length: float = 0.0) -> list[str]:
+        """ffmpeg input options for the images (in the order graph() numbers them). `length` = how long
+        the picture runs: the looped images stop a second after it, so ffmpeg can never run forever
+        (it did when a seek landed after the last frame: no picture, endless images)."""
         args: list[str] = []
+        stop = ["-t", f"{length + 1:.3f}"] if length > 0 else []
         for img in self.images():
-            args += ["-framerate", rate, "-loop", "1", "-i", str(img)]
+            args += ["-framerate", rate, "-loop", "1", *stop, "-i", str(img)]
         if self.captions:
             args += ["-f", "concat", "-safe", "0", "-i", str(self.captions)]
         return args

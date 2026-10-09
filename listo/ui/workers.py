@@ -284,7 +284,7 @@ class PreviewTask(QRunnable):
                 [caps.ffmpeg, *args],
                 stdin=subprocess.DEVNULL,
                 capture_output=True,
-                timeout=60,
+                timeout=30,
                 **popen_kwargs(),
             )
             if cp.returncode == 0:

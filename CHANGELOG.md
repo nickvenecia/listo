@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Fix: a preview frame at the very end of a camcorder clip (with burn-ins on) could keep ffmpeg busy at full speed for a minute; previews stay just before the end, and burn-in layers always stop with the clip
 - Fix: a crash when playing some camcorder clips (.MOD) on a Mac. Playback inside Listo no longer uses the Mac's hardware video decoder, and a clip only opens in the player once you press Play. Any hard crash is now written to crash.log next to the log file
 - Changing caption accuracy (Fast / Balanced / Most Accurate) or picking a language now redoes the captions in the background; clips you fixed by hand ask first
 - **Play videos inside Listo**: double-click a clip to play it with sound; the Export preview and the Preview window play too. Paused shows the exact result (LUT, frame, burn-ins, captions); playing shows the clip with its captions

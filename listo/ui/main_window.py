@@ -1629,8 +1629,10 @@ class MainWindow(QMainWindow):
         if job is None:
             return
         if job.thread is not None:
-            job.thread.wait(2000)
-            job.thread.deleteLater()
+            if job.thread.wait(15000):
+                job.thread.deleteLater()
+            else:
+                _ORPHANS.append(job.thread)  # never let go of a QThread that's still running (crashes)
         ids = [i for i in job.ids if i in job.parts and i in self.items]
         left_out = [i for i in job.ids if i not in job.parts and i in self.items]
         if r.status == "done" and left_out:
