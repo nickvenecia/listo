@@ -100,6 +100,10 @@ def hide_mac_title(window: QWidget) -> bool:
     """[window.nsWindow setTitleVisibility:NSWindowTitleHidden]. False if it couldn't (the title shows)."""
     if sys.platform != "darwin":
         return False
+    from PySide6.QtGui import QGuiApplication
+
+    if QGuiApplication.platformName() != "cocoa":
+        return False  # offscreen (tests, smoke test): winId() isn't an NSView, and asking it crashes
     try:
         import ctypes
         import ctypes.util

@@ -5,6 +5,7 @@ Run all tests with:  python -m pytest   (tests that need ffmpeg skip themselves 
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -133,7 +134,8 @@ def test_filter_escaping():
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_lut_and_burnins(tmp_path: Path):
-    d = tmp_path / "odd: dir, with 'quotes'"
+    # ':' can't be in a Windows folder name (it's what makes C: a drive); everything else can
+    d = tmp_path / ("odd dir, with 'quotes'" if sys.platform == "win32" else "odd: dir, with 'quotes'")
     d.mkdir()
     lut = d / "look.cube"
     lut.write_text(
