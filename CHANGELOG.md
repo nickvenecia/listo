@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- JVC camcorder clips (.MOD / .TOD) read their matching .MOI automatically: real recording date (for Date & time burn-ins and {date} names) and the true 4:3 / 16:9 shape. .MOI and other camera sidecar files are left out of the list
 - **Burn-ins work with any copy of ffmpeg**: Listo draws the text itself (no more greyed-out checkboxes with Homebrew's ffmpeg); timecode is frame-accurate, drop-frame included
 - **Preview**: see one frame of the selected clip (or the first) exactly as it will come out, compare with the original, scrub to any moment
 - **Upscaling**: Size is the size you get, up or down (720×480 4:3 camcorder footage at 1080 → 1440×1080, true shape)

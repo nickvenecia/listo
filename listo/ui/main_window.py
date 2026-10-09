@@ -45,7 +45,15 @@ from ..core.presets import (
     Settings,
     format_label,
 )
-from ..core.probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_duration, kind_from_ext
+from ..core.probe import (
+    KNOWN_EXTS,
+    SIDECAR_EXTS,
+    UNSUPPORTED_HINTS,
+    MediaInfo,
+    ext_of,
+    fmt_duration,
+    kind_from_ext,
+)
 from ..core.tools import capabilities
 from . import theme, tokens
 from .export_dialog import ExportDialog
@@ -595,9 +603,9 @@ class MainWindow(QMainWindow):
                             continue
                         if ext_of(fn) in KNOWN_EXTS:
                             to_add.append((os.path.join(root, fn), False))
-                        else:
+                        elif ext_of(fn) not in SIDECAR_EXTS:  # camera sidecars are read, not listed
                             skipped += 1
-            elif pp.is_file():
+            elif pp.is_file() and ext_of(pp) not in SIDECAR_EXTS:
                 to_add.append((str(pp), True))
         fresh = []
         for path, _explicit in to_add:
@@ -617,7 +625,8 @@ class MainWindow(QMainWindow):
             msgs.append(f"{dupes} already in the list")
         if skipped:
             msgs.append(
-                f"skipped {skipped} file{'s' if skipped != 1 else ''} that aren't video, photo or audio"
+                f"skipped {skipped} file{'s' if skipped != 1 else ''} that "
+                f"{'aren' if skipped != 1 else 'isn'}'t video, photo or audio"
             )
         if added:
             self._show_summary = False

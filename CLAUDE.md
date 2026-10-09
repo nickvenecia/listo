@@ -69,6 +69,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins.
 - `frame.frame_plan` also returns the picture area (fractions, without bars); burnin.plan keeps everything inside it.
 - Sidebar.VIDEO_ADVANCED / PHOTO_ADVANCED list the settings counted in the "Advanced options · N changed" header; add new advanced settings there.
+- Camera sidecars (probe.SIDECAR_EXTS) are never listed. JVC .MOI next to .MOD/.TOD is read in probe (read_moi):
+  recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
   starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.

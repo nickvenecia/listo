@@ -117,10 +117,66 @@ UNSUPPORTED_HINTS = {
 }
 
 KNOWN_EXTS = VIDEO_EXTS | AUDIO_EXTS | IMAGE_EXTS
+# Files cameras write next to the clips. Listo reads what it needs from them (JVC .MOI: recording
+# date + true aspect ratio) and leaves them out of the list instead of calling them unknown files.
+SIDECAR_EXTS = {"moi", "thm", "pgi", "tid", "xml", "ifo", "bup", "mpl", "cpi", "bdm", "lrv"}
 
 
 def ext_of(path: str | Path) -> str:
     return Path(path).suffix.lower().lstrip(".")
+
+
+@dataclass
+class MoiInfo:
+    """What a JVC Everio .MOI file says about its .MOD / .TOD clip."""
+
+    recorded: datetime | None = None  # camera clock: the local time where it was shot
+    widescreen: bool | None = None  # True 16:9, False 4:3, None unknown
+    pal: bool | None = None
+
+
+def find_moi(clip: str | Path) -> Path | None:
+    """The .MOI next to a .MOD / .TOD clip (same name, any letter case)."""
+    p = Path(clip)
+    if ext_of(p) not in ("mod", "tod"):
+        return None
+    for cand in (p.with_suffix(".MOI"), p.with_suffix(".moi")):
+        if cand.is_file():
+            return cand
+    try:  # case-sensitive disks (Linux) with odd capitalisation
+        stem = p.stem.lower()
+        return next(
+            (c for c in p.parent.iterdir() if c.suffix.lower() == ".moi" and c.stem.lower() == stem), None
+        )
+    except OSError:
+        return None
+
+
+def read_moi(path: str | Path) -> MoiInfo:
+    """Parse a JVC .MOI (layout as documented by ExifTool's JVC MOI tags):
+    0x00 'V6' version, 0x06 year (2 bytes), 0x08 month, 0x09 day, 0x0A hour, 0x0B minute,
+    0x0C milliseconds into the minute (2 bytes), 0x80 aspect / TV system byte."""
+    info = MoiInfo()
+    try:
+        data = Path(path).read_bytes()[:0x100]
+    except OSError:
+        return info
+    if len(data) < 0x0E or not data.startswith(b"V"):
+        return info
+    year = int.from_bytes(data[6:8], "big")
+    month, day, hour, minute = data[8], data[9], data[10], data[11]
+    ms = int.from_bytes(data[12:14], "big")
+    try:
+        if 1990 <= year <= 2100:
+            info.recorded = datetime(year, month, day, hour, minute, min(59, ms // 1000), (ms % 1000) * 1000)
+    except ValueError:
+        pass
+    if len(data) > 0x80:
+        b = data[0x80]
+        lo, hi = b & 0x0F, b >> 4
+        info.widescreen = True if lo in (4, 5) else False if lo < 2 else None
+        info.pal = True if hi == 5 else False if hi == 4 else None
+    return info
 
 
 def kind_from_ext(path: str | Path) -> str:
@@ -470,6 +526,13 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
                 except ValueError:
                     pass
         info.sar = _sar(video.get("sample_aspect_ratio", ""))
+        moi = find_moi(path)
+        if moi:  # JVC camcorders: the .MOI knows the real date and shape (the MPEG header often doesn't)
+            m = read_moi(moi)
+            if m.recorded and not info.created:
+                info.created = m.recorded
+            if m.widescreen is not None and info.width and info.height:
+                info.sar = (16 / 9 if m.widescreen else 4 / 3) / (info.width / info.height)
         if rot in (90, 270):
             info.width, info.height = info.height, info.width
             info.sar = 1 / info.sar

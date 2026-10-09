@@ -140,3 +140,34 @@ def test_scrolling_over_a_dropdown_never_changes_it():
     assert c.currentIndex() == 0
     assert area.verticalScrollBar().value() > 0
     app.removeEventFilter(guard)
+
+
+def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.main_window
+    import listo.ui.sidebar
+
+    ini = str(tmp_path / "listo-test.ini")
+    for mod in (listo.ui.main_window, listo.ui.sidebar):
+        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
+    from listo.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication([])
+    folder = tmp_path / "SD_VIDEO"
+    folder.mkdir()
+    for name in ("MOV01A.MOD", "MOV01A.MOI", "MOV01A.THM", "notes.txt"):
+        (folder / name).write_bytes(b"x")
+    w = MainWindow()
+    w.add_paths([str(folder)])
+    names = sorted(Path(it.path).name for it in w.items.values())
+    assert names == ["MOV01A.MOD"]
+    assert "skipped 1 file that isn't" in w.toast.text().lower()  # only notes.txt counts as skipped
+    w.add_paths([str(folder / "MOV01A.MOI")])  # dropped on its own: still not listed
+    assert len(w.items) == 1
+    w.close()
+    app.processEvents()
