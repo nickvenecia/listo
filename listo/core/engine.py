@@ -98,7 +98,8 @@ class Conversion:
         return (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
 
     def _wrap_blue(self, tmp: Path, conform, muxer: str, notes: list[str]) -> None:
-        """Tape effect: VCR blue screen before and after the video, joined on without re-encoding."""
+        """Tape effect: a screen (VCR blue, black, bars, a color) before and after the video, joined on
+        without re-encoding."""
         import shutil
 
         from .join import concat_args
@@ -112,7 +113,7 @@ class Conversion:
                 out = folder / f"{name}{tmp.suffix}"
                 r = tape.make_blue(out, conform, self.s, self.caps, tape.blue_badge(self.s, name), area)
                 if r.status != "done":
-                    notes.append("Blue screen skipped (couldn't make it).")
+                    notes.append("Start and end screen skipped (couldn't make it).")
                     log.warning("blue screen failed: %s", r.message)
                     return
                 pieces.append(out)
@@ -124,7 +125,7 @@ class Conversion:
             self._ff.run(None)
             os.replace(wrapped, tmp)
             self.blue_added = tape.BLUE_SECONDS
-            notes.append("Blue screen added at the start and end.")
+            notes.append("Screen added at the start and end.")
         finally:
             shutil.rmtree(folder, ignore_errors=True)
 
@@ -219,7 +220,9 @@ class Conversion:
 
                     conform = conform_for(self.info, self.s)
                 marks = self.marks
-                if self.blue and marks is None:  # PLAY carries on from the blue screen, STOP before the end
+                if (
+                    marks is None and self.target is None
+                ):  # a video of its own: PLAY at the start, STOP at the end
                     marks = tape.marks(self.s, self._length(), first=True, last=True)
                 plan = video.build(
                     self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions,

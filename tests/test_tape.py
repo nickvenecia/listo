@@ -1,4 +1,5 @@
-"""Tape effects: blue screen at the start and end, glitches at joined cuts, random glitches."""
+"""Tape effects (VHS look only): a screen at the start and end, glitches at joined cuts, random
+glitches, PLAY / STOP."""
 
 from __future__ import annotations
 
@@ -18,24 +19,32 @@ from listo.core.tools import capabilities
 from .helpers import HAS_FFMPEG, ff
 
 
+def _vhs(**kw) -> Settings:
+    """Tape effects belong to the VHS Camcorder Look (burn-ins on, VHS style)."""
+    return Settings(burn_timecode=True, burn_style="vhs", **kw)
+
+
 def test_glitch_moments_are_steady_and_follow_the_settings():
     info = MediaInfo(kind="video", duration=600.0)
-    rare = tape.glitch_windows(Settings(tape_glitches="rare"), "/x/MOV01A.MOD", info, None)
-    often = tape.glitch_windows(Settings(tape_glitches="often"), "/x/MOV01A.MOD", info, None)
+    rare = tape.glitch_windows(_vhs(tape_glitches="rare"), "/x/MOV01A.MOD", info, None)
+    often = tape.glitch_windows(_vhs(tape_glitches="often"), "/x/MOV01A.MOD", info, None)
     assert 3 <= len(rare) <= 12 and len(often) > len(rare)  # ~every 90 s vs ~every 30 s
     assert rare == tape.glitch_windows(
-        Settings(tape_glitches="rare"), "/x/MOV01A.MOD", info, None
+        _vhs(tape_glitches="rare"), "/x/MOV01A.MOD", info, None
     )  # same every time
-    assert all(0.12 <= b - a <= 0.35 for a, b in rare)
-    assert tape.glitch_windows(Settings(), "/x/a.mov", info, None) == []  # off by default
-    cut = tape.glitch_windows(Settings(tape_cut_glitch=True), "/x/a.mov", info, None, cut=True)
+    assert all(0.25 <= b - a <= 0.5 for a, b in rare)
+    assert tape.glitch_windows(_vhs(), "/x/a.mov", info, None) == []  # off by default
+    cut = tape.glitch_windows(_vhs(tape_cut_glitch=True), "/x/a.mov", info, None, cut=True)
     assert cut == [(0.0, tape.CUT_GLITCH_S)]
-    assert tape.glitch_windows(Settings(tape_cut_glitch=True), "/x/a.mov", info, None, cut=False) == []
-    trimmed = tape.glitch_windows(Settings(tape_glitches="often"), "/x/MOV01A.MOD", info, (100.0, 200.0))
+    assert tape.glitch_windows(_vhs(tape_cut_glitch=True), "/x/a.mov", info, None, cut=False) == []
+    trimmed = tape.glitch_windows(_vhs(tape_glitches="often"), "/x/MOV01A.MOD", info, (100.0, 200.0))
     assert all(0 <= a < b <= 100 for a, b in trimmed)  # moved onto the trimmed clip's own clock
-    assert (
-        tape.glitch_windows(Settings(video_preset="rewrap", tape_glitches="often"), "/x/a", info, None) == []
-    )
+    assert tape.glitch_windows(_vhs(video_preset="rewrap", tape_glitches="often"), "/x/a", info, None) == []
+    # only with the VHS look: the clean look, or no burn-ins, means no tape effects at all
+    assert tape.glitch_windows(Settings(tape_glitches="often"), "/x/a", info, None) == []
+    clean = _vhs(tape_glitches="often", tape_blue=True)
+    clean.burn_style = "clean"
+    assert tape.glitch_windows(clean, "/x/a", info, None) == [] and not tape.wants_blue(clean)
 
 
 def _clip(path: Path, secs: int = 2) -> Path:
@@ -52,8 +61,8 @@ def _frame(video: Path, at: float, out: Path) -> tuple[int, int, int]:
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_single_video_gets_blue_screen_and_glitches(tmp_path: Path):
     src = _clip(tmp_path / "a.mp4")
-    s = Settings(video_preset="h264", tape_blue=True, tape_glitches="often", captions=True, caption_srt=True,
-                 destination="folder", dest_folder=str(tmp_path / "out"))  # fmt: skip
+    s = _vhs(video_preset="h264", tape_blue=True, tape_glitches="often", captions=True, caption_srt=True,
+             destination="folder", dest_folder=str(tmp_path / "out"))  # fmt: skip
     r = Conversion(str(src), probe(src), s, capabilities(), set(), captions=[Cue(0.5, 1.5, "Hi.")]).run()
     assert r.status == "done", (r.message, r.log)
     assert not r.warning, r.warning  # the length check knows about the blue screen
@@ -69,17 +78,44 @@ def test_single_video_gets_blue_screen_and_glitches(tmp_path: Path):
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_glitch_filters_go_on_picture_and_sound(tmp_path: Path):
     src = _clip(tmp_path / "a.mp4")
-    s = Settings(video_preset="h264", tape_cut_glitch=True)
+    s = _vhs(video_preset="h264", tape_cut_glitch=True)
     r = Conversion(str(src), probe(src), s, capabilities(), set(), cut=True).run()
     assert r.status == "done", (r.message, r.log)
     cmd = " ".join(r.command)
-    assert "rgbashift" in cmd and "noise=" in cmd and "acrusher" in cmd and "between(t,0.000,0.200)" in cmd
+    assert "geq=" in cmd and "acrusher" in cmd and "tremolo" in cmd
+    assert f"between(t,0.000,{tape.CUT_GLITCH_S:.3f})" in cmd
+    # the picture really changes during the glitch, and is untouched after it
+    plain = Conversion(str(src), probe(src), _vhs(video_preset="h264"), capabilities(), set()).run()
+    hit = _diff(r.output, plain.output, 0.12, tmp_path)
+    after = _diff(r.output, plain.output, 1.2, tmp_path)
+    assert hit > 8 and after < 2, (hit, after)
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_glitch_keeps_ten_bit_pictures_in_range(tmp_path: Path):
+    """ProRes is 10-bit: the glitch works in the encoder's own pixel format (0-1023, not 0-255)."""
+    src = _clip(tmp_path / "a.mp4")
+    s = _vhs(video_preset="prores", tape_cut_glitch=True)
+    r = Conversion(str(src), probe(src), s, capabilities(), set(), cut=True).run()
+    assert r.status == "done", (r.message, r.log)
+    assert "format=yuv422p10le" in " ".join(r.command)
+    plain = Conversion(str(src), probe(src), _vhs(video_preset="prores"), capabilities(), set()).run()
+    assert _diff(r.output, plain.output, 1.2, tmp_path) < 2  # same brightness once it's over
+
+
+def _diff(a: Path, b: Path, at: float, tmp: Path) -> float:
+    """Average difference (0-255) between two videos' frames at `at`."""
+    fa, fb = tmp / "da.png", tmp / "db.png"
+    ff("-ss", f"{at}", "-i", str(a), "-frames:v", "1", str(fa))
+    ff("-ss", f"{at}", "-i", str(b), "-frames:v", "1", str(fb))
+    x, y = Image.open(fa).convert("L").tobytes(), Image.open(fb).convert("L").tobytes()
+    return sum(abs(p - q) for p, q in zip(x, y, strict=True)) / len(x)
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_joined_video_gets_one_blue_screen_around_it(tmp_path: Path):
     a, b = _clip(tmp_path / "a.mp4"), _clip(tmp_path / "b.mp4")
-    s = Settings(video_preset="prores", join=True, tape_blue=True, tape_cut_glitch=True)
+    s = _vhs(video_preset="prores", join=True, tape_blue=True, tape_cut_glitch=True)
     folder = join.parts_folder(str(a), s)
     folder.mkdir()
     conform = join.conform_for(probe(a), s)
@@ -101,22 +137,52 @@ def test_joined_video_gets_one_blue_screen_around_it(tmp_path: Path):
     assert out.count("video") == 1 and out.count("audio") == 1
 
 
-def test_play_and_stop_marks_follow_the_vcr_badge():
-    vcr = Settings(
-        video_preset="h264", tape_blue=True, burn_timecode=True, burn_style="vhs", burn_badge="play"
-    )
-    m = tape.marks(vcr, 10.0, first=True, last=True)
-    assert m.play_until == 4.0 - tape.BLUE_SECONDS  # PLAY blinks on the blue screen, then on into the footage
+def test_play_and_stop_marks():
+    s = _vhs(video_preset="h264", tape_blue=True, burn_badge="play", burn_stop=True)
+    m = tape.marks(s, 10.0, first=True, last=True)
+    assert (
+        m.play_until == 4.0 - tape.BLUE_SECONDS
+    )  # PLAY blinks on the start screen, then on into the footage
     assert abs(m.stop_at - (10.0 - tape.STOP_FRAMES_S)) < 1e-9  # STOP on the last frames
-    middle = tape.marks(vcr, 10.0, first=False, last=False)
+    middle = tape.marks(s, 10.0, first=False, last=False)
     assert middle.play_until == 0 and middle.stop_at is None  # joined clips in between: neither
-    assert tape.blue_badge(vcr, "start") == "play" and tape.blue_badge(vcr, "end") == "stop"
-    plain = vcr.copy()
-    plain.burn_badge = "rec"
-    assert tape.marks(plain, 10.0, True, True) is None and tape.blue_badge(plain, "end") == ""
-    no_blue = vcr.copy()
-    no_blue.tape_blue = False
-    assert tape.marks(no_blue, 10.0, True, True) is None
+    assert tape.blue_badge(s, "start") == "play" and tape.blue_badge(s, "end") == "stop"
+
+    no_stop = s.copy()
+    no_stop.burn_stop = False  # STOP is its own switch
+    assert tape.marks(no_stop, 10.0, True, True).stop_at is None and tape.blue_badge(no_stop, "end") == ""
+
+    rec = s.copy()
+    rec.burn_badge = "rec"  # REC and STOP go together fine; no PLAY on the start screen
+    assert tape.blue_badge(rec, "start") == "" and tape.marks(rec, 10.0, True, True).stop_at is not None
+
+    alone = s.copy()
+    alone.tape_blue = False  # no screen: PLAY for 4 s, STOP for the last second
+    m = tape.marks(alone, 10.0, True, True)
+    assert m.play_until == 4.0 and abs(m.stop_at - (10.0 - tape.STOP_ALONE_S)) < 1e-9
+
+    clean = s.copy()
+    clean.burn_style = "clean"
+    assert tape.marks(clean, 10.0, True, True) is None and tape.blue_badge(clean, "start") == ""
+
+
+def test_screen_choices():
+    from listo.core.video import Conform
+
+    conform = Conform(1920, 1080, "25")
+    s = _vhs(tape_blue=True)
+    assert tape.screen_color(s) == tape.BLUE  # VCR blue by default
+    s.tape_screen = "black"
+    assert tape.screen_color(s) == "0x000000"
+    s.tape_screen, s.tape_screen_color = "color", "#ff8800"
+    assert tape.screen_color(s) == "0xFF8800"
+    s.tape_screen_color = "nonsense"
+    assert tape.screen_color(s) == tape.BLUE
+    s.tape_screen = "bars"
+    video, audio = tape.screen_sources(s, conform, 2.0)
+    assert video.startswith("smptehdbars=") and "sine=f=1000" in audio and "pan=stereo" in audio
+    sd, _ = tape.screen_sources(s, Conform(720, 480, "30000/1001"), 2.0)
+    assert sd.startswith("smptebars=")  # 4:3 tapes get the classic bars
 
 
 def _bright_top_left(video: Path, at: float, out: Path) -> int:
@@ -130,14 +196,43 @@ def _bright_top_left(video: Path, at: float, out: Path) -> int:
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
-def test_play_on_the_blue_start_and_stop_into_the_blue_end(tmp_path: Path):
+def test_play_on_the_start_screen_and_stop_into_the_end_screen(tmp_path: Path):
     src = _clip(tmp_path / "a.mp4")
-    s = Settings(video_preset="h264", tape_blue=True, burn_timecode=True, burn_style="vhs", burn_badge="play")
+    s = _vhs(video_preset="h264", tape_blue=True, burn_badge="play", burn_stop=True)
     r = Conversion(str(src), probe(src), s, capabilities(), set()).run()
     assert r.status == "done", (r.message, r.log)
     d = probe(r.output).duration
     assert _bright_top_left(r.output, 0.2, tmp_path / "p.png") > 20  # PLAY on the blue screen
-    assert (
-        _bright_top_left(r.output, d - tape.BLUE_SECONDS + 0.5, tmp_path / "s.png") > 20
-    )  # STOP on the blue end
-    assert _bright_top_left(r.output, d - 0.2, tmp_path / "e.png") == 0  # then the blue is clean
+    assert _bright_top_left(r.output, d - tape.BLUE_SECONDS + 0.5, tmp_path / "s.png") > 20  # STOP on the end
+    assert _bright_top_left(r.output, d - 0.2, tmp_path / "e.png") == 0  # then the screen is clean
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_stop_without_a_screen_and_off_by_default(tmp_path: Path):
+    src = _clip(tmp_path / "a.mp4", secs=3)
+    on = _vhs(video_preset="h264", burn_badge="none", burn_stop=True, naming="{name}_stop")
+    off = _vhs(video_preset="h264", burn_badge="none", naming="{name}_plain")
+    r_on = Conversion(str(src), probe(src), on, capabilities(), set()).run()
+    r_off = Conversion(str(src), probe(src), off, capabilities(), set()).run()
+    assert r_on.status == r_off.status == "done"
+    assert _bright_top_left(r_on.output, 2.6, tmp_path / "a.png") > 20  # STOP for the last second
+    assert _bright_top_left(r_on.output, 1.0, tmp_path / "b.png") < 5  # not before
+    assert _bright_top_left(r_off.output, 2.6, tmp_path / "c.png") < 5  # and only when switched on
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_color_bars_and_tone_screen(tmp_path: Path):
+    src = _clip(tmp_path / "a.mp4")
+    s = _vhs(video_preset="h264", tape_blue=True, tape_screen="bars")
+    r = Conversion(str(src), probe(src), s, capabilities(), set()).run()
+    assert r.status == "done", (r.message, r.log)
+    ff("-ss", "0.5", "-i", str(r.output), "-frames:v", "1", str(tmp_path / "bars.png"))
+    im = Image.open(tmp_path / "bars.png").convert("RGB")
+    w, h = im.size
+    left, right = im.getpixel((w // 10, h // 3)), im.getpixel((w * 6 // 10, h // 3))
+    assert left != right and max(left) > 150  # bars, not one flat color
+    level = subprocess.run(
+        [capabilities().ffmpeg, "-v", "info", "-t", "1", "-i", str(r.output), "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True,
+    ).stderr  # fmt: skip
+    assert "mean_volume: -2" in level  # the 1 kHz tone at about -20 dBFS (sine RMS is 3 dB under its peak)

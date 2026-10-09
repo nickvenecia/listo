@@ -467,7 +467,8 @@ def build(
             cut_at = graph.rfind("[vout]")
             graph = graph[:cut_at] + "[gin]" + graph[cut_at + len("[vout]") :]
             size = (conform.width, conform.height) if conform and conform.width else out_size
-            graph += ";" + tape.video_graph(windows, size, "gin", "vout")
+            pix = vargs[vargs.index("-pix_fmt") + 1] if "-pix_fmt" in vargs else ""
+            graph += ";" + tape.video_graph(windows, size, "gin", "vout", pix)
         args += ["-filter_complex", graph]
         args[args.index(f"0:{info.video_index}")] = "[vout]"
     elif vf:

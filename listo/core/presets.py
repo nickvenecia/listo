@@ -293,6 +293,7 @@ class Settings:
     burn_datetime: bool = False  # the clip's own date + a running clock
     burn_style: str = "clean"  # see BURN_STYLES
     burn_badge: str = "play"  # VHS style: "play" (PLAY ► blinks, then goes), "rec" (● REC), "none"
+    burn_stop: bool = False  # VHS style: STOP ■ on the last moment of the video (and its end screen)
     desqueeze: str = "1"  # anamorphic squeeze factor, see DESQUEEZE
     aspect: str = "orig"  # see ASPECT_CHOICES (frame.ASPECTS)
     aspect_fit: str = "crop"  # "crop" to fill, "bars" = pad to the new shape, "matte" = cinema bars on top
@@ -306,7 +307,9 @@ class Settings:
     caption_lines: int = 2
     caption_size: str = "medium"  # small / medium / large
     caption_srt: bool = False  # also save an .srt file next to the video
-    tape_blue: bool = False  # VCR blue screen at the start and end (core/tape.py)
+    tape_blue: bool = False  # a screen at the start and end (core/tape.py; VHS look only)
+    tape_screen: str = "blue"  # that screen: "blue" (VCR), "black", "bars" (color bars & tone), "color"
+    tape_screen_color: str = ""  # "#RRGGBB" for "color" ("" = VCR blue)
     tape_cut_glitch: bool = False  # a tracking glitch at each cut of a joined video
     tape_glitches: str = "off"  # random glitches through the video: "off", "rare", "often"
     verify: bool = True

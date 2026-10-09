@@ -105,6 +105,16 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.cc_on.setChecked(True)
     assert s.captions and sb.cc_box.isVisibleTo(sb)
     assert sb.burn_badge.isVisibleTo(sb)  # VHS style + a burn-in on
+    assert sb.burn_stop.isVisibleTo(sb) and sb.sec_tape.isVisibleTo(sb)  # STOP and tape effects too
+    assert not sb.tape_screen.isVisibleTo(sb)  # the screen choice shows once the screen is on
+    sb.tape_blue.setChecked(True)
+    assert s.tape_blue and sb.tape_screen.isVisibleTo(sb)
+    sb.tape_screen.setCurrentIndex(sb.tape_screen.findData("bars"))
+    sb._screen_picked(sb.tape_screen.currentIndex())
+    assert s.tape_screen == "bars"
+    sb.burn_style.setCurrentIndex(sb.burn_style.findData("clean"))
+    assert not sb.burn_stop.isVisibleTo(sb) and not sb.sec_tape.isVisibleTo(sb)  # VHS only
+    sb.burn_style.setCurrentIndex(sb.burn_style.findData("vhs"))
     w._fill_trash_menu()
     assert [a.text() for a in w.trash_menu.actions() if a.text()] == [
         "Remove Selected",

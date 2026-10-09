@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
+    QColorDialog,
     QComboBox,
     QFileDialog,
     QFrame,
@@ -35,9 +37,9 @@ from ..core.presets import (
     VIDEO_PRESETS,
     Settings,
 )
-from ..core.tape import NO_EFFECTS
+from ..core.tape import BLUE, NO_EFFECTS
 from ..core.tools import Capabilities
-from .tokens import SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
+from .tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
 from .widgets import (
     Disclosure,
     FitScroll,
@@ -108,8 +110,10 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "burn_timecode",
         "burn_filename",
         "burn_datetime",
+        "burn_stop",
         "captions",
         "tape_blue",
+        "tape_screen",
         "tape_cut_glitch",
         "tape_glitches",
     ),
@@ -298,18 +302,35 @@ class Sidebar(QFrame):
         self.burn_badge.currentIndexChanged.connect(
             lambda: self._set_and_sync("burn_badge", self.burn_badge.currentData())
         )
+        self.burn_stop = _checkbox(
+            "STOP ■ at the End", self.s.burn_stop, lambda v: self._set("burn_stop", v),
+            "STOP comes up for the last moment of the video, like pressing stop on a VCR "
+            "(with a start and end screen, the last frames, then on the end screen)",
+        )  # fmt: skip
 
         # ---- tape effects (core/tape.py)
         self.sec_tape = Section("Tape Effects")
         self.tape_blue = _checkbox(
-            "Blue Screen at Start and End", self.s.tape_blue, lambda v: self._set("tape_blue", v),
-            "Two seconds of VCR blue before the video starts and after it ends",
+            "Screen at Start and End", self.s.tape_blue, lambda v: self._set_and_sync("tape_blue", v),
+            "Two seconds of screen before the video starts and after it ends",
         )  # fmt: skip
+        self.tape_screen = combo(
+            [
+                ("blue", "VCR Blue", "The blue a VCR shows with no tape playing"),
+                ("black", "Black", ""),
+                ("bars", "Color Bars & Tone", "SMPTE bars with a 1 kHz tone, like the head of a tape"),
+                ("color", "Custom Color…", "Pick any color"),
+            ],
+            self.s.tape_screen,
+        )
+        self.tape_screen.activated.connect(self._screen_picked)
         self.tape_cut = _checkbox(
             "Glitch Between Joined Clips", self.s.tape_cut_glitch, lambda v: self._set("tape_cut_glitch", v),
-            "Half a second of tape tracking trouble at each cut, like a camcorder starting to record again",
+            "A third of a second of lost tracking at each cut, like a camcorder starting to record again",
         )  # fmt: skip
-        self.sec_tape.add(_checks(self.tape_blue, self.tape_cut))
+        self.sec_tape.add(_checks(self.tape_blue))
+        self.sec_tape.add(self.tape_screen)
+        self.sec_tape.add(_checks(self.tape_cut))
         self.tape_glitches = combo(
             [
                 ("off", "No Random Glitches", ""),
@@ -398,6 +419,7 @@ class Sidebar(QFrame):
         self.sec_cc.add(self.cc_box)
         self.sec_burn.add(self.burn_style)
         self.sec_burn.add(self.burn_badge)
+        self.sec_burn.add(_checks(self.burn_stop))
 
         speed = Section("Speed")
         self.v_hw = _checkbox(
@@ -544,7 +566,12 @@ class Sidebar(QFrame):
         """Burn-in and caption options only show when they're switched on."""
         self.tape_cut.setVisible(self.s.join)  # only joined videos have cuts
         self.burn_style.setVisible(self.s.burns)
-        self.burn_badge.setVisible(self.s.burns and self.s.burn_style == "vhs")
+        vhs = self.s.burns and self.s.burn_style == "vhs"
+        self.burn_badge.setVisible(vhs)
+        self.burn_stop.setVisible(vhs)
+        # Tape effects are part of the VHS look (core/tape.applies)
+        self.sec_tape.setVisible(vhs and self.s.video_preset not in NO_EFFECTS)
+        self.tape_screen.setVisible(self.s.tape_blue)
         self.cc_box.setVisible(self.s.captions)
 
     def _aspect_picked(self) -> None:
@@ -592,7 +619,6 @@ class Sidebar(QFrame):
         looks = p.key not in ("rewrap", "audio")
         self.sec_lut.setVisible(looks)
         self.sec_burn.setVisible(looks)
-        self.sec_tape.setVisible(p.key not in NO_EFFECTS)
         self.sec_frame.setVisible(looks)
         self._sync_frame()
         self._sync_text()
@@ -655,6 +681,28 @@ class Sidebar(QFrame):
         c.setCurrentIndex(max(0, c.findData(current)))
         c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
         c.blockSignals(False)
+
+    def _screen_picked(self, index: int) -> None:
+        key = self.tape_screen.itemData(index)
+        if key == "color":
+            start = QColor(self.s.tape_screen_color or "#" + BLUE[2:])
+            c = QColorDialog.getColor(start, self, "Screen Color")
+            if not c.isValid():
+                set_combo(self.tape_screen, self.s.tape_screen)  # cancelled: back to what it was
+                return
+            self.s.tape_screen_color = c.name().upper()
+        self._set("tape_screen", key)
+        self._sync_screen()
+
+    def _sync_screen(self) -> None:
+        """The Custom Color item shows its color."""
+        i = self.tape_screen.findData("color")
+        if self.s.tape_screen_color:
+            pm = QPixmap(ICON, ICON)
+            pm.fill(QColor(self.s.tape_screen_color))
+            self.tape_screen.setItemIcon(i, QIcon(pm))
+        else:
+            self.tape_screen.setItemIcon(i, QIcon())
 
     def _lut_picked(self, index: int) -> None:
         data = self.lut.itemData(index)
@@ -785,6 +833,7 @@ class Sidebar(QFrame):
                 (self.burn_style, self.s.burn_style),
                 (self.burn_badge, self.s.burn_badge),
                 (self.tape_glitches, self.s.tape_glitches),
+                (self.tape_screen, self.s.tape_screen),
                 (self.cc_lang, self.s.caption_language),
                 (self.cc_model, self.s.caption_model),
                 (self.cc_style, self.s.caption_style),
@@ -804,6 +853,7 @@ class Sidebar(QFrame):
                 (self.burn_dt, self.s.burn_datetime),
                 (self.cc_on, self.s.captions),
                 (self.tape_blue, self.s.tape_blue),
+                (self.burn_stop, self.s.burn_stop),
                 (self.tape_cut, self.s.tape_cut_glitch),
                 (self.cc_bg, self.s.caption_box),
                 (self.cc_srt, self.s.caption_srt),
@@ -827,6 +877,7 @@ class Sidebar(QFrame):
             self._sync_video()
             self._sync_photo()
             self._sync_lut()
+            self._sync_screen()
         finally:
             self._loading = False
         self._update_advanced()

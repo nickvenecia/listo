@@ -40,9 +40,12 @@ listo/
     fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
     paths.py       per-user folders: data_dir(), tools_dir(), log_dir(), downloads_dir() (~/Downloads/Listo)
     log.py         rotating log file (listo.log in log_dir(), 5 MB x 3); also printed to the terminal when run from one
-    tape.py        Tape effects: glitch_windows (cut + seeded random moments), video_graph / audio_filters (applied last in
-                   video.build, timeline-enabled filters), make_blue (a matching blue-screen piece joined on via
-                   join.concat_args; Conversion._wrap_blue for single videos, Join._add_blue for joined ones)
+    tape.py        Tape effects (VHS look only, tape.applies): glitch_windows (cut + seeded random moments),
+                   video_graph (one geq per glitch, enable-gated, modelled on ntsc-rs; per-line values cached
+                   in geq vars, so keep the expression's st/ld layout) / audio_filters, applied last in
+                   video.build; make_blue (a matching start/end screen piece: VCR blue, black, a color, or
+                   SMPTE bars + 1 kHz tone; joined on via join.concat_args; Conversion._wrap_blue for single
+                   videos, Join._add_blue for joined ones)
     storage.py     Storage & Cache: kinds of data in data_dir() with sizes, clear(key) (logs are emptied, not deleted)
     console.py     Debug console: opens the system terminal following the log files live (Mac .command file,
                    Windows PowerShell, Linux terminal); turns on DEBUG logging for the session
@@ -127,12 +130,17 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   joined video (one Convert = one tape, from 0); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for
   the burn-in and -timecode). Only the first part keeps the PLAY badge (REC stays on every part).
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
-- Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS). With the blue screen on, a single video is
+- Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS), and only with the VHS look (the sidebar's
+  Tape Effects section shows only then). With the blue screen on, a single video is
   conformed to itself (48 kHz stereo) so the blue pieces match; its .srt and length check shift by tape.BLUE_SECONDS.
-- VCR badges (tape.vcr: blue screen + VHS + PLAY badge): tape.marks() -> burnin.Marks(play_until, stop_at) passed
-  as Conversion(marks=) -> video.build -> burnin.plan. PLAY blinks on the start blue piece (make_blue badge="play")
-  and for the first 2 s of footage; STOP ■ from STOP_FRAMES_S before the end, then on the end blue piece for
-  STOP_SHOWS_S. Joined videos: only the first part gets play_until, only the last stop_at.
+- VCR badges (VHS look): tape.marks() -> burnin.Marks(play_until, stop_at) passed as Conversion(marks=) ->
+  video.build -> burnin.plan (single videos compute their own). PLAY (burn_badge "play") blinks 4 s; with a start
+  screen the first 2 s are on it (make_blue badge="play"). STOP ■ (Settings.burn_stop, its own switch) shows from
+  STOP_FRAMES_S before the end and then on the end screen for STOP_SHOWS_S, or for the last STOP_ALONE_S without a
+  screen. Joined videos: only the first part gets play_until, only the last stop_at.
+- geq gotchas: W/H/X/Y are the CURRENT plane's (chroma is smaller), vars are st/ld 0-9 only, and pow() of a
+  negative number is NaN (which turns the whole shift into garbage). The glitch runs in the encoder's own
+  pixel format (format=<-pix_fmt> first) so 10-bit uses 0-1023. Don't use vibrato (NaN on some camcorder sound).
 - presets.SESSION_ONLY (captions, join) reset to off at every launch; everything else in Settings is remembered.
 - ClipPlayer.step(-1/+1) = the previous / next clip arrows; owners call set_steps(has_prev, has_next).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.

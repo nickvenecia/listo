@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **STOP ■ at the End** is its own switch under the PLAY badge (VHS look): STOP comes up for the last moment of the video like pressing stop on a VCR, carrying on to the end screen if there is one
+- **Tape glitches look like real lost tracking** now, modelled on ntsc-rs (the open-source VHS emulator used as an After Effects / Resolve plugin): the lines wave sideways, a band of torn lines and snow rolls up the picture, the bottom bends (head switching), the picture hops, color slips and drops out, and the sound flutters, goes dull and crunches. It hits at once and settles, about a third of a second at each cut
+- **Start and end screen**: VCR blue, black, SMPTE color bars with a 1 kHz tone, or any color you pick
+- Tape Effects only show (and only apply) with the VHS Camcorder Look
 - Tape Effects feel more like a real VCR: the glitch at joined cuts is shorter (about 6 frames) and subtler (a small sideways jolt, a faint band, a touch of color split), random glitches last a third of a second at most. With the blue screen and the VHS PLAY badge, PLAY blinks on the blue screen and carries on into the footage; at the end, **STOP ■** comes up on the last frames of the clip and stays on the blue screen, like pressing stop
 - **Tape Effects** (Burn-In group): VCR blue screen at the start and end, a tracking glitch at each cut of a joined video, and random glitches now and then or often. The picture jitters, a noise band rolls through, colors split and the sound crunches; random moments are the same in the preview and the file
 - **Storage & Cache** (the ⋯ menu in the bottom bar, or Help): see what Listo keeps on your computer (speech models, saved captions, link tools, logs, small extras), how big it is, and delete any of it. Settings, recipes and your files are never touched

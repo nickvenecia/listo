@@ -1,18 +1,21 @@
-"""Tape effects: VCR blue screen at the start and end, tracking glitches at joined cuts, and rare
-random glitches through a video. All drawn by Listo's own ffmpeg; all off unless switched on.
+"""Tape effects, part of the VHS Camcorder Look: a screen at the start and end (VCR blue, black,
+color bars & tone, or any color), tracking glitches at joined cuts, and random glitches through a
+video. All drawn by Listo's own ffmpeg; all off unless switched on, and only with the VHS look.
 
-A glitch is a fifth of a second (random ones up to a third) where the picture jolts sideways, a faint band rolls down it, the
-colors split and grain spikes, and the sound dips and crunches, like a camcorder tape restarting.
-Random glitch moments come from the clip's name, so the preview and the finished file glitch at
-exactly the same moments.
+A glitch is a third of a second of lost tracking, modelled on ntsc-rs (an open-source VHS
+emulator): the lines wave sideways, a band of torn lines and snow rolls up the picture, the bottom
+bends (head switching), the picture hops, color slips and drops out, the sound flutters and
+crunches. Random glitch moments come from the clip's name, so the preview and the finished file
+glitch at exactly the same moments.
 
-The blue screen is made as its own short piece with the same encoder settings as the video
+The screen is made as its own short piece with the same encoder settings as the video
 (make_blue), then joined on without re-encoding (join.concat), like the parts of a joined video.
 """
 
 from __future__ import annotations
 
 import random
+import re
 import subprocess
 import tempfile
 import zlib
@@ -24,13 +27,15 @@ from .tools import Capabilities, popen_kwargs
 
 BLUE = "0x1E2EE6"  # a VCR's blue screen
 BLUE_SECONDS = 2.0
-CUT_GLITCH_S = 0.2  # the glitch at each cut of a joined video (about 6 frames: the tape catching)
+CUT_GLITCH_S = 0.33  # the glitch at each cut of a joined video (about 10 frames: the tape catching)
 GLITCH_EVERY = {"rare": 90.0, "often": 30.0}  # random glitches: about one per this many seconds
 NO_EFFECTS = ("rewrap", "gif", "audio")  # copies, palettes and sound-only can't take them
 
 
 def applies(s: Settings) -> bool:
-    return s.video_preset not in NO_EFFECTS
+    """Tape effects belong to the VHS Camcorder Look (burn-ins on, VHS style) and to formats that
+    re-encode the picture."""
+    return s.video_preset not in NO_EFFECTS and s.burns and s.burn_style == "vhs"
 
 
 def wants_blue(s: Settings) -> bool:
@@ -54,7 +59,7 @@ def glitch_windows(
         rng = random.Random(zlib.crc32(Path(src).name.encode("utf-8")))  # noqa: S311 — looks, not security
         t = rng.uniform(every * 0.3, every)
         while t < info.duration:
-            d = rng.uniform(0.12, 0.35)
+            d = rng.uniform(0.25, 0.5)
             a, b = t - start, t + d - start
             if b > 0 and a < length:
                 out.append((max(0.0, a), min(length, b)))
@@ -66,60 +71,155 @@ def _when(windows: list[tuple[float, float]]) -> str:
     return "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in windows)
 
 
-def video_graph(windows: list[tuple[float, float]], size: tuple[int, int], src: str, out: str) -> str:
-    """Filter-graph text that glitches [src] into [out] during the windows (the picture's clock
-    must start at 0, as it does on the burn-in path). Kept subtle: a sideways jolt, a faint smeared
-    band rolling through, a little color split and grain, like a real tape catching."""
-    W, H = size
-    on = _when(windows)
-    band = max(2, round(H / 12) // 2 * 2)
-    shift = max(1, round(W / 320))
-    jitter = f"{W / 120:.1f}*sin(t*71)+{W / 260:.1f}*sin(t*23)"
-    return (
-        f"[{src}]split=3[gA][gB][gC];"
-        f"[gC]crop=iw:{band}:0:0,noise=alls=60:allf=t+u,avgblur=sizeX={max(2, W // 60)}:sizeY=1,"
-        f"eq=brightness=0.1:contrast=1.3,format=yuva420p,colorchannelmixer=aa=0.5[gBand];"
-        f"[gA][gB]overlay=x='{jitter}':y=0:enable='{on}'[gJ];"
-        f"[gJ][gBand]overlay=x=0:y='mod(t*{H * 2.2:.0f},{H})':enable='{on}'[gN];"
-        f"[gN]noise=alls=14:allf=t+u:enable='{on}',rgbashift=rh=-{shift}:bh={shift}:enable='{on}'[{out}]"
+def _hash(x: str) -> str:
+    """A steady 0..1 random number from x (the same frame and row always give the same value)."""
+    return f"mod(abs(sin({x}))*43758.5453,1)"
+
+
+def _glitch_geq(a: float, b: float, n: int, top: int) -> str:
+    """One tracking glitch from a to b, the way ntsc-rs (an open-source VHS emulator) models a tape
+    losing its tracking: the picture's lines wave sideways, a band of torn lines and white streaks
+    rolls up the picture, the bottom lines bend (head switching), the picture hops a few lines,
+    some lines lose their color and the color slips right of the picture. It hits at once and
+    settles (env). Every number comes from the frame (N), the row and this glitch's seed, so the
+    preview and the file glitch identically."""
+    rng = random.Random(n * 7919 + round(a * 1000))  # noqa: S311 — looks, not security
+    seed = rng.uniform(0, 1000)
+    band_at, band_speed, band_h = rng.uniform(0.35, 1.0), rng.uniform(-1.6, -0.5), rng.uniform(0.07, 0.16)
+    mid = (top + 1) // 2
+    d = max(b - a, 0.01)
+    common = (
+        f"st(0,clip((T-{a:.3f})/{d:.3f},0,1));"
+        "st(0,min(1,ld(0)*6)*pow(1-ld(0),0.6));"  # strength: hits at once, then settles
+        "st(1,Y/H);"  # how far down the picture (0 top, 1 bottom; W and H are this plane's size)
+        "st(2,floor(Y/SH));"  # the picture line
+        f"st(3,{_hash(f'ld(2)*12.9898+N*78.233+{seed:.2f}')});"  # this line's random number
+        f"st(4,mod({band_at:.3f}+(T-{a:.3f})*{band_speed:.3f},1.3)-0.15);"  # the rolling band
+        f"st(5,between(ld(1),ld(4),ld(4)+{band_h:.3f}));"
+        "st(6,ld(0)*W*(0.007*(sin(ld(1)*37+T*23)+0.7*sin(ld(1)*91-T*41))"  # lines wave sideways
+        "+0.07*ld(5)*(ld(3)-0.35)"  # torn lines in the band
+        "+0.06*pow(max(0,ld(1)-0.93)/0.07,1.5)"  # head switching at the bottom
+        "+0.003*(ld(3)-0.5)));"  # every line a little unsteady
+        f"st(7,H*0.03*ld(0)*gt({_hash(f'N*91.7+{seed:.2f}')},0.72));"  # the picture hops
     )
+    # The per-line numbers are worked out once per line, not for every pixel (vars 0-8 keep them;
+    # 9 remembers which line of which frame they belong to): about 4x faster.
+    once = "if(not(eq(ld(9),Y+N*65536+1)),st(9,Y+N*65536+1);" + common.rstrip(";")
+    luma = (
+        once
+        + ");"
+        # snow / streak numbers per short stretch of a line (var 4 is free once the line is worked out)
+        + "if(not(eq(ld(4),floor(X/(W*0.015))+2)),st(4,floor(X/(W*0.015))+2);"
+        + f"st(8,{_hash(f'ld(4)*7.13+ld(2)*311.7+N*3.1+{seed:.2f}')}));"
+        + f"clip(lum(X-ld(6),Y+ld(7))*(1-0.18*ld(0))+{top}*ld(0)*(0.05"
+        + "+ld(5)*0.6*(ld(8)-0.45)*gt(ld(8),0.45)"  # streaks in the band
+        + "+0.75*gt(ld(8),1-0.006*ld(0))),"  # snow
+        + f"0,{top})"
+    )
+
+    def chroma(plane: str) -> str:
+        return (
+            once
+            + f";st(8,gt(0.12*ld(0),{_hash(f'ld(2)*57.31+N*1.37+{seed:.2f}')})));"  # lines that lose color
+            + f"{mid}+({plane}(X-ld(6)-W*0.008*ld(0),Y+ld(7))-{mid})*(1-ld(8))*(1-0.3*ld(5)*ld(0))"
+        )
+
+    return f"geq=lum='{luma}':cb='{chroma('cb')}':cr='{chroma('cr')}':enable='between(t,{a:.3f},{b:.3f})'"
+
+
+def video_graph(
+    windows: list[tuple[float, float]], size: tuple[int, int], src: str, out: str, pix_fmt: str = ""
+) -> str:
+    """Filter-graph text that glitches [src] into [out] during the windows (the picture's clock
+    must start at 0, as it does on the burn-in path). The picture is put in the encoder's own pixel
+    format first (no extra conversion), so the glitch knows its brightness range."""
+    W, _H = size
+    deep = "10" in pix_fmt or pix_fmt == "p010le"
+    top = 1023 if deep else 255
+    fmt = pix_fmt if pix_fmt.startswith("yuv") else ("yuv420p10le" if deep else "yuv420p")
+    chain = [f"format={fmt}"]
+    chain += [_glitch_geq(a, b, n, top) for n, (a, b) in enumerate(windows)]
+    chain.append(
+        f"avgblur=sizeX={max(2, W // 160)}:sizeY=1:planes=6:enable='{_when(windows)}'"
+    )  # color bleeds
+    return f"[{src}]" + ",".join(chain) + f"[{out}]"
 
 
 def audio_filters(windows: list[tuple[float, float]]) -> list[str]:
-    """The sound dips and crunches while the picture glitches."""
+    """The sound drops, flutters, goes dull and crunches while the picture glitches."""
     on = _when(windows)
-    return [f"volume=volume='if({on},0.7,1)':eval=frame", f"acrusher=bits=8:mix=0.35:enable='{on}'"]
+    return [
+        f"volume=volume='if({on},0.6,1)':eval=frame",
+        f"tremolo=f=11:d=0.5:enable='{on}'",  # (vibrato made NaNs on some camcorder sound)
+        f"lowpass=f=3500:enable='{on}'",
+        f"acrusher=bits=8:mix=0.4:enable='{on}'",
+    ]
 
 
-# ---------------------------------------------------------------------------- blue screen
-STOP_FRAMES_S = (
-    0.1  # STOP shows on the last couple of frames before the blue screen (clip lengths run a frame long)
-)
-STOP_SHOWS_S = 1.6  # then stays on the blue screen this long
+# ---------------------------------------------------------------------------- start / end screen
+STOP_FRAMES_S = 0.1  # with a screen: STOP shows on the last couple of frames, then on the end screen
+STOP_SHOWS_S = 1.6  # and stays on the end screen this long
+STOP_ALONE_S = 1.0  # without a screen: STOP shows for the video's last second
+SCREENS = ("blue", "black", "bars", "color")
 
 
-def vcr(s: Settings) -> bool:
-    """The VCR badge story (PLAY at the start, STOP at the end) goes with the VHS look's PLAY badge."""
-    return wants_blue(s) and s.burns and s.burn_style == "vhs" and s.burn_badge == "play"
+def vhs(s: Settings) -> bool:
+    """The VHS Camcorder Look is on (where PLAY / STOP and the tape effects live)."""
+    return s.burns and s.burn_style == "vhs"
 
 
 def marks(s: Settings, length: float, first: bool, last: bool):
-    """PLAY / STOP timing for a clip that sits between tape blue screens."""
+    """PLAY / STOP timing for a clip (first / last = it starts / ends the video). PLAY blinks for 4
+    seconds, the first 2 of them on the start screen if there is one; STOP comes up at the end."""
     from .burnin import Marks
 
-    if not vcr(s):
+    if not vhs(s):
         return None
-    return Marks(
-        play_until=max(0.0, 4.0 - BLUE_SECONDS) if first else 0.0,
-        stop_at=max(0.0, length - STOP_FRAMES_S) if last else None,
-    )
+    screen = wants_blue(s)
+    play = 0.0
+    if s.burn_badge == "play" and first:
+        play = max(0.0, 4.0 - BLUE_SECONDS) if screen else 4.0
+    stop = None
+    if s.burn_stop and last:
+        stop = max(0.0, length - (STOP_FRAMES_S if screen else STOP_ALONE_S))
+    return Marks(play_until=play, stop_at=stop)
 
 
 def blue_badge(s: Settings, which: str) -> str:
-    """PLAY blinking on the blue screen before; STOP on the one after."""
-    if not vcr(s):
+    """PLAY blinking on the start screen, STOP on the end one (when those badges are on)."""
+    if not vhs(s):
         return ""
-    return "play" if which == "start" else "stop"
+    if which == "start":
+        return "play" if s.burn_badge == "play" else ""
+    return "stop" if s.burn_stop else ""
+
+
+def screen_color(s: Settings) -> str:
+    """The plain screen's color for ffmpeg (0xRRGGBB)."""
+    if s.tape_screen == "black":
+        return "0x000000"
+    if s.tape_screen == "color" and re.fullmatch(r"#?[0-9A-Fa-f]{6}", s.tape_screen_color or ""):
+        return "0x" + s.tape_screen_color.lstrip("#").upper()
+    return BLUE
+
+
+def screen_sources(s: Settings, conform, seconds: float) -> tuple[str, str]:
+    """lavfi sources (picture, sound) for the start / end screen. Color bars are SMPTE bars (HD bars
+    for wide pictures) with a 1 kHz tone at -20 dBFS, like the head of a broadcast tape."""
+    W, H = conform.width, conform.height
+    rate = conform.rate or "30000/1001"
+    layout = "mono" if conform.channels == 1 else "stereo"
+    if s.tape_screen == "bars":
+        bars = "smptehdbars" if W / max(H, 1) > 1.5 else "smptebars"
+        video = f"{bars}=s={W}x{H}:r={rate}:d={seconds}"
+        audio = f"sine=f=1000:r={conform.sample_rate}:d={seconds},volume=-2dB"  # sine is -18 dBFS
+        if layout == "stereo":
+            audio += ",pan=stereo|c0=c0|c1=c0"
+        return video, audio
+    return (
+        f"color=c={screen_color(s)}:s={W}x{H}:r={rate}:d={seconds}",
+        f"anullsrc=r={conform.sample_rate}:cl={layout}",
+    )
 
 
 def picture_area(info: MediaInfo, s: Settings):
@@ -148,7 +248,8 @@ def make_blue(
     area=None,
     seconds: float = BLUE_SECONDS,
 ):
-    """A short blue-screen piece that matches the video exactly (size, frame rate, sound, encoder),
+    """A short start / end screen piece (blue, black, bars & tone or a color) that matches the
+    video exactly (size, frame rate, sound, encoder),
     so it can be joined on without re-encoding; badge "play" (blinking) or "stop" (steady, then gone)
     drawn where the video's own badge sits. Returns the engine Result."""
     from .burnin import FULL, badge_plan
@@ -156,22 +257,22 @@ def make_blue(
     from .probe import probe
 
     with tempfile.TemporaryDirectory(prefix="listo-blue-") as d:
-        src = Path(d) / "blue.mkv"
+        src = Path(d) / "screen.mkv"
         rate = conform.rate or "30000/1001"
-        layout = "mono" if conform.channels == 1 else "stereo"
         size = (conform.width, conform.height)
+        video_src, audio_src = screen_sources(s, conform, seconds)
         bp = None
         if badge:
             when = "lt(mod(t,1),0.7)" if badge == "play" else f"lt(t,{STOP_SHOWS_S})"
             bp = badge_plan(badge, size, area or FULL, when)
         try:
             args = [caps.ffmpeg, "-hide_banner", "-v", "error", "-y",
-                    "-f", "lavfi", "-i", f"color=c={BLUE}:s={size[0]}x{size[1]}:r={rate}:d={seconds}"]  # fmt: skip
+                    "-f", "lavfi", "-i", video_src]  # fmt: skip
             n_images = 0
             if bp is not None and not bp.empty:
                 args += bp.input_args(rate, seconds)
                 n_images = len(bp.images())
-            args += ["-f", "lavfi", "-i", f"anullsrc=r={conform.sample_rate}:cl={layout}"]
+            args += ["-f", "lavfi", "-i", audio_src]
             if n_images:
                 args += [
                     "-filter_complex",
