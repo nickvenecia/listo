@@ -2,7 +2,7 @@
 
 ## Unreleased
 - New app icon: the "listo." wordmark
-- Mac: the title bar is dark like the rest of the app, with the "listo." logo in the middle (Windows and Linux get a dark title bar too)
+- Mac: the title bar is dark like the rest of the app, with the "listo." logo in the middle, in line with the window buttons (one bar, drag it to move the window) (Windows and Linux get a dark title bar too)
 - The file count left the top of the Files panel (the bottom bar already shows it)
 - After joining, the bottom bar says how many clips were joined into one video
 - Fix: a preview frame at the very end of a camcorder clip (with burn-ins on) could keep ffmpeg busy at full speed for a minute; previews stay just before the end, and burn-in layers always stop with the clip

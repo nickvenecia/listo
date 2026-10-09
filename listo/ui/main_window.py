@@ -311,6 +311,7 @@ class MainWindow(QMainWindow):
         v.setSpacing(0)
         self.titlebar = titlebar.install(self)  # Mac: Listo's own dark title bar, wordmark centred
         if self.titlebar is not None:
+            titlebar.ignore_safe_area(root)
             v.addWidget(self.titlebar)
 
         body = QHBoxLayout()

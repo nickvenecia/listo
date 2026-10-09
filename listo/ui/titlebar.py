@@ -1,9 +1,11 @@
 """The Mac title bar, drawn by Listo: the app's dark background with the "listo." wordmark centred.
 
 Qt (6.9+) lets the window's content run up under the title bar (ExpandedClientAreaHint) with no
-bar background (NoTitleBarBackgroundHint); the traffic-light buttons stay where they are. The Mac's
+bar background (NoTitleBarBackgroundHint); the traffic-light buttons stay where they are, on top of
+our bar. Qt would normally push the content below that area (the "safe area"), which left an empty,
+undraggable strip above our bar: the window turns that off, so our bar IS the title bar. The Mac's
 own title text is hidden with one call into AppKit (ctypes, no extra packages). Dragging the bar
-moves the window; double-clicking zooms it, like any Mac title bar.
+moves the window (Listo moves it itself); double-clicking zooms it, like any Mac title bar.
 
 Windows and Linux keep their system title bar (dark, via the app's colour scheme in app.py).
 If any piece is missing (older Qt, the AppKit call fails), the normal title bar stays.
@@ -13,14 +15,12 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QLabel, QMainWindow, QWidget
 
 from . import theme
 from .tokens import TITLEBAR_H
 from .widgets import hbox
-
-log_name = __name__
 
 
 def supported() -> bool:
@@ -34,7 +34,14 @@ def install(window: QMainWindow) -> TitleBar | None:
     window.setWindowFlag(Qt.WindowType.ExpandedClientAreaHint, True)
     if hasattr(Qt.WindowType, "NoTitleBarBackgroundHint"):
         window.setWindowFlag(Qt.WindowType.NoTitleBarBackgroundHint, True)
+    ignore_safe_area(window)
     return TitleBar(window)
+
+
+def ignore_safe_area(w: QWidget) -> None:
+    """Lay out from the very top (our bar goes where the system bar was, not below an empty strip)."""
+    if hasattr(Qt.WidgetAttribute, "WA_ContentsMarginsRespectsSafeArea"):
+        w.setAttribute(Qt.WidgetAttribute.WA_ContentsMarginsRespectsSafeArea, False)
 
 
 class TitleBar(QWidget):
@@ -43,7 +50,9 @@ class TitleBar(QWidget):
         self.setObjectName("TitleBar")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._window = window
+        self._drag: QPoint | None = None  # where in the window the drag grabbed it
         self.setFixedHeight(TITLEBAR_H)
+        ignore_safe_area(self)
         lay = hbox(self, 0, 0)
         word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
         word.setObjectName("TitleWordmark")
@@ -57,17 +66,29 @@ class TitleBar(QWidget):
         handle = self._window.windowHandle()
         if handle is not None and hasattr(handle, "safeAreaMargins"):
             top = handle.safeAreaMargins().top()
-            if top > 0:
+            if 0 < top <= 2 * TITLEBAR_H:  # the real bar's height (a sane one)
                 self.setFixedHeight(top)
         hide_mac_title(self._window)
 
     def mousePressEvent(self, e):
-        handle = self._window.windowHandle()
-        if e.button() == Qt.MouseButton.LeftButton and handle is not None:
-            handle.startSystemMove()
+        if e.button() == Qt.MouseButton.LeftButton and not self._window.isFullScreen():
+            self._drag = e.globalPosition().toPoint() - self._window.frameGeometry().topLeft()
+        e.accept()
+
+    def mouseMoveEvent(self, e):
+        if self._drag is not None and e.buttons() & Qt.MouseButton.LeftButton:
+            if self._window.isMaximized():  # pulling a zoomed window off: restore it under the pointer
+                self._window.showNormal()
+                self._drag = QPoint(self._window.width() // 2, self.height() // 2)
+            self._window.move(e.globalPosition().toPoint() - self._drag)
+        e.accept()
+
+    def mouseReleaseEvent(self, e):
+        self._drag = None
         e.accept()
 
     def mouseDoubleClickEvent(self, e):
+        self._drag = None
         if self._window.isMaximized():
             self._window.showNormal()
         else:
