@@ -75,6 +75,12 @@ jobs:
           python -m pytest -v -p no:cacheprovider > pytest.log 2>&1
           code=$?
           tail -n 300 pytest.log
+          # Qt can crash while Python shuts down AFTER every test has passed (Windows does this);
+          # what counts is pytest's own verdict on its last line.
+          if [ $code -ne 0 ] && python -c "import re,sys; last=[l for l in open('pytest.log',encoding='utf-8',errors='replace').read().splitlines() if l.startswith('=')][-1]; sys.exit(0 if re.search(r' passed', last) and not re.search(r'failed|error', last) else 1)"; then
+            echo "All tests passed (exit code $code came from shutting down afterwards)."
+            code=0
+          fi
           if [ $code -ne 0 ]; then
             # Show the end of the test output as an annotation on the run's summary page too
             # (readable without opening the full log).

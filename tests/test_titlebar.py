@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
+import pytest
 
+
+# The test pretends to be a Mac on the screenless "offscreen" display. On a real Mac machine that
+# display reports a 20 px safe area of its own (a real Mac window doesn't), so the check is skipped
+# there; it runs on Linux / Windows, and the real thing was checked by hand on a Mac.
+@pytest.mark.skipif(sys.platform == "darwin", reason="the offscreen display on macOS fakes a safe area")
 def test_title_bar_is_on_top_and_drags_the_window(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
