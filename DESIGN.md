@@ -217,6 +217,8 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
 - **One identity everywhere.** The app icon is the "listo." wordmark on the dark tile (`scripts/make_icon.py`);
   on the Mac the title bar is ours (`ui/titlebar.py`): `BG`, a `BORDER` hairline, the wordmark centred.
   Nothing is said twice: counts live in the bottom bar, not also in a header.
+- **Troubleshooting is one click, out of the way.** A faint terminal icon at the right of the bottom bar opens
+  the debug console; it never interrupts and is never needed for normal work.
 - **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)
   run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
   Heavy Python work (loading the speech model, listening) runs in its **own process**, not a thread: Python runs

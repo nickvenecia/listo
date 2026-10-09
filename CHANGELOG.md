@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- **Much faster with big lists**: reading 400 clips used to keep the window busy for over 3 minutes; now about 10 seconds, and it stays responsive the whole time
+- **Debug console**: the terminal icon in the bottom bar (or Help › Open Debug Console) opens a terminal window that shows everything Listo does as it happens: each file, the exact ffmpeg command, how long it took, and what went wrong if something fails. Run from a terminal, Listo prints the same there
 - New app icon: the "listo." wordmark
 - Mac: the title bar is dark like the rest of the app, with the "listo." logo in the middle, in line with the window buttons (one bar, drag it to move the window) (Windows and Linux get a dark title bar too)
 - The file count left the top of the Files panel (the bottom bar already shows it)

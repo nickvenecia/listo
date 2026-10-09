@@ -232,8 +232,8 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
     assert wait(lambda: all(it.transcript is not None for it in w.items.values()))
     assert not opened and not w.running  # nothing popped up, nothing converted
-    app.processEvents()
-    assert w.btn_check.isVisibleTo(w) and "1 New" in w.btn_check.text()
+    assert wait(lambda: "1 New" in w.btn_check.text())
+    assert w.btn_check.isVisibleTo(w)
     w.check_captions()  # the Check Captions button
     assert opened == [["talk.mov"]]
     assert captions.load(clip).reviewed

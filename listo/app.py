@@ -159,6 +159,25 @@ class ListoApp(QApplication):
 _crash_file = None
 
 
+def _log_uncaught() -> None:
+    """Any unexpected Python error (also in background threads) goes to the log with its details,
+    so the debug console shows it, instead of only printing where nobody looks."""
+    import threading
+
+    previous = sys.excepthook
+
+    def hook(kind, value, tb):
+        log.error("unexpected error", exc_info=(kind, value, tb))
+        if previous is not None:
+            previous(kind, value, tb)
+
+    sys.excepthook = hook
+    threading.excepthook = lambda a: log.error(
+        "unexpected error in %s", a.thread.name if a.thread else "a thread",
+        exc_info=(a.exc_type, a.exc_value, a.exc_traceback),
+    )  # fmt: skip
+
+
 def _crash_log() -> None:
     """If Listo ever crashes hard (a crash inside Qt or ffmpeg libraries, not a Python error), write
     where it was to crash.log next to listo.log, so it can be found and fixed."""
@@ -184,6 +203,7 @@ def main() -> int:
     setup_logging()
     log.info("Listo %s starting (%s)", __version__, sys.platform)
     _crash_log()
+    _log_uncaught()
     # Playback inside Listo decodes on the processor: Qt's player crashed on MPEG-2 camcorder clips when
     # the Mac's hardware decoder refused them ("," = no hardware decoders; see ui/player.py).
     os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",")

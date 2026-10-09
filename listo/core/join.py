@@ -216,6 +216,8 @@ class Join:
             args += ["-f", muxer, str(tmp)]
             if self._canceled:
                 raise Canceled()
+            log.info("joining %d clips into %s", len(self.parts), target)
+            log.info("ffmpeg command: %s", " ".join([self.caps.ffmpeg, *args]))
             self._ff = FFmpegRun(self.caps.ffmpeg, args)
             self._ff.run(on_progress)
             if not tmp.exists() or tmp.stat().st_size == 0:

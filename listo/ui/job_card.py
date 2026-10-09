@@ -220,13 +220,19 @@ class JobCard(QFrame):
             return
         self.thumb.setPixmap(_rounded(QPixmap.fromImage(img), THUMB_W, THUMB_H))
 
+    # Setters skip work when nothing changed: with hundreds of clips the window calls them a lot.
     def set_meta(self, text: str) -> None:
-        self.meta.setText(text)
+        if self.meta.text() != text:
+            self.meta.setText(text)
 
     def set_output(self, text: str) -> None:
-        self.out.setText(text)
+        if self.out.text() != text:
+            self.out.setText(text)
 
     def set_format(self, label: str, overridden: bool, editable: bool) -> None:
+        if (label, overridden, editable) == getattr(self, "_fmt_shown", None):
+            return
+        self._fmt_shown = (label, overridden, editable)
         self.chip.setText(label + ("  ▾" if editable else ""))
         self.chip.setProperty("custom", "true" if overridden else "false")
         self.chip.setEnabled(editable)
@@ -239,6 +245,9 @@ class JobCard(QFrame):
 
     def set_captions(self, status: str, detail: str = "") -> None:
         """'' = captions off for this clip; 'working' / 'failed' / 'review' / 'reviewed'."""
+        if (status, detail) == getattr(self, "_cc_shown", None):
+            return
+        self._cc_shown = (status, detail)
         self._cc = status
         tips = {
             "working": detail or "Making captions in the background…",
@@ -257,7 +266,8 @@ class JobCard(QFrame):
         )
 
     def set_name(self, name: str) -> None:
-        self.name.setText(name)
+        if self.name.text() != name:
+            self.name.setText(name)
 
     def set_progress(self, frac: float) -> None:
         self.bar.setValue(int(max(0.0, min(1.0, frac)) * 1000))
@@ -278,7 +288,11 @@ class JobCard(QFrame):
             "transcribing": "Making Captions",
             "downloading": "Downloading",
         }
-        self.status.setText(text or default.get(state, state))
+        label = text or default.get(state, state)
+        if self.status.text() != label:
+            self.status.setText(label)
+        if state == getattr(self, "_state", None):
+            return  # same state (e.g. a progress update): only the text changes, skip the restyling
         self.status.setProperty("tone", state)  # colored by the stylesheet (#Status[tone=...])
         repolish(self.status)
         busy = state in ("converting", "paused", "downloading", "transcribing")

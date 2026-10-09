@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import os
+import shlex
 import threading
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -11,10 +13,13 @@ from pathlib import Path
 
 from . import naming, photo, video
 from .fileutil import copy_dates
+from .log import get_logger
 from .presets import Settings
 from .probe import MediaInfo
 from .runner import Canceled, FFmpegFailed, FFmpegRun
 from .tools import Capabilities
+
+log = get_logger(__name__)
 
 _plan_lock = threading.Lock()  # two conversions at once must not pick the same output name
 
@@ -139,6 +144,8 @@ class Conversion:
             key = naming.reserve_key(target)
             self.reserved.add(key)
         notes = [note] if note else []
+        started = time.monotonic()
+        log.info("converting %s -> %s", self.src, target)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -163,6 +170,7 @@ class Conversion:
                 )
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]
+                log.info("ffmpeg command: %s", shlex.join(cmd))
                 self._ff = FFmpegRun(self.caps.ffmpeg, plan.args)
                 if self._canceled:
                     raise Canceled()
@@ -175,14 +183,24 @@ class Conversion:
             if self.s.captions and self.s.caption_srt and self.captions and kind == "video":
                 self._write_srt(target, notes)
             warning = self._verify(target, notes) if (self.s.verify and kind != "photo") else ""
+            log.info(
+                "done in %.1f s: %s%s",
+                time.monotonic() - started,
+                target.name,
+                f" (check: {warning})" if warning else "",
+            )
             return Result("done", output=target, notes=notes, command=cmd, warning=warning)
         except Canceled:
+            log.info("canceled: %s", self.src)
             return Result("canceled", message="Canceled", command=cmd)
         except video.PlanError as e:
+            log.warning("can't convert %s: %s", self.src, e)
             return Result("failed", message=str(e), command=cmd)
         except FFmpegFailed as e:
+            log.warning("ffmpeg failed on %s: %s\nffmpeg said:\n%s", self.src, e, (e.log or "")[-3000:])
             return Result("failed", message=str(e), log=e.log, command=cmd)
         except Exception as e:
+            log.exception("conversion crashed on %s", self.src)
             return Result("failed", message=f"{e.__class__.__name__}: {e}", command=cmd)
         finally:
             try:

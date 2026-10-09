@@ -39,7 +39,9 @@ listo/
                    SHA-256 checked against the release's published sums; yt-dlp -U at most daily
     fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
     paths.py       per-user folders: data_dir(), tools_dir(), log_dir(), downloads_dir() (~/Downloads/Listo)
-    log.py         rotating log file (listo.log in log_dir()); get_logger(__name__)
+    log.py         rotating log file (listo.log in log_dir(), 5 MB x 3); also printed to the terminal when run from one
+    console.py     Debug console: opens the system terminal following the log files live (Mac .command file,
+                   Windows PowerShell, Linux terminal); turns on DEBUG logging for the session
     sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
   ui/
     tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
@@ -117,6 +119,12 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
   starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.
+- Long lists (hundreds of clips): never do list-wide work per file. Use MainWindow._refresh_soon() (bundles the
+  footer / captions status / sample into one pass, waiting longer for longer lists); card setters skip unchanged
+  values; theme.icon / pixmap are cached; read captions/burn-in settings in loops with MainWindow._base(it)
+  (no copy). tests/test_big_list.py guards this (400 clips once took 205 s of window time; now ~10 s).
+- Logging: conversions log the source, target, exact ffmpeg command, time taken and ffmpeg's last words on failure;
+  uncaught errors (any thread) are logged by app._log_uncaught. Keep new features logging what they do at INFO.
 - Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click; cards emit `pressed`; the clear-list icon opens a menu (Remove selected / Clear finished / Clear all).
 - Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.

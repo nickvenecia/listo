@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
@@ -279,6 +280,7 @@ _SVG = {
     "chevron": '<path d="m6 9 6 6 6-6"/>',
     "captions": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3"/>',
     "eye": '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    "terminal": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>',
     "chevron-right": '<path d="m9 6 6 6-6 6"/>',
     "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
     "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
@@ -296,7 +298,9 @@ def svg_markup(name: str, color: str = TEXT, stroke: float = 2.0) -> str:
     )
 
 
+@lru_cache(maxsize=512)
 def pixmap(name: str, size: int = ICON, color: str = TEXT, stroke: float = 2.0, dpr: float = 2.0) -> QPixmap:
+    """Drawn once per look and reused (a long list redraws the same few icons thousands of times)."""
     r = QSvgRenderer(QByteArray(svg_markup(name, color, stroke).encode()))
     pm = QPixmap(int(size * dpr), int(size * dpr))
     pm.fill(Qt.GlobalColor.transparent)
@@ -308,6 +312,7 @@ def pixmap(name: str, size: int = ICON, color: str = TEXT, stroke: float = 2.0, 
     return pm
 
 
+@lru_cache(maxsize=256)
 def icon(name: str, color: str = TEXT, size: int = ICON) -> QIcon:
     """An icon that looks the same however the button is hovered, focused or pressed."""
     ic = QIcon()
@@ -316,6 +321,7 @@ def icon(name: str, color: str = TEXT, size: int = ICON) -> QIcon:
     return ic
 
 
+@lru_cache(maxsize=128)
 def menu_icon(name: str, color: str = MUTED, size: int = ICON) -> QIcon:
     """For menu rows: the highlighted row is marigold, so its icon switches to dark there."""
     ic = QIcon(pixmap(name, size, color))

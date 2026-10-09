@@ -9,7 +9,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from .log import get_logger
 from .tools import capabilities, run_quiet
+
+log = get_logger(__name__)
 
 VIDEO_EXTS = {
     "mov",
@@ -460,6 +463,7 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
         else:
             info.error = (last.split(": ", 1)[-1] if last else "") or "Couldn't read this file."
         info.kind = "unknown"
+        log.warning("can't read %s: %s", path, out.strip()[-500:])
         return info
 
     fmt = data.get("format", {}) or {}

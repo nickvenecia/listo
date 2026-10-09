@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME, __version__
-from ..core import captions, join, naming
+from ..core import captions, console, join, naming
 from ..core.captions import sample_cues
 from ..core.engine import Conversion, Result
 from ..core.fileutil import reveal
@@ -83,6 +83,7 @@ from .workers import (
 log = get_logger(__name__)
 
 _ORPHANS: list = []
+SOON_MS = 60  # how long list-wide refreshes wait to gather changes
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
 
 
@@ -280,6 +281,13 @@ class MainWindow(QMainWindow):
         self._live_signals = PreviewSignals(self)
         self._live_signals.done.connect(self._live_got)
         self.export_panel.player.settled.connect(self._live_settled)
+        # List-wide refreshes (footer, captions status, live preview) wait a moment and run once:
+        # reading 500 files must not redo them 500 times (that took minutes).
+        self._soon_captions = False
+        self._soon_timer = QTimer(self)
+        self._soon_timer.setSingleShot(True)
+        self._soon_timer.setInterval(SOON_MS)
+        self._soon_timer.timeout.connect(self._refresh_now)
         self._live_timer = QTimer(self)
         self._live_timer.setSingleShot(True)
         self._live_timer.setInterval(350)  # wait until a slider or a few clicks settle
@@ -414,6 +422,14 @@ class MainWindow(QMainWindow):
         for b in (self.btn_show, self.btn_pause, self.btn_cancel):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
+        self.btn_console = QToolButton()
+        self.btn_console.setObjectName("IconBtn")
+        self.btn_console.setIcon(theme.icon("terminal", theme.FAINT))
+        self.btn_console.setIconSize(QSize(tokens.ICON, tokens.ICON))
+        self.btn_console.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_console.setToolTip("Debug console: watch what Listo is doing, live, in a terminal window")
+        self.btn_console.clicked.connect(self.open_console)
+        f.addWidget(self.btn_console)
         self.btn_check = QPushButton("Check Captions")
         self.btn_check.setIcon(theme.icon("captions", theme.TEXT))
         self.btn_check.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -472,10 +488,19 @@ class MainWindow(QMainWindow):
         act(v, "Show All Options", lambda: self.sidebar.open_groups(True))
         act(v, "Fold All Options", lambda: self.sidebar.open_groups(False))
         h = bar.addMenu("Help")
+        act(h, "Open Debug Console", self.open_console, "Ctrl+Alt+D")
         act(h, "Show the Log File", self._show_log)
         act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
         if sys.platform != "darwin":
             bar.hide()
+
+    def open_console(self) -> None:
+        """A terminal window that follows Listo's log live (core/console.py)."""
+        error = console.open_console()
+        if error:
+            self.toast.show_message(error)
+        else:
+            log.info("%d files in the list, %s", len(self.items), "converting" if self.running else "idle")
 
     def _menu_captions(self) -> None:
         self.check_captions()
@@ -737,6 +762,7 @@ class MainWindow(QMainWindow):
             )
         if added:
             self._show_summary = False
+            log.info("added %d file%s to the list", added, "s" if added != 1 else "")
         if msgs:
             self.toast.show_message(
                 (f"Added {added}. " if added else "") + "; ".join(msgs).capitalize() + "."
@@ -809,23 +835,20 @@ class MainWindow(QMainWindow):
             self._update_output_name(it)
             if it.kind == "video" and info.audio:
                 it.transcript = captions.load(it.path)
-            self._sync_captions()
-        self._list_changed()
-        self._update_sample()
-        self._refresh_footer()
+        self._refresh_soon(captions=True)
         if self.running:
             self._kick()
 
     # ------------------------------------------------------------------ captions
     def _wants_captions(self, it: Item) -> bool:
         return (
-            it.kind == "video" and it.info is not None and bool(it.info.audio) and self.eff(it).captions
+            it.kind == "video" and it.info is not None and bool(it.info.audio) and self._base(it).captions
             and it.state in ("ready", "waiting", "done", "warning")
         )  # fmt: skip
 
     def _made_differently(self, it: Item) -> bool:
         """These captions came from another accuracy setting or language than the one chosen now."""
-        t, s = it.transcript, self.eff(it)
+        t, s = it.transcript, self._base(it)
         if t is None:
             return False
         model = captions.MODELS.get(s.caption_model, captions.MODELS["balanced"])[0]
@@ -943,7 +966,7 @@ class MainWindow(QMainWindow):
                 self._schedule_live()
         elif error and error != "Canceled":
             self._tx_failed[iid] = error
-        self._sync_captions()
+        self._refresh_soon(captions=True)
 
     def _tx_finished(self) -> None:
         self.tx = None
@@ -1130,6 +1153,11 @@ class MainWindow(QMainWindow):
             start,
             self,
         ).exec()
+
+    def _base(self, it: Item) -> Settings:
+        """The file's settings without its format change, NOT a copy: only for reading settings a
+        per-file format change can't touch (captions, burn-ins…), in loops over the whole list."""
+        return it.base or self.settings
 
     def eff(self, it: Item) -> Settings:
         """The settings this file will actually convert with."""
@@ -1442,6 +1470,10 @@ class MainWindow(QMainWindow):
         self.reserved = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         self.counter = 0
         self.btn_show.hide()
+        log.info(
+            "convert pressed: %s%s", format_label("video", self.settings),
+            " (joining into one video)" if self.join_job else "",
+        )  # fmt: skip
         self._kick()
         self._refresh_footer()
 
@@ -1553,7 +1585,7 @@ class MainWindow(QMainWindow):
         if it.length and it.speed > 0:
             txt += f" · {_eta(max(0.0, it.length - processed) / it.speed)}"
         it.card.set_state("converting", txt)
-        self._refresh_footer()
+        self._refresh_soon()
 
     def _finished(self, iid: int, r: Result) -> None:
         th = self.active.pop(iid, None)
@@ -1711,6 +1743,7 @@ class MainWindow(QMainWindow):
         self._convert_after_captions = False
         if not self.running:
             return
+        log.info("stop pressed")
         self.running = False
         self.paused = False
         for iid in self.batch:
@@ -1738,6 +1771,7 @@ class MainWindow(QMainWindow):
         failed = sum(1 for it in results if it.state == "failed")
         skipped = sum(1 for it in results if it.state == "skipped")
         self._last_summary = (done, failed, skipped, warned)
+        log.info("finished: %d done, %d failed, %d skipped, %d to check", done, failed, skipped, warned)
         self._last_outputs = [it.result.output for it in results if it.result and it.result.output]
         self.btn_show.setVisible(bool(self._last_outputs))
         QApplication.alert(self, 0)
@@ -1765,12 +1799,28 @@ class MainWindow(QMainWindow):
     def _label_duplicates(self) -> None:
         """Same file name twice (e.g. MOV01A.MOD in PRG001 and PRG002)? Show each one's folder."""
         files = [it for it in self.items.values() if it.kind != "link"]
+        names = {it.id: os.path.basename(it.path) for it in files}  # (plain strings: fast for long lists)
         counts: dict[str, int] = {}
+        for n in names.values():
+            counts[n.lower()] = counts.get(n.lower(), 0) + 1
         for it in files:
-            counts[Path(it.path).name.lower()] = counts.get(Path(it.path).name.lower(), 0) + 1
-        for it in files:
-            p = Path(it.path)
-            it.card.set_name(f"{p.parent.name} / {p.name}" if counts[p.name.lower()] > 1 else p.name)
+            n = names[it.id]
+            folder = os.path.basename(os.path.dirname(it.path))
+            it.card.set_name(f"{folder} / {n}" if counts[n.lower()] > 1 else n)
+
+    def _refresh_soon(self, captions: bool = False) -> None:
+        """Ask for a list-wide refresh; many requests in a row become one."""
+        self._soon_captions = self._soon_captions or captions
+        if not self._soon_timer.isActive():
+            # a long list waits a little longer, so the window stays responsive while hundreds arrive
+            self._soon_timer.start(SOON_MS + len(self.items) // 2)
+
+    def _refresh_now(self) -> None:
+        if self._soon_captions:
+            self._soon_captions = False
+            self._sync_captions()
+        self._update_sample()
+        self._refresh_footer()
 
     def _refresh_footer(self, finished: bool = False) -> None:
         self._label_duplicates()

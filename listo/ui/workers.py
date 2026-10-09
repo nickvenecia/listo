@@ -280,6 +280,7 @@ class PreviewTask(QRunnable):
                 args = original_frame_args(self.path, self.info, self.at, name)
             else:
                 args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name, self.captions)
+            log.debug("preview frame at %.2f s of %s", self.at, self.path)
             cp = subprocess.run(
                 [caps.ffmpeg, *args],
                 stdin=subprocess.DEVNULL,
@@ -423,7 +424,12 @@ class TranscribeThread(QThread):
                     iid, path, _info, s = self._jobs.pop(0)
                     self.current = iid
                 try:
+                    log.info("captions: listening to %s (%s)", path, s.caption_model)
                     t, error = self._one(iid, path, s)
+                    if error:
+                        log.warning("captions failed for %s: %s", path, error)
+                    elif t is not None:
+                        log.info("captions ready for %s: %d lines", path, len(t.cues))
                     if t is not None:
                         captions.save(t)
                     self.done.emit(iid, t, error)
