@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- The window reads as three numbered steps: **1 Files → 2 Convert To → 3 Export**, with matching headers and equal side panels; the logo sits in the empty drop area
+- Cleaner sample picture for the preview: a soft colour gradient instead of a test pattern
 - Fix: Preview window crashed when opened with clips in the list
 - VHS look: much subtler colour fringing (1 px at 1080, a third of the strength)
 - Captions use half the processor on the first run too (while the model downloads)

@@ -79,7 +79,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   _captions_ready(): waits if some are still being made (then restarts itself), opens CaptionEditor for unchecked ones,
   then converts with Conversion(captions=cues). Previews use captions.sample_cues() until the real words exist. Captions are the last overlay
   (BurnPlan.captions: an ffconcat list of per-cue PNGs), so they sit on top of bars and burn-ins.
-- Window: settings panel (left) | files (middle, footer under them) | export panel (right). Sidebar groups:
+- Window = three steps: ① files (left, footer under them) | ② Convert To settings (sidebar.py) | ③ Export (export_panel.py),
+  each topped by widgets.StepHeader. Sidebar groups:
   Image / Burn-In / Encoding (sidebar.GROUPS lists what each "N changed" counts). Labels are Title Case (DESIGN.md §7).
 - Camera sidecars (probe.SIDECAR_EXTS) are never listed. JVC .MOI next to .MOD/.TOD is read in probe (read_moi):
   recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).

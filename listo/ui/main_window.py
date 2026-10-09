@@ -61,7 +61,7 @@ from .export_panel import ExportPanel
 from .job_card import JobCard
 from .sidebar import Sidebar
 from .trim_dialog import TrimDialog, fmt_time
-from .widgets import Toast, repolish
+from .widgets import StepHeader, Toast, repolish
 from .workers import ConvertThread, DownloadThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
 
 log = get_logger(__name__)
@@ -134,6 +134,11 @@ class DropZone(QFrame):
         ic = QLabel()
         ic.setPixmap(theme.pixmap("drop", tokens.ICON_XL, theme.ACCENT, 1.6))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
+        word.setObjectName("Wordmark")
+        word.setTextFormat(Qt.TextFormat.RichText)
+        word.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        word.setToolTip("Drop it in. Get it back edit-ready.")
         title = QLabel("Drop Videos, Photos or Audio Here")
         title.setObjectName("DropTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -146,6 +151,8 @@ class DropZone(QFrame):
         fmts.setObjectName("DropFormats")
         fmts.setAlignment(Qt.AlignmentFlag.AlignCenter)
         fmts.setWordWrap(True)
+        lay.addWidget(word)
+        lay.addSpacing(tokens.SPACE_3)
         lay.addWidget(ic)
         lay.addSpacing(tokens.SPACE_1)
         lay.addWidget(title)
@@ -270,19 +277,11 @@ class MainWindow(QMainWindow):
         left_col = QVBoxLayout()
         left_col.setContentsMargins(0, 0, 0, 0)
         left_col.setSpacing(0)
-        bar = QHBoxLayout()
-        bar.setContentsMargins(tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_4, tokens.SPACE_2)
-        bar.setSpacing(tokens.SPACE_2)
-        word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
-        word.setObjectName("Wordmark")
-        word.setTextFormat(Qt.TextFormat.RichText)
-        word.setToolTip("Drop it in. Get it back edit-ready.")
-        bar.addWidget(word)
-        bar.addStretch(1)
+        step1 = StepHeader(1, "Files")
+        bar = step1.actions
         self.q_count = QLabel()
         self.q_count.setObjectName("SectionLabel")
         bar.addWidget(self.q_count)
-        bar.addSpacing(tokens.SPACE_1)
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("IconBtn")
         self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
@@ -307,7 +306,7 @@ class MainWindow(QMainWindow):
         self.btn_clear_all.setMenu(self.trash_menu)
         self.btn_clear_all.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         bar.addWidget(self.btn_clear_all)
-        left_col.addLayout(bar)
+        left_col.addWidget(step1)
         self.queue_stack = QStackedWidget()
         empty_wrap = QWidget()
         ew = QVBoxLayout(empty_wrap)
@@ -339,9 +338,9 @@ class MainWindow(QMainWindow):
         self.export_panel.changed.connect(self._settings_changed)
         self.export_panel.preview_clicked.connect(self.open_preview)
         self.sidebar.recipe_applied.connect(self.export_panel.reload)
-        body.addWidget(self.sidebar)  # left: what the files become
-        body.addLayout(left_col, 1)  # middle: the files
-        body.addWidget(self.export_panel)  # right: preview, where, name, Convert
+        body.addLayout(left_col, 1)  # step 1: the files
+        body.addWidget(self.sidebar)  # step 2: what they become
+        body.addWidget(self.export_panel)  # step 3: preview, where, name, Convert
         v.addLayout(body, 1)
         footer = QFrame()
         footer.setObjectName("Footer")

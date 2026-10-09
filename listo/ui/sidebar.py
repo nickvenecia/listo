@@ -39,7 +39,18 @@ from ..core.presets import (
 )
 from ..core.tools import Capabilities
 from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import Disclosure, FitScroll, Section, Segmented, combo, disable_item, hbox, set_combo, vbox
+from .widgets import (
+    Disclosure,
+    FitScroll,
+    Section,
+    Segmented,
+    StepHeader,
+    combo,
+    disable_item,
+    hbox,
+    set_combo,
+    vbox,
+)
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
@@ -120,7 +131,8 @@ class Sidebar(QFrame):
         self._emit_timer.setInterval(120)
         self._emit_timer.timeout.connect(self._emit_changed)
 
-        lay = vbox(self, (0, SPACE_3, 0, 0), SPACE_3)
+        lay = vbox(self, 0, SPACE_3)
+        lay.addWidget(StepHeader(2, "Convert To"))
         top = vbox(margins=(SPACE_4, 0, SPACE_4, 0), spacing=SPACE_3)
         recipe = Section("Recipe")
         self.recipe = QComboBox()

@@ -48,8 +48,10 @@ WEIGHT_SEMIBOLD = 600  # titles, labels, primary button
 WEIGHT_BOLD = 700  # wordmark, dialog titles
 
 # ---------------------------------------------------------------- layout
-SIDEBAR_W = 310  # settings panel (left)
-EXPORT_W = 330  # export panel (right): live preview, where, name, Convert
+SIDEBAR_W = 330  # step 2 panel (Convert To) — same width as the export panel
+EXPORT_W = 330  # step 3 panel (Export): live preview, where, name, Convert
+HEADER_H = 52  # the numbered step header on top of every panel
+STEP_BADGE = 22  # the round step number
 SEG_INSET = 2  # gap between a segmented control's frame and its buttons
 THUMB_W, THUMB_H = 112, 63  # 16:9 file thumbnails
 CARD_H = THUMB_H + 2 * SPACE_2

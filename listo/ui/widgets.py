@@ -325,3 +325,25 @@ class ClickLabel(QLabel):
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mousePressEvent(e)
+
+
+class StepHeader(QFrame):
+    """The top of each panel: a numbered step and its name ("1 Files", "2 Convert To", "3 Export").
+    All three are the same height so the panels line up; `.actions` takes buttons on the right."""
+
+    def __init__(self, number: int, title: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("StepHeader")
+        self.setFixedHeight(tokens.HEADER_H)
+        lay = hbox(self, (tokens.SPACE_4, 0, tokens.SPACE_4, 0), tokens.SPACE_2)
+        badge = QLabel(str(number))
+        badge.setObjectName("StepBadge")
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setFixedSize(tokens.STEP_BADGE, tokens.STEP_BADGE)
+        name = QLabel(title)
+        name.setObjectName("StepTitle")
+        lay.addWidget(badge)
+        lay.addWidget(name)
+        lay.addStretch(1)
+        self.actions = hbox(spacing=tokens.SPACE_2)
+        lay.addLayout(self.actions)

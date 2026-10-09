@@ -28,6 +28,7 @@ from .widgets import (
     FitScroll,
     FlowLayout,
     Section,
+    StepHeader,
     combo,
     hbox,
     hint,
@@ -98,6 +99,7 @@ class ExportPanel(QFrame):
         )
 
         outer = vbox(self, 0, 0)
+        outer.addWidget(StepHeader(3, "Export"))
         scroll = FitScroll()
         outer.addWidget(scroll, 1)
         inner = QWidget()

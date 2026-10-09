@@ -179,16 +179,18 @@ Listo talks like a helpful person, not like software.
 ## 8. Layout of the main window
 
 ```
-┌ settings (SIDEBAR_W) ┬ wordmark ·········· N Files · + · ☰× ┬ export (EXPORT_W) ┐
-│ Recipe               │ file list (cards, SPACE_2 apart)      │ Preview (live)    │
-│ Video | Photo | Audio│   — or the drop zone                  │ Saves As example  │
-│ Format, Quality, Size│                                       │ Where · Name      │
-│ ▸ Image              │                                       │ ▸ Advanced Options│
-│ ▸ Burn-In            ├ status · progress · Show Files/Pause/Stop                 │
-│ ▸ Encoding           │                                       │ [ Convert N Files]│
-└──────────────────────┴───────────────────────────────────────┴───────────────────┘
+┌ ① Files ·········· N Files · + · ☰× ┬ ② Convert To (SIDEBAR_W) ┬ ③ Export (EXPORT_W) ┐
+│ file list (cards, SPACE_2 apart)      │ Recipe                   │ Preview (live)      │
+│   — or the drop zone (with the logo)  │ Video | Photo | Audio    │ Saves As example    │
+│                                       │ Format, Quality, Size    │ Where · Name        │
+│                                       │ ▸ Image ▸ Burn-In        │ ▸ Advanced Options  │
+├ status · progress · Show Files/Pause/Stop  ▸ Encoding            │ [ Convert N Files ] │
+└───────────────────────────────────────┴──────────────────────────┴─────────────────────┘
 ```
-Left to right is the order you think in: **what** the files become → **your files** → **where** they go.
+The window reads as three steps, left to right, in the order you work: **① add your files → ② choose what
+they become → ③ choose where they go and convert.** Every panel starts with a `widgets.StepHeader`
+(marigold number + Title Case name, `HEADER_H` tall) so the three line up. The two side panels share one
+width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, paths and status need room.
 
 - **The file list works like Finder / Explorer:** click selects, Cmd/Ctrl-click adds or removes one,
   Shift-click selects a range, Cmd/Ctrl+A selects all, Delete or Backspace removes the selection,

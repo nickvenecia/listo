@@ -54,6 +54,7 @@ from .tokens import (
     SPACE_3,
     SPACE_4,
     SPACE_5,
+    STEP_BADGE,
     TEXT,
     TEXT_BRAND,
     TEXT_LG,
@@ -115,7 +116,11 @@ QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRON
 #Status[tone="failed"], #Status[tone="unsupported"] {{ color: {BAD}; }}
 
 /* ---------- areas */
-#Sidebar {{ background: {PANEL}; border-right: 1px solid {BORDER}; }}
+#Sidebar {{ background: {PANEL}; border-left: 1px solid {BORDER}; }}
+#StepHeader {{ border-bottom: 1px solid {BORDER}; }}
+#StepBadge {{ background: {ACCENT}; color: {ON_ACCENT}; border-radius: {STEP_BADGE // 2}px;
+    font-size: {TEXT_SM}px; font-weight: {WEIGHT_BOLD}; }}
+#StepTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #ExportPanel {{ background: {PANEL}; border-left: 1px solid {BORDER}; }}
 #PanelBottom {{ border-top: 1px solid {BORDER}; }}
 #Footer {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
