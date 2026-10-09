@@ -78,6 +78,7 @@ class JobCard(QFrame):
     details = Signal(int)
     format_clicked = Signal(int, object)  # item id, the chip button (to anchor a menu)
     trim_clicked = Signal(int)
+    captions_clicked = Signal(int)
     pressed = Signal(int, object)  # item id, keyboard modifiers (for selecting)
 
     def mousePressEvent(self, e):
@@ -153,13 +154,23 @@ class JobCard(QFrame):
         top.addWidget(self.status)
         top.addSpacing(tokens.SPACE_2)
         self.btn_trim = self._icon_btn("scissors", "Trim", lambda: self.trim_clicked.emit(self.item_id))
+        self.btn_cc = self._icon_btn("captions", "Captions", lambda: self.captions_clicked.emit(self.item_id))
+        self.btn_cc.hide()
+        self._cc = ""
         self.btn_details = self._icon_btn("info", "Details", lambda: self.details.emit(self.item_id))
         self.btn_retry = self._icon_btn("retry", "Try again", lambda: self.retry.emit(self.item_id))
         self.btn_reveal = self._icon_btn(
             "reveal", "Show the new file", lambda: self.reveal.emit(self.item_id)
         )
         self.btn_remove = self._icon_btn("x", "Remove from list", lambda: self.remove.emit(self.item_id))
-        for b in (self.btn_trim, self.btn_details, self.btn_retry, self.btn_reveal, self.btn_remove):
+        for b in (
+            self.btn_cc,
+            self.btn_trim,
+            self.btn_details,
+            self.btn_retry,
+            self.btn_reveal,
+            self.btn_remove,
+        ):
             top.addWidget(b)
         right.addStretch(1)
         right.addLayout(top)
@@ -220,6 +231,24 @@ class JobCard(QFrame):
         self.trim_tag.setText(text)
         self.trim_tag.setVisible(bool(text))
 
+    def set_captions(self, status: str) -> None:
+        """'' = captions off for this clip; 'todo' / 'review' / 'reviewed'."""
+        self._cc = status
+        tips = {
+            "todo": "Make captions for this clip",
+            "review": "Check this clip's captions before converting",
+            "reviewed": "Captions checked — click to edit",
+        }
+        self.btn_cc.setToolTip(tips.get(status, ""))
+        color = theme.ACCENT if status == "review" else theme.GOOD if status == "reviewed" else theme.MUTED
+        self.btn_cc.setIcon(theme.icon("captions", color))
+        self._show_cc()
+
+    def _show_cc(self) -> None:
+        self.btn_cc.setVisible(
+            bool(self._cc) and getattr(self, "_state", "") in ("ready", "waiting", "done", "warning")
+        )
+
     def set_name(self, name: str) -> None:
         self.name.setText(name)
 
@@ -239,12 +268,13 @@ class JobCard(QFrame):
             "canceled": "Canceled",
             "unsupported": "Can't convert",
             "warning": "Check this one",
+            "transcribing": "Making captions",
             "downloading": "Downloading",
         }
         self.status.setText(text or default.get(state, state))
         self.status.setProperty("tone", state)  # colored by the stylesheet (#Status[tone=...])
         repolish(self.status)
-        busy = state in ("converting", "paused", "downloading")
+        busy = state in ("converting", "paused", "downloading", "transcribing")
         finished_ok = state in ("done", "warning")
         self.bar.setVisible(busy or finished_ok)
         self.bar.setObjectName("Done" if state == "done" else ("Warn" if state == "warning" else ""))
@@ -253,6 +283,8 @@ class JobCard(QFrame):
             self.bar.setValue(1000)
         self.btn_remove.setVisible(not busy or state == "downloading")
         self.btn_trim.setVisible(state in ("ready", "waiting") and self.kind in ("video", "audio"))
+        self._state = state
+        self._show_cc()
         self.btn_retry.setVisible(state in ("failed", "canceled", "skipped", "warning"))
         self.btn_reveal.setVisible(finished_ok)
         self.btn_details.setVisible(state in ("failed", "done", "skipped", "unsupported", "warning"))

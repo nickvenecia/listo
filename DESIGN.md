@@ -198,9 +198,13 @@ Listo talks like a helpful person, not like software.
   The one exception: items in a format list stay, disabled with a tooltip saying why.
 - **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
+- **Menus hold commands, the panel holds settings.** File / Edit / View / Help list actions with their
+  shortcuts (add, select, remove, preview, convert). They live in the Mac menu bar; on Windows and Linux
+  the bar is hidden (no strip across the window) and the shortcuts still work. Never put a setting in a menu.
 - **Basic first, the rest folded away.** Each panel shows only what most people change every time
   (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; Export options: Where, Name).
-  Everything else lives under **Advanced options** (`widgets.Disclosure`), closed by default and remembered.
+  Everything else lives in three fold-away groups (`widgets.Disclosure`): **Picture** (frame, interlacing, LUT),
+  **Text on screen** (burn-ins, captions) and **Sound & speed** — closed by default, each remembered.
   The folded header always says how many advanced settings differ from a fresh start ("· 2 changed"),
   so nothing that changes the output is ever hidden silently. New settings go into Advanced unless
   nearly everyone needs them.

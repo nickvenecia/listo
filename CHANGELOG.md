@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **Captions**: Listo listens to each clip on your computer (faster-whisper; nothing is uploaded), you check and fix the words, then they're burned in on top of everything (bars and burn-ins included). Clean or VHS look, black background on/off, words per line, 1–3 lines, text size, any language or auto-detect (follows people switching between Spanish and English). Optional .srt file. Click CC on a clip to check its captions any time
+- **VHS look redone**: solid letters with a black outline, a little tape softness and colour fringing (no more milky glow). Badge choice: PLAY ► (blinks for the first seconds, then goes away), ● REC (red dot blinking) or none
+- **Advanced options** are three groups: Picture, Text on screen, Sound & speed (each folds on its own and says how many settings are changed)
+- **Menus**: File / Edit / View / Help with shortcuts (in the Mac menu bar; hidden on Windows and Linux so the window stays clean, shortcuts still work)
 - Same-named clips (JVC restarts MOV01A in every PRG folder) never skip or replace each other: the second gets its folder's name (MOV01A_PRG002.mp4), and the list shows each one's folder
 - JVC camcorder clips (.MOD / .TOD) read their matching .MOI automatically: real recording date (for Date & time burn-ins and {date} names) and the true 4:3 / 16:9 shape. .MOI and other camera sidecar files are left out of the list
 - **Burn-ins work with any copy of ffmpeg**: Listo draws the text itself (no more greyed-out checkboxes with Homebrew's ffmpeg); timecode is frame-accurate, drop-frame included

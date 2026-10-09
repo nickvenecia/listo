@@ -36,7 +36,21 @@ except Exception as e:  # noqa: BLE001
 binaries += collect_dynamic_libs("rawpy")
 hiddenimports += ["rawpy._rawpy"]
 
+# Captions: faster-whisper (speech to text) + CTranslate2 (its engine), its voice-detection model,
+# and the tokenizer / audio libraries it loads. The speech model itself is downloaded on first use.
+# PyAV is left out on purpose (Listo decodes audio with ffmpeg; see captions._without_pyav).
+for pkg in ("faster_whisper", "ctranslate2", "tokenizers", "onnxruntime"):
+    try:
+        d, b, h = collect_all(pkg)
+        datas += d
+        binaries += b
+        hiddenimports += h
+    except Exception as e:  # noqa: BLE001
+        print(f"WARNING: couldn't collect {pkg}: {e}")
+hiddenimports += ["huggingface_hub"]
+
 excludes = [
+    "av",
     "rawpy.enhance", "scipy", "cv2", "matplotlib", "pandas", "IPython", "imageio", "imageio_ffmpeg",
     "skimage", "PyQt5", "PyQt6", "gi", "numpy.f2py", "numpy.distutils",
     "tkinter", "unittest", "pydoc_data", "PySide6.QtQml", "PySide6.QtQuick",

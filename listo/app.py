@@ -203,6 +203,17 @@ def main() -> int:
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)
+        try:
+            import ctranslate2  # noqa: F401
+
+            from .core.captions import _without_pyav
+
+            _without_pyav()
+            import faster_whisper  # noqa: F401
+
+            print("captions: ready (speech model downloads on first use)", flush=True)
+        except Exception as e:
+            print(f"captions: NOT available ({e.__class__.__name__}: {e})", flush=True)
         QTimer.singleShot(1500, app.quit)
         code = app.exec()
         return code if caps.ok else 3

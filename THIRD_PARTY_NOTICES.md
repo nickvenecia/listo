@@ -13,6 +13,12 @@ The packaged app includes these open-source components. Thank you to their autho
 | psutil | BSD-3 | https://github.com/giampaolo/psutil |
 | Python | PSF License | https://www.python.org |
 | Inter typeface | SIL Open Font License 1.1 | https://github.com/rsms/inter (see `listo/assets/fonts/OFL.txt`) |
+| faster-whisper (speech to text for captions) | MIT | https://github.com/SYSTRAN/faster-whisper |
+| CTranslate2 | MIT | https://github.com/OpenNMT/CTranslate2 |
+| Whisper speech models (downloaded on first use) | MIT | https://github.com/openai/whisper · converted models: https://huggingface.co/Systran |
+| Silero VAD (voice detection, inside faster-whisper) | MIT | https://github.com/snakers4/silero-vad |
+| ONNX Runtime | MIT | https://github.com/microsoft/onnxruntime |
+| Hugging Face tokenizers / huggingface_hub | Apache-2.0 | https://github.com/huggingface/tokenizers · https://github.com/huggingface/huggingface_hub |
 | VCR OSD Mono typeface, by Riciery Leal (MrManet) | "100% Free" (free for personal and commercial use) | https://www.dafont.com/vcr-osd-mono.font |
 | Icons (redrawn line icons) | ISC (Lucide) | https://lucide.dev |
 

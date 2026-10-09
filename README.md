@@ -51,6 +51,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font).
 - **Frame**: desqueeze anamorphic footage (1.33×–2×), and change the shape to 16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35 or 2.39. Crop to fill, add black bars, or draw cinema bars over the picture with adjustable opacity.
 - **Size** means the short edge, so 1080 gives 1920×1080 for widescreen and 1080×1920 for vertical video. It scales up too (old 720×480 camcorder footage at 1080 comes out 1440×1080, in its true 4:3 shape).
+- **Captions**: Listo listens to each clip on your computer (nothing is uploaded), you check and fix the words, then they're burned in (Clean or VHS look) and/or saved as an .srt file. The speech model downloads once the first time (150 MB to 1.6 GB depending on accuracy).
 - **Preview**: see one frame of any clip exactly as it will come out, side by side with the original.
 - **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.
 - **Two at once**: optionally convert two files side by side.

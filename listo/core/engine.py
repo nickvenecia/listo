@@ -42,7 +42,9 @@ class Conversion:
         reserved: set[str],
         counter: int = 1,
         trim: tuple[float, float] | None = None,
+        captions: list | None = None,
     ):
+        self.captions = captions  # reviewed caption cues for this clip (captions.Cue), or None
         self.src = src
         self.info = info
         self.s = settings
@@ -52,6 +54,22 @@ class Conversion:
         self.trim = trim if (trim and info.kind in ("video", "audio") and trim[1] > trim[0]) else None
         self._ff: FFmpegRun | None = None
         self._canceled = False
+
+    def _write_srt(self, target: Path, notes: list[str]) -> None:
+        """Captions as an .srt next to the video (same name), for players and editing apps."""
+        from .captions import for_output, to_srt
+
+        srt = target.with_suffix(".srt")
+        if srt.exists() or naming.reserve_key(srt) in self.reserved:
+            notes.append(f"{srt.name} is already there, so the caption file wasn't replaced.")
+            return
+        start, length = (self.trim[0], self.trim[1] - self.trim[0]) if self.trim else (0.0, None)
+        tmp = srt.with_name(f".{srt.name}.part")
+        tmp.write_text(
+            to_srt(for_output(self.captions, start, length), self.s.caption_words), encoding="utf-8"
+        )
+        os.replace(tmp, srt)
+        notes.append(f"Caption file saved: {srt.name}.")
 
     def pause(self) -> bool:
         return self._ff.pause() if self._ff else False
@@ -134,7 +152,7 @@ class Conversion:
             else:
                 if not self.caps.ffmpeg:
                     return Result("failed", message="ffmpeg is missing.")
-                plan = video.build(self.src, str(tmp), self.info, self.s, self.caps, self.trim)
+                plan = video.build(self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions)
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]
                 self._ff = FFmpegRun(self.caps.ffmpeg, plan.args)
@@ -146,6 +164,8 @@ class Conversion:
             os.replace(tmp, target)
             if self.s.keep_dates:
                 copy_dates(self.src, target)
+            if self.s.captions and self.s.caption_srt and self.captions and kind == "video":
+                self._write_srt(target, notes)
             warning = self._verify(target, notes) if (self.s.verify and kind != "photo") else ""
             return Result("done", output=target, notes=notes, command=cmd, warning=warning)
         except Canceled:

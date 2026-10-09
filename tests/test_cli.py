@@ -93,12 +93,18 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
         True,
         "vhs",
     )
-    sb.v_adv.set_open(True)
+    sb.g_picture.set_open(True)
     assert sb.matte_row.isVisibleTo(sb)
     from listo.core.presets import Settings
+    from listo.ui.sidebar import GROUPS
 
-    n = sum(1 for k in sb.VIDEO_ADVANCED if getattr(s, k) != getattr(Settings(), k))
-    assert n >= 2 and f"{n} changed" in sb.v_adv.header.text()  # changed settings are never hidden silently
+    for group, key in ((sb.g_picture, "picture"), (sb.g_text, "text")):
+        n = sum(1 for k in GROUPS[key] if getattr(s, k) != getattr(Settings(), k))
+        assert n >= 1 and f"{n} changed" in group.header.text()  # changed settings never hide silently
+    sb.g_text.set_open(True)
+    sb.cc_on.setChecked(True)
+    assert s.captions and sb.cc_box.isVisibleTo(sb)
+    assert sb.burn_badge.isVisibleTo(sb)  # VHS style + a burn-in on
     w._fill_trash_menu()
     assert [a.text() for a in w.trash_menu.actions() if a.text()] == [
         "Remove selected",

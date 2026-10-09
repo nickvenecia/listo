@@ -38,12 +38,28 @@ class Layer:
     y: int
     cell: tuple[int, int] | None = None
     expr: str = ""
+    enable: str = ""  # ffmpeg expression: show only while true (blinking, first seconds)
 
 
 @dataclass
 class BurnPlan:
     layers: list[Layer] = field(default_factory=list)
     folder: Path | None = None  # temp folder holding the PNGs (delete after the conversion)
+    captions: Path | None = None  # ffconcat list: one image per caption, timed; drawn on top of everything
+    caption_xy: tuple[int, int] = (0, 0)
+
+    @property
+    def empty(self) -> bool:
+        return not self.layers and self.captions is None
+
+    def input_args(self, rate: str) -> list[str]:
+        """ffmpeg input options for the images (in the order graph() numbers them)."""
+        args: list[str] = []
+        for img in self.images():
+            args += ["-framerate", rate, "-loop", "1", "-i", str(img)]
+        if self.captions:
+            args += ["-f", "concat", "-safe", "0", "-i", str(self.captions)]
+        return args
 
     def images(self) -> list[Path]:
         seen: list[Path] = []
@@ -69,6 +85,8 @@ class BurnPlan:
             else:
                 parts.append(f"[{index[img]}:v]format=rgba,split={n}" + "".join(f"[{x}]" for x in names))
         cur = src_label
+        if not self.layers and self.captions:
+            return self._caption_graph(first_input + len(images), cur, out_label, parts)
         for k, la in enumerate(self.layers):
             pad = pads[la.image].pop(0)
             if la.cell:
@@ -76,9 +94,19 @@ class BurnPlan:
                 cropped = f"c{k}"
                 parts.append(f"[{pad}]crop={cw}:{ch}:0:'{ch}*({la.expr})'[{cropped}]")
                 pad = cropped
-            nxt = out_label if k == len(self.layers) - 1 else f"b{k}"
-            parts.append(f"[{cur}][{pad}]overlay={la.x}:{la.y}:format=auto:shortest=1[{nxt}]")
+            last = k == len(self.layers) - 1
+            nxt = out_label if last and not self.captions else f"b{k}"
+            when = f":enable='{la.enable}'" if la.enable else ""
+            parts.append(f"[{cur}][{pad}]overlay={la.x}:{la.y}:format=auto:shortest=1{when}[{nxt}]")
             cur = nxt
+        if self.captions:
+            return self._caption_graph(first_input + len(images), cur, out_label, parts)
+        return ";".join(parts)
+
+    def _caption_graph(self, index: int, cur: str, out_label: str, parts: list[str]) -> str:
+        x, y = self.caption_xy
+        parts.append(f"[{index}:v]format=rgba[cap]")
+        parts.append(f"[{cur}][cap]overlay={x}:{y}:format=auto:eof_action=pass[{out_label}]")
         return ";".join(parts)
 
     def cleanup(self) -> None:
@@ -140,10 +168,11 @@ def ones(x: str) -> str:
 class Look:
     font: ImageFont.FreeTypeFont
     color: tuple[int, int, int, int]
-    pad: int  # transparent margin around the text (room for glow / box)
+    pad: int  # transparent margin around the text (room for outline / box)
     box: tuple[int, int, int, int] | None = None  # clean style: box behind the text
-    glow: bool = False
-    shadow: int = 0
+    outline: int = 0  # hard black edge around every letter
+    soften: float = 0.0  # blur radius: tape and CRT softness
+    fringe: int = 0  # colour fringing (chromatic aberration), in pixels
 
     @property
     def line_h(self) -> int:
@@ -153,9 +182,10 @@ class Look:
 
 def _look(style: str, size: int) -> Look:
     if style == "vhs":
+        # Like a VCR / camcorder on-screen display: solid, outlined, a touch soft, slightly mis-registered.
         return Look(
-            ImageFont.truetype(str(VHS_FONT), size), (244, 244, 240, 255), max(4, size // 5),
-            glow=True, shadow=max(1, size // 14),
+            ImageFont.truetype(str(VHS_FONT), size), (242, 242, 236, 255), max(4, size // 5),
+            outline=max(1, round(size / 18)), soften=max(0.5, size / 70), fringe=max(1, round(size / 36)),
         )  # fmt: skip
     return Look(
         ImageFont.truetype(str(CLEAN_FONT), size), (255, 255, 255, 255), max(4, size // 3), box=(0, 0, 0, 140)
@@ -163,20 +193,19 @@ def _look(style: str, size: int) -> Look:
 
 
 def _finish(text_layer: Image.Image, look: Look) -> Image.Image:
-    """Add the style's glow / shadow / box under a layer of plain text."""
+    """Add the style's fringe / softness / box under (and to) a layer of outlined text."""
     out = Image.new("RGBA", text_layer.size, (0, 0, 0, 0))
     if look.box:
         out.paste(Image.new("RGBA", text_layer.size, look.box), (0, 0))
-    alpha = text_layer.getchannel("A")
-    if look.glow:
-        glow = Image.new("RGBA", text_layer.size, (255, 255, 255, 0))
-        glow.putalpha(alpha.filter(ImageFilter.GaussianBlur(max(1, look.pad // 2))).point(lambda a: a * 0.35))
-        out.alpha_composite(glow)
-    if look.shadow:
-        shadow = Image.new("RGBA", text_layer.size, (0, 0, 0, 0))
-        shadow.putalpha(alpha.point(lambda a: a * 0.6))
-        out.alpha_composite(shadow, (look.shadow, look.shadow))
+    if look.fringe:
+        alpha = text_layer.getchannel("A").point(lambda a: a * 0.55)
+        for color, dx in (((255, 40, 60), look.fringe), ((40, 140, 255), -look.fringe)):
+            ghost = Image.new("RGBA", text_layer.size, (*color, 0))
+            ghost.putalpha(alpha)
+            out.alpha_composite(ghost, (max(0, dx), 0), (max(0, -dx), 0))
     out.alpha_composite(text_layer)
+    if look.soften:
+        out = out.filter(ImageFilter.GaussianBlur(look.soften))
     return out
 
 
@@ -185,13 +214,16 @@ def _text_image(parts: list[tuple[str, float]], width: int, look: Look) -> Image
     layer = Image.new("RGBA", (width + 2 * look.pad, look.line_h + 2 * look.pad), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
     for text, x in parts:
-        d.text((look.pad + x, look.pad), text, font=look.font, fill=look.color)
+        d.text(
+            (look.pad + x, look.pad), text, font=look.font, fill=look.color,
+            stroke_width=look.outline, stroke_fill=(0, 0, 0, 255),
+        )  # fmt: skip
     return _finish(layer, look)
 
 
 def _strip(glyphs: list[str], cell_w: int, look: Look) -> tuple[Image.Image, tuple[int, int]]:
     """Glyphs stacked vertically in equal cells (each centred), with no box (the line's box is under it)."""
-    plain = Look(look.font, look.color, look.pad, None, look.glow, look.shadow)
+    plain = Look(look.font, look.color, look.pad, None, look.outline, look.soften, look.fringe)
     cw, ch = cell_w + 2 * look.pad, look.line_h + 2 * look.pad
     strip = Image.new("RGBA", (cw, ch * len(glyphs)), (0, 0, 0, 0))
     for i, g in enumerate(glyphs):
@@ -253,6 +285,33 @@ class _Builder:
             self.layers.append(Layer(path, ox + round(sx), oy, cell, slot.expr))
         return look.line_h
 
+    def badge(self, kind: str, look: Look, mx: int, my: int) -> None:
+        """Top-left VCR / camcorder badge. PLAY ► blinks for the first seconds, then goes away (like
+        a VCR after pressing play); ● REC stays, with its red dot blinking (like a camcorder)."""
+        start = len(self.layers)
+        if kind == "play":
+            self.line(["PLAY ►"], look, "tl", mx, my)
+            for la in self.layers[start:]:
+                la.enable = "lt(t,4)*lt(mod(t,1),0.7)"
+        elif kind == "rec":
+            ascent = look.font.getmetrics()[0]
+            top = look.font.getbbox("R", anchor="ls")[1]  # cap height (negative, from the baseline)
+            d = max(6, round(-top * 0.95))
+            gap = round(d * 0.45)
+            self.line(["REC"], look, "tl", mx + d + gap, my)
+            dot = Image.new("RGBA", (d + 2 * look.pad, d + 2 * look.pad), (0, 0, 0, 0))
+            ImageDraw.Draw(dot).ellipse(
+                (look.pad, look.pad, look.pad + d, look.pad + d),
+                fill=(230, 32, 40, 255), outline=(0, 0, 0, 255), width=max(1, look.outline),
+            )  # fmt: skip
+            if look.soften:
+                dot = dot.filter(ImageFilter.GaussianBlur(look.soften))
+            # centre the dot on the capital letters
+            y = self.top + my + ascent + top + (-top - d) // 2 - look.pad
+            self.layers.append(
+                Layer(self._save(dot), self.left + mx - look.pad, y, enable="lt(mod(t,1),0.6)")
+            )
+
 
 DIGITS = [str(d) for d in range(10)]
 
@@ -270,11 +329,13 @@ def plan(
     shot: datetime | None,
     tc: str,
     rate: Fraction | None,
+    cues: list | None = None,
 ) -> BurnPlan:
-    """Render the burn-ins for one conversion. `shot` is the wall-clock time of the first frame,
-    `tc` the timecode of the first frame (with `rate` the output frame rate)."""
+    """Render the burn-ins (and captions) for one conversion. `shot` is the wall-clock time of the
+    first frame, `tc` the timecode of the first frame (with `rate` the output frame rate), `cues`
+    the captions already shifted to the output's own timeline."""
     W, H = frame
-    if not W or not H or not s.burns:
+    if not W or not H or not (s.burns or cues):
         return BurnPlan()
     folder = Path(tempfile.mkdtemp(prefix="listo-burn-"))
     b = _Builder(folder, frame, area if area else FULL)
@@ -285,12 +346,12 @@ def plan(
         (hh, mm, ss, ff), df = timecode_fields(tc, rate)
         timecode = [*_two(hh), ":", *_two(mm), ":", *_two(ss), ";" if df else ":", *_two(ff)]
 
-    if s.burn_style == "vhs":
+    if s.burns and s.burn_style == "vhs":
         size = max(12, round(ref / 15))
         look = _look("vhs", size)
         mx, my = round(ref * 0.09), round(ref * 0.07)
         gap = round(size * 0.25)
-        b.line(["PLAY ►"], look, "tl", mx, my)
+        b.badge(s.burn_badge, look, mx, my)
         if timecode:
             b.line(timecode, look, "tr", mx, my)
         if s.burn_datetime and shot:
@@ -306,7 +367,7 @@ def plan(
             )
         if s.burn_filename:
             b.line([Path(src).name], _look("vhs", max(10, round(size * 0.6))), "br", mx, my)
-    else:
+    elif s.burns:
         size = max(12, round(ref / 26))
         look = _look("clean", size)
         pad = max(8, size)
@@ -323,7 +384,92 @@ def plan(
                 pad,
                 pad,
             )
-    return BurnPlan(b.layers, folder)
+    bp = BurnPlan(b.layers, folder)
+    if cues:
+        bp.captions, bp.caption_xy = caption_track(cues, s, frame, folder)
+    return bp
+
+
+# ---------------------------------------------------------------------------- captions
+CAPTION_SIZE = {"small": 24, "medium": 19, "large": 15}  # short edge / n
+
+
+def _caption_look(s: Settings, size: int) -> Look:
+    if s.caption_style == "vhs":
+        look = _look("vhs", size)
+        if s.caption_box:  # closed-caption look: solid black behind each line, crisp letters
+            look.outline, look.fringe = 0, max(1, look.fringe // 2)
+        return look
+    font = ImageFont.truetype(str(CLEAN_FONT), size)
+    return Look(
+        font, (255, 255, 255, 255), max(4, size // 3), outline=0 if s.caption_box else max(2, size // 12)
+    )
+
+
+def _caption_image(
+    lines: list[str], look: Look, box: bool, band: tuple[int, int], line_step: int
+) -> Image.Image:
+    """Lines centred and stacked from the bottom of a fixed-size transparent band."""
+    bw, bh = band
+    layer = Image.new("RGBA", band, (0, 0, 0, 0))
+    plain = Look(look.font, look.color, look.pad, None, look.outline, 0.0, 0)
+    y = bh - look.pad - len(lines) * line_step
+    for text in lines:
+        w = look.font.getlength(text)
+        x = (bw - w) / 2
+        if box:
+            bpad = max(4, look.font.size // 4)
+            ImageDraw.Draw(layer).rectangle(
+                (round(x - bpad), y - bpad // 3, round(x + w + bpad), y + line_step - bpad // 3),
+                fill=(0, 0, 0, 255 if look.fringe else 190),
+            )  # fmt: skip
+        line_img = _text_image([(text, 0.0)], round(w), plain)
+        layer.alpha_composite(line_img, (round(x) - look.pad, y - look.pad))
+        y += line_step
+    look_fx = Look(look.font, look.color, 0, None, 0, look.soften, look.fringe)
+    return _finish(layer, look_fx) if (look.soften or look.fringe) else layer
+
+
+def caption_track(
+    cues: list, s: Settings, frame: tuple[int, int], folder: Path
+) -> tuple[Path, tuple[int, int]]:
+    """One image per caption plus an ffconcat list that shows each for its time.
+    Returns (list file, where the band goes). Captions sit bottom-centre of the whole frame,
+    over bars and burn-ins."""
+    from .captions import wrap
+
+    W, H = frame
+    size = max(12, round(min(W, H) / CAPTION_SIZE.get(s.caption_size, 19)))
+    look = _caption_look(s, size)
+    line_step = round(look.line_h * 1.08)
+    wrapped = [wrap(c.text, s.caption_words) for c in cues]
+    widest = max((look.font.getlength(t) for ls in wrapped for t in ls), default=0)
+    most = max((len(ls) for ls in wrapped), default=1)
+    band = (min(W, round(widest) + 4 * look.pad), most * line_step + 2 * look.pad)
+    blank = folder / "cap_blank.png"
+    Image.new("RGBA", band, (0, 0, 0, 0)).save(blank)
+
+    def q(p: Path) -> str:
+        return "'" + str(p).replace("'", "'\\''") + "'"
+
+    entries: list[tuple[Path, float]] = []
+    t = 0.0
+    for i, (c, ls) in enumerate(zip(cues, wrapped, strict=True)):
+        if c.start > t + 0.001:
+            entries.append((blank, c.start - t))
+        img = folder / f"cap{i}.png"
+        _caption_image(ls, look, s.caption_box, band, line_step).save(img)
+        entries.append((img, max(0.04, c.end - max(c.start, t))))
+        t = max(t, c.end)
+    entries.append((blank, 1.0))
+    lst = folder / "captions.ffconcat"
+    lines = ["ffconcat version 1.0"]
+    for path, dur in entries:
+        lines += [f"file {q(path)}", f"duration {dur:.3f}"]
+    lines.append(f"file {q(blank)}")  # (the concat reader needs the last file twice)
+    lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    margin = round(H * 0.06)
+    return lst, ((W - band[0]) // 2, H - margin - band[1])
 
 
 def shot_start(src: str, info: MediaInfo, start_s: float) -> datetime:

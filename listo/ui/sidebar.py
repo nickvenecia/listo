@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core.captions import LANGUAGES
+from ..core.captions import MODELS as CAPTION_MODELS
 from ..core.presets import (
     ASPECT_CHOICES,
     AUDIO_FORMATS,
@@ -97,6 +99,15 @@ def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> QCheckBox:
     if tip:
         box.setToolTip(tip)
     return box
+
+
+# Settings counted in each folded group's "· N changed" (so nothing changed hides when folded).
+GROUPS: dict[str, tuple[str, ...]] = {
+    "picture": ("desqueeze", "aspect", "deinterlace", "lut_path"),
+    "text": ("burn_timecode", "burn_filename", "burn_datetime", "captions"),
+    "sound": ("hardware", "parallel", "keep_all_audio"),
+    "photo": ("photo_keep_metadata",),
+}
 
 
 class Sidebar(QFrame):
@@ -252,19 +263,110 @@ class Sidebar(QFrame):
         self.sec_burn.add(self.burn_dt)
         self.burn_style = combo(
             [
-                ("clean", "Clean", "Small labels on dark boxes in the corners"),
+                ("clean", "Clean look", "Small labels on dark boxes in the corners"),
                 (
                     "vhs",
-                    "VHS camcorder",
+                    "VHS camcorder look",
                     "PLAY, date and a running clock in a VCR font, like an old camcorder",
                 ),
             ],
             self.s.burn_style,
         )
         self.burn_style.currentIndexChanged.connect(
-            lambda: self._set("burn_style", self.burn_style.currentData())
+            lambda: self._set_and_sync("burn_style", self.burn_style.currentData())
         )
+        self.burn_badge = combo(
+            [
+                (
+                    "play",
+                    "PLAY ► at the start",
+                    "Blinks for the first few seconds, then goes away, like a VCR",
+                ),
+                ("rec", "● REC", "Red dot blinking, like a camcorder while recording"),
+                ("none", "No badge", ""),
+            ],
+            self.s.burn_badge,
+        )
+        self.burn_badge.currentIndexChanged.connect(
+            lambda: self._set_and_sync("burn_badge", self.burn_badge.currentData())
+        )
+
+        self.sec_cc = Section("Captions")
+        self.cc_on = _checkbox(
+            "Add captions",
+            self.s.captions,
+            lambda v: self._set_and_sync("captions", v),
+            "Listo listens to each clip on this computer, you check the words, then they're burned in",
+        )
+        self.sec_cc.add(self.cc_on)
+        self.cc_box = QWidget()
+        cb = vbox(self.cc_box, 0, SPACE_1)
+        self.cc_lang = combo([(k, t, "") for k, t in LANGUAGES], self.s.caption_language)
+        self.cc_lang.setToolTip("'Detect automatically' also follows people switching languages")
+        self.cc_lang.currentIndexChanged.connect(
+            lambda: self._set("caption_language", self.cc_lang.currentData())
+        )
+        self.cc_model = combo(
+            [
+                (k, f"{t} · {CAPTION_MODELS[k][1]} download", "")
+                for k, t in (("fast", "Fast"), ("balanced", "Balanced accuracy"), ("best", "Most accurate"))
+            ],
+            self.s.caption_model,
+        )
+        self.cc_model.setToolTip("Downloaded once the first time it's used. More accurate = slower")
+        self.cc_model.currentIndexChanged.connect(
+            lambda: self._set("caption_model", self.cc_model.currentData())
+        )
+        self.cc_style = combo(
+            [
+                ("clean", "Clean", "Like modern subtitles"),
+                ("vhs", "VHS", "VCR font, like closed captions on tape"),
+            ],
+            self.s.caption_style,
+        )
+        self.cc_style.currentIndexChanged.connect(
+            lambda: self._set("caption_style", self.cc_style.currentData())
+        )
+        self.cc_bg = _checkbox("Black background", self.s.caption_box, lambda v: self._set("caption_box", v))
+        self.cc_size = combo(
+            [("small", "Small text", ""), ("medium", "Medium text", ""), ("large", "Large text", "")],
+            self.s.caption_size,
+        )
+        self.cc_size.currentIndexChanged.connect(
+            lambda: self._set("caption_size", self.cc_size.currentData())
+        )
+        self.cc_lines = combo(
+            [("1", "1 line at a time", ""), ("2", "Up to 2 lines", ""), ("3", "Up to 3 lines", "")],
+            str(self.s.caption_lines),
+        )
+        self.cc_lines.currentIndexChanged.connect(
+            lambda: self._set("caption_lines", int(self.cc_lines.currentData()))
+        )
+        words_row = QWidget()
+        wr = hbox(words_row, spacing=SPACE_3)
+        wl = QLabel("Words per line")
+        wl.setObjectName("Muted")
+        self.cc_words = QSlider(Qt.Orientation.Horizontal)
+        self.cc_words.setRange(2, 12)
+        self.cc_words.setValue(self.s.caption_words)
+        self.cc_words.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cc_words_val = QLabel(str(self.s.caption_words))
+        self.cc_words_val.setObjectName("Muted")
+        self.cc_words.valueChanged.connect(self._caption_words)
+        wr.addWidget(wl)
+        wr.addWidget(self.cc_words, 1)
+        wr.addWidget(self.cc_words_val)
+        self.cc_srt = _checkbox(
+            "Also save a caption file (.srt)", self.s.caption_srt, lambda v: self._set("caption_srt", v),
+            "For YouTube, players and editing apps",
+        )  # fmt: skip
+        for w in (self.cc_lang, self.cc_model, self.cc_style, self.cc_size, self.cc_lines, words_row):
+            cb.addWidget(w)
+        cb.addWidget(self.cc_bg)
+        cb.addWidget(self.cc_srt)
+        self.sec_cc.add(self.cc_box)
         self.sec_burn.add(self.burn_style)
+        self.sec_burn.add(self.burn_badge)
 
         speed = Section("Speed")
         self.v_hw = _checkbox(
@@ -286,10 +388,17 @@ class Sidebar(QFrame):
 
         for sec in (fmt, self.sec_variant, self.sec_size):
             lay.addWidget(sec)
-        self.v_adv = self._advanced()
-        for sec in (self.sec_frame, self.sec_deint, self.sec_lut, self.sec_burn, speed, self.sec_audio):
-            self.v_adv.add(sec)
-        lay.addWidget(self.v_adv)
+        self.g_picture = self._group("Picture", "picture")
+        for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
+            self.g_picture.add(sec)
+        self.g_text = self._group("Text on screen", "text")
+        for sec in (self.sec_burn, self.sec_cc):
+            self.g_text.add(sec)
+        self.g_sound = self._group("Sound & speed", "sound")
+        for sec in (self.sec_audio, speed):
+            self.g_sound.add(sec)
+        for g in (self.g_picture, self.g_text, self.g_sound):
+            lay.addWidget(g)
         lay.addStretch(1)
         self.stack.addWidget(page)
         self._sync_lut()
@@ -330,7 +439,7 @@ class Sidebar(QFrame):
         meta.add(self.p_meta)
         for sec in (fmt, self.sec_quality, size):
             lay.addWidget(sec)
-        self.p_adv = self._advanced()
+        self.p_adv = self._group("More", "photo")
         self.p_adv.add(meta)
         lay.addWidget(self.p_adv)
         lay.addStretch(1)
@@ -358,37 +467,23 @@ class Sidebar(QFrame):
         self._emit_timer.start()
 
     # ------------------------------------------------------------------ advanced options
-    VIDEO_ADVANCED = (
-        "desqueeze",
-        "aspect",
-        "deinterlace",
-        "lut_path",
-        "burn_timecode",
-        "burn_filename",
-        "burn_datetime",
-        "hardware",
-        "parallel",
-        "keep_all_audio",
-    )
-    PHOTO_ADVANCED = ("photo_keep_metadata",)
-
-    def _advanced(self) -> Disclosure:
-        d = Disclosure("Advanced options", is_open=self.qs.value("advanced_open", False, type=bool))
-        d.toggled.connect(self._advanced_toggled)
+    def _group(self, title: str, key: str) -> Disclosure:
+        d = Disclosure(title, is_open=self.qs.value(f"group_open/{key}", False, type=bool))
+        d.toggled.connect(lambda on, k=key: self.qs.setValue(f"group_open/{k}", on))
+        d.setProperty("group", key)
         return d
 
-    def _advanced_toggled(self, on: bool) -> None:
-        self.qs.setValue("advanced_open", on)
-        for d in (self.v_adv, self.p_adv):
-            if d.is_open() != on:
-                d.set_open(on)
+    def open_groups(self, on: bool) -> None:
+        for d in (self.g_picture, self.g_text, self.g_sound, self.p_adv):
+            d.set_open(on, emit=True)
 
     def _update_advanced(self) -> None:
-        """Say how many advanced settings differ from a fresh start, so nothing changed hides away."""
+        """Each folded group says how many of its settings differ from a fresh start."""
         if not hasattr(self, "p_adv"):
             return
         base = Settings()
-        for d, keys in ((self.v_adv, self.VIDEO_ADVANCED), (self.p_adv, self.PHOTO_ADVANCED)):
+        for d in (self.g_picture, self.g_text, self.g_sound, self.p_adv):
+            keys = GROUPS[d.property("group")]
             n = sum(1 for k in keys if getattr(self.s, k) != getattr(base, k))
             d.set_summary(f"{n} changed" if n else "")
 
@@ -404,6 +499,20 @@ class Sidebar(QFrame):
     def _video_preset(self, key: str) -> None:
         self._set("video_preset", key)
         self._sync_video()
+
+    def _set_and_sync(self, attr: str, value) -> None:
+        self._set(attr, value)
+        self._sync_text()
+
+    def _caption_words(self, v: int) -> None:
+        self.cc_words_val.setText(str(v))
+        self._set("caption_words", v)
+
+    def _sync_text(self) -> None:
+        """Burn-in and caption options only show when they're switched on."""
+        self.burn_style.setVisible(self.s.burns)
+        self.burn_badge.setVisible(self.s.burns and self.s.burn_style == "vhs")
+        self.cc_box.setVisible(self.s.captions)
 
     def _aspect_picked(self) -> None:
         self._set("aspect", self.v_aspect.currentData())
@@ -424,7 +533,7 @@ class Sidebar(QFrame):
 
     def _burn(self, attr: str, value: bool) -> None:
         self._set(attr, value)
-        self.burn_style.setVisible(self.s.burns)
+        self._sync_text()
 
     def _variant_picked(self) -> None:
         if self._loading or self.v_variant.signalsBlocked():
@@ -452,7 +561,7 @@ class Sidebar(QFrame):
         self.sec_burn.setVisible(looks)
         self.sec_frame.setVisible(looks)
         self._sync_frame()
-        self.burn_style.setVisible(self.s.burns)
+        self._sync_text()
         self.sec_audio.setVisible(p.edit_format)
 
     def _sync_photo(self) -> None:
@@ -640,6 +749,12 @@ class Sidebar(QFrame):
                 (self.v_aspect, self.s.aspect),
                 (self.v_fit, self.s.aspect_fit),
                 (self.burn_style, self.s.burn_style),
+                (self.burn_badge, self.s.burn_badge),
+                (self.cc_lang, self.s.caption_language),
+                (self.cc_model, self.s.caption_model),
+                (self.cc_style, self.s.caption_style),
+                (self.cc_size, self.s.caption_size),
+                (self.cc_lines, str(self.s.caption_lines)),
                 (self.p_fmt, self.s.photo_format),
                 (self.p_size, self.s.photo_resize),
                 (self.a_fmt, self.s.audio_format),
@@ -652,11 +767,18 @@ class Sidebar(QFrame):
                 (self.burn_tc, self.s.burn_timecode),
                 (self.burn_name, self.s.burn_filename),
                 (self.burn_dt, self.s.burn_datetime),
+                (self.cc_on, self.s.captions),
+                (self.cc_bg, self.s.caption_box),
+                (self.cc_srt, self.s.caption_srt),
                 (self.p_meta, self.s.photo_keep_metadata),
             ):
                 box.blockSignals(True)
                 box.setChecked(val)
                 box.blockSignals(False)
+            self.cc_words.blockSignals(True)
+            self.cc_words.setValue(self.s.caption_words)
+            self.cc_words.blockSignals(False)
+            self.cc_words_val.setText(str(self.s.caption_words))
             self.matte_q.blockSignals(True)
             self.matte_q.setValue(self.s.matte_opacity)
             self.matte_q.blockSignals(False)

@@ -85,12 +85,13 @@ def burn_plan(
     notes: list[str],
     start_tc: str = "",
     start_s: float = 0.0,
+    cues: list | None = None,
 ) -> BurnPlan:
-    """Burn-in images for this conversion (drawn by Listo, so any ffmpeg works)."""
-    if not s.burns:
+    """Burn-in and caption images for this conversion (drawn by Listo, so any ffmpeg works)."""
+    if not s.burns and not cues:
         return BurnPlan()
     if not frame[0] or not frame[1]:
-        notes.append("Burn-ins skipped — couldn't read the picture size.")
+        notes.append("Burn-ins and captions skipped — couldn't read the picture size.")
         return BurnPlan()
     tc, rate = "", None
     if s.burn_timecode:
@@ -103,13 +104,15 @@ def burn_plan(
         else:
             notes.append("Timecode burn-in skipped — frame rate unknown.")
     shot = None
-    if s.burn_datetime:
+    if s.burns and s.burn_datetime:
         if not info.created:
             notes.append("No recording time inside the clip — the date comes from the file instead.")
         shot = burnin.shot_start(src, info, start_s)
-    bp = burnin.plan(info, s, frame, area, src, shot, tc, rate)
+    bp = burnin.plan(info, s, frame, area, src, shot, tc, rate, cues)
     if bp.layers:
         notes.append("Burn-ins added" + (" (VHS style)." if s.burn_style == "vhs" else "."))
+    if bp.captions:
+        notes.append(f"Captions added ({len(cues or [])}).")
     return bp
 
 
@@ -176,7 +179,9 @@ def build(
     s: Settings,
     caps: Capabilities,
     trim: tuple[float, float] | None = None,
+    captions: list | None = None,
 ) -> Plan:
+    """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim."""
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
         return _audio_only(src, out, info, s, caps, trim)
     if info.kind != "video" or info.video_index is None:
@@ -266,9 +271,14 @@ def build(
     if shape_vf:
         bars_only = s.aspect_fit == "matte" and s.desqueeze == "1"
         notes.append(f"Cinema bars added ({s.aspect})." if bars_only else f"Reshaped to {fw}×{fh}.")
+    cues = None
+    if s.captions and captions:
+        from .captions import for_output
+
+        cues = for_output(captions, trim[0] if trim else 0.0, (trim[1] - trim[0]) if trim else None)
     burn = burn_plan(
         info, s, (fw, fh) if p.key == "gif" else out_size, area, doubled, src, notes, start_tc,
-        trim[0] if trim else 0.0,
+        trim[0] if trim else 0.0, cues,
     )  # fmt: skip
     burn_at = len(vf) if p.key == "gif" else -1  # GIF: burn in before the frame-rate drop
 
@@ -400,14 +410,10 @@ def build(
     elif tonemap and caps.has_filter("zscale"):
         vargs += ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
 
-    if burn.layers:
-        # Burn-in images are extra inputs, so the picture goes through a filter graph.
+    if not burn.empty:
+        # Burn-in / caption images are extra inputs, so the picture goes through a filter graph.
         first = args.index("-i") + 2
-        images = burn.images()
-        extra: list[str] = []
-        for img in images:
-            extra += ["-framerate", _out_rate(info, s, doubled) or "25", "-loop", "1", "-i", str(img)]
-        args[first:first] = extra
+        args[first:first] = burn.input_args(_out_rate(info, s, doubled) or "25")
         # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
         # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
         pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
@@ -421,7 +427,7 @@ def build(
     args += vargs
 
     # ---- audio codec
-    if tracks and burn.layers:
+    if tracks and not burn.empty:
         args += ["-af", "asetpts=PTS-STARTPTS"]  # keep in step with the picture (see above)
     if tracks:
         if p.edit_format:
@@ -470,7 +476,13 @@ def _hw_rate(enc: str, info: MediaInfo, variant: str, size: tuple[int, int]) -> 
 
 
 def preview_plan(
-    src: str, info: MediaInfo, s: Settings, caps: Capabilities, at: float, out_png: str
+    src: str,
+    info: MediaInfo,
+    s: Settings,
+    caps: Capabilities,
+    at: float,
+    out_png: str,
+    captions: list | None = None,
 ) -> tuple[list[str], Plan]:
     """ffmpeg args that save ONE frame at `at` seconds, with exactly the picture steps the real
     conversion would use (LUT, frame, size, burn-ins). Call plan.cleanup() afterwards."""
@@ -479,7 +491,7 @@ def preview_plan(
         s.video_preset = "h264"  # same look; a GIF's palette step needs the whole clip
     length = max(info.duration, 0.1)
     at = min(max(0.0, at), max(0.0, length - 0.05))
-    plan = build(src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)))
+    plan = build(src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)), captions=captions)
     a = plan.args
     first_map = a.index("-map")
     args = [*a[:first_map], "-map", a[first_map + 1]]

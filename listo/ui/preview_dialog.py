@@ -7,8 +7,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QSlider, QWidget
 
 from ..core import naming
-from ..core.presets import VIDEO_BY_KEY, Settings
-from ..core.probe import MediaInfo
+from ..core.presets import VIDEO_BY_KEY
 from .tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
 from .trim_dialog import fmt_time
 from .widgets import Segmented, combo, hbox, vbox
@@ -18,11 +17,9 @@ STEP = 10  # slider units per second
 
 
 class PreviewDialog(QDialog):
-    """`clips` = [(label, path, info, settings)] — every video in the list, with its own settings."""
+    """`clips` = [(label, path, info, settings, captions or None)] — every video in the list."""
 
-    def __init__(
-        self, clips: list[tuple[str, str, MediaInfo, Settings]], start: int = 0, parent: QWidget | None = None
-    ):
+    def __init__(self, clips: list[tuple], start: int = 0, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Preview")
         self.clips = clips
@@ -83,11 +80,11 @@ class PreviewDialog(QDialog):
         self._clip_changed()
 
     # ------------------------------------------------------------------ behavior
-    def _clip(self) -> tuple[str, str, MediaInfo, Settings]:
+    def _clip(self) -> tuple:
         return self.clips[max(0, self.pick.currentIndex())]
 
     def _clip_changed(self) -> None:
-        _, _, info, s = self._clip()
+        _, _, info, s, _ = self._clip()
         self.slider.blockSignals(True)
         self.slider.setRange(0, max(0, int(info.duration * STEP) - 1))
         self.slider.setValue(int(min(info.duration / 3, 10) * STEP))  # a moment in, not the black first frame
@@ -103,7 +100,7 @@ class PreviewDialog(QDialog):
         self._timer.start()
 
     def _render(self) -> None:
-        _, path, info, s = self._clip()
+        _, path, info, s, cues = self._clip()
         self.seq += 1
         self.picture.setText("Making a preview…")
         self.pool.start(
@@ -115,6 +112,7 @@ class PreviewDialog(QDialog):
                 self.slider.value() / STEP,
                 self.view.value() == "original",
                 self.signals,
+                captions=cues,
             )
         )
 

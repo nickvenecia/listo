@@ -291,12 +291,27 @@ class Settings:
     burn_filename: bool = False
     burn_datetime: bool = False  # the clip's own date + a running clock
     burn_style: str = "clean"  # see BURN_STYLES
+    burn_badge: str = "play"  # VHS style: "play" (PLAY ► blinks, then goes), "rec" (● REC), "none"
     desqueeze: str = "1"  # anamorphic squeeze factor, see DESQUEEZE
     aspect: str = "orig"  # see ASPECT_CHOICES (frame.ASPECTS)
     aspect_fit: str = "crop"  # "crop" to fill, "bars" = pad to the new shape, "matte" = cinema bars on top
     matte_opacity: int = 100  # how dark cinema bars are, 0-100
+    captions: bool = False  # transcribe speech, review it, burn it in
+    caption_language: str = "auto"
+    caption_model: str = "balanced"  # captions.MODELS
+    caption_style: str = "clean"  # "clean" or "vhs"
+    caption_box: bool = True  # black background behind each line
+    caption_words: int = 7  # most words per line
+    caption_lines: int = 2
+    caption_size: str = "medium"  # small / medium / large
+    caption_srt: bool = False  # also save an .srt file next to the video
     verify: bool = True
     parallel: bool = False
+
+    @property
+    def overlays(self) -> bool:
+        """Anything drawn over the picture (burn-ins or captions)."""
+        return self.burns or self.captions
 
     @property
     def burns(self) -> bool:

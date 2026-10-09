@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import os
 import subprocess
+import threading
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
@@ -227,8 +228,10 @@ class PreviewTask(QRunnable):
         at: float,
         original: bool,
         signals: PreviewSignals,
+        captions: list | None = None,
     ):
         super().__init__()
+        self.captions = captions
         self.seq, self.path, self.info, self.s = seq, path, info, settings
         self.at, self.original, self.signals = at, original, signals
         self.setAutoDelete(True)
@@ -247,7 +250,7 @@ class PreviewTask(QRunnable):
             if self.original:
                 args = original_frame_args(self.path, self.info, self.at, name)
             else:
-                args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name)
+                args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name, self.captions)
             cp = subprocess.run(
                 [caps.ffmpeg, *args],
                 stdin=subprocess.DEVNULL,
@@ -273,3 +276,44 @@ class PreviewTask(QRunnable):
             self.signals.done.emit(self.seq, data, error)
         except RuntimeError:  # the dialog closed meanwhile
             pass
+
+
+class TranscribeThread(QThread):
+    """Turns speech into captions for a queue of clips, one at a time (the model is big)."""
+
+    progress = Signal(int, float)  # item id, 0..1
+    status = Signal(int, str)  # item id, what's happening ("Downloading the speech model…")
+    done = Signal(int, object, str)  # item id, Transcript or None, error message
+
+    def __init__(self, jobs: list[tuple[int, str, MediaInfo, object]]):
+        """jobs: (item id, path, info, settings)."""
+        super().__init__()
+        self.jobs = list(jobs)
+        self._cancel = threading.Event()
+
+    def cancel(self) -> None:
+        self._cancel.set()
+
+    def run(self) -> None:
+        from ..core import captions
+
+        for iid, path, info, s in self.jobs:
+            if self._cancel.is_set():
+                self.done.emit(iid, None, "Canceled")
+                continue
+            try:
+                t = captions.transcribe(
+                    path, info, s.caption_model, s.caption_language, s.caption_words, s.caption_lines,
+                    on_progress=lambda f, i=iid: self.progress.emit(i, f),
+                    on_status=lambda m, i=iid: self.status.emit(i, m),
+                    cancel=self._cancel,
+                )  # fmt: skip
+                captions.save(t)
+                self.done.emit(iid, t, "")
+            except captions.Canceled:
+                self.done.emit(iid, None, "Canceled")
+            except captions.CaptionError as e:
+                self.done.emit(iid, None, str(e))
+            except Exception as e:
+                log.warning("transcription failed for %s", path, exc_info=True)
+                self.done.emit(iid, None, f"Couldn't make captions ({e.__class__.__name__}).")

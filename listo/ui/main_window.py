@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -88,6 +89,7 @@ class Item:
     speed: float = 0.0
     url: str = ""  # set for things added from a link
     trim: tuple[float, float] | None = None
+    transcript: object | None = None  # captions.Transcript once speech has been turned into text
 
     @property
     def length(self) -> float:
@@ -218,16 +220,12 @@ class MainWindow(QMainWindow):
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
         self.selected: set[int] = set()
+        self.tx = None  # TranscribeThread while captions are being made
+        self._tx_then = None  # what to do when it's finished
         self._anchor: int | None = None  # where a Shift-click range starts
 
         self._build()
         self._menus()
-        QShortcut(QKeySequence.StandardKey.Paste, self, activated=self._paste)
-        # Text fields keep these keys for themselves while you type in them.
-        QShortcut(QKeySequence.StandardKey.SelectAll, self, activated=self.select_all)
-        for key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
-            QShortcut(QKeySequence(key), self, activated=self.remove_selected)
-        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=lambda: self._select(set()))
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
         self._update_export_button()
@@ -387,29 +385,67 @@ class MainWindow(QMainWindow):
         self.toast = Toast(root)
 
     def _menus(self) -> None:
-        m = self.menuBar().addMenu("File")
-        a = QAction("Add Files…", self)
-        a.setShortcut(QKeySequence.StandardKey.Open)
-        a.triggered.connect(self.pick_files)
-        m.addAction(a)
-        a = QAction("Add Folder…", self)
-        a.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        a.triggered.connect(self.pick_folder)
-        m.addAction(a)
-        a = QAction("Add a Link…", self)
-        a.setShortcut(QKeySequence("Ctrl+L"))
-        a.triggered.connect(self.ask_link)
-        m.addAction(a)
-        m.addSeparator()
-        a = QAction("Convert", self)
-        a.setShortcut(QKeySequence("Ctrl+Return"))
-        a.triggered.connect(self.start)
-        m.addAction(a)
-        h = self.menuBar().addMenu("Help")
-        a = QAction(f"About {APP_NAME}", self)
-        a.setMenuRole(QAction.MenuRole.AboutRole)
-        a.triggered.connect(self._about)
-        h.addAction(a)
+        """File / Edit / View / Help. On a Mac they live in the menu bar at the top of the screen;
+        on Windows and Linux the bar stays hidden (no extra strip in the window) but every
+        shortcut still works. Menus hold commands only; settings stay in the side panel."""
+
+        def act(menu, text: str, fn, keys=None, role=None) -> QAction:
+            a = QAction(text, self)
+            if keys is not None:
+                seqs = keys if isinstance(keys, list) else [keys]
+                a.setShortcuts([QKeySequence(k) for k in seqs])
+            if role is not None:
+                a.setMenuRole(role)
+            a.triggered.connect(fn)
+            menu.addAction(a)
+            self.addAction(a)  # shortcuts work even while the menu bar is hidden
+            return a
+
+        bar = self.menuBar()
+        f = bar.addMenu("File")
+        act(f, "Add Files…", self.pick_files, QKeySequence.StandardKey.Open)
+        act(f, "Add Folder…", self.pick_folder, "Ctrl+Shift+O")
+        act(f, "Add a Link…", self.ask_link, "Ctrl+L")
+        f.addSeparator()
+        act(f, "Preview…", self.open_preview, "Ctrl+P")
+        act(f, "Export Options…", self.open_export_options, "Ctrl+E")
+        f.addSeparator()
+        act(f, "Convert", self.start, "Ctrl+Return")
+        act(f, "Stop", self.stop, "Ctrl+.")
+        e = bar.addMenu("Edit")
+        # Text fields keep these keys for themselves while you type in them.
+        act(e, "Paste", self._paste, QKeySequence.StandardKey.Paste)
+        e.addSeparator()
+        act(e, "Select All", self.select_all, QKeySequence.StandardKey.SelectAll)
+        act(e, "Deselect", lambda: self._select(set()), "Esc")
+        act(e, "Remove Selected", self.remove_selected, [Qt.Key.Key_Backspace, Qt.Key.Key_Delete])
+        e.addSeparator()
+        act(e, "Clear Finished", self.clear_finished)
+        act(e, "Clear All", self.clear_all)
+        v = bar.addMenu("View")
+        act(v, "Check Captions…", self._menu_captions, "Ctrl+Shift+C")
+        v.addSeparator()
+        act(v, "Show All Options", lambda: self.sidebar.open_groups(True))
+        act(v, "Fold All Options", lambda: self.sidebar.open_groups(False))
+        h = bar.addMenu("Help")
+        act(h, "Show the Log File", self._show_log)
+        act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
+        if sys.platform != "darwin":
+            bar.hide()
+
+    def _menu_captions(self) -> None:
+        sel = [i for i in self.order if i in self.selected] or list(self.order)
+        target = next((i for i in sel if self._wants_captions(self.items[i])), None)
+        if target is None:
+            self.toast.show_message("Turn on Captions (Text on screen) and add a video with sound first.")
+            return
+        self.open_captions(target)
+
+    def _show_log(self) -> None:
+        from ..core.fileutil import reveal
+        from ..core.paths import log_dir
+
+        reveal(str(log_dir() / "listo.log"))
 
     # ------------------------------------------------------------------ links
     def ask_link(self) -> None:
@@ -649,6 +685,7 @@ class MainWindow(QMainWindow):
         card.details.connect(self.show_details)
         card.format_clicked.connect(self._format_menu)
         card.trim_clicked.connect(self.trim_item)
+        card.captions_clicked.connect(self.open_captions)
         card.pressed.connect(self._card_pressed)
         it.card = card
         self.items[iid] = it
@@ -698,10 +735,111 @@ class MainWindow(QMainWindow):
             it.state = "waiting" if (self.running and iid in self.batch) else "ready"
             card.set_state(it.state)
             self._update_output_name(it)
+            if it.kind == "video" and info.audio:
+                from ..core import captions
+
+                it.transcript = captions.load(it.path)
+            self._sync_captions()
         self._update_sample()
         self._refresh_footer()
         if self.running:
             self._kick()
+
+    # ------------------------------------------------------------------ captions
+    def _wants_captions(self, it: Item) -> bool:
+        return (
+            it.kind == "video" and it.info is not None and bool(it.info.audio) and self.eff(it).captions
+            and it.state in ("ready", "waiting", "done", "warning", "transcribing")
+        )  # fmt: skip
+
+    def _sync_captions(self) -> None:
+        for it in self.items.values():
+            if not self._wants_captions(it):
+                it.card.set_captions("")
+            elif it.transcript is None:
+                it.card.set_captions("todo")
+            else:
+                it.card.set_captions("reviewed" if it.transcript.reviewed else "review")
+
+    def _captions_ready(self, then) -> bool:
+        """Before converting: make missing captions, then let people check them. False = not yet."""
+        todo = [
+            self.items[i]
+            for i in self.order
+            if self.items[i].state == "ready" and self._wants_captions(self.items[i])
+        ]
+        missing = [it for it in todo if it.transcript is None]
+        if missing:
+            self._transcribe(missing, then)
+            return False
+        unchecked = [it for it in todo if not it.transcript.reviewed]
+        if unchecked:
+            n = len(todo)
+            return self._edit_captions(
+                unchecked, f"Convert {n} file{'s' if n != 1 else ''}" if then else "Done"
+            )
+        return True
+
+    def open_captions(self, iid: int) -> None:
+        it = self.items.get(iid)
+        if not it or self.tx is not None:
+            return
+        if it.transcript is None:
+            self._transcribe([it], lambda: self._edit_captions([it], "Done"))
+        else:
+            self._edit_captions([it], "Done")
+
+    def _edit_captions(self, items: list[Item], action: str) -> bool:
+        from .caption_editor import CaptionEditor
+
+        clips = [(Path(it.path).name, it.path, it.info, self.eff(it), it.transcript) for it in items]
+        ok = CaptionEditor(clips, 0, action, self).exec() == QDialog.DialogCode.Accepted
+        self._sync_captions()
+        return ok
+
+    def _transcribe(self, items: list[Item], then) -> None:
+        from .workers import TranscribeThread
+
+        for it in items:
+            it.state = "transcribing"
+            it.card.set_state("transcribing", "Making captions…")
+            it.card.set_progress(0)
+        self._tx_then = then
+        self.tx = TranscribeThread([(it.id, it.path, it.info, self.eff(it)) for it in items])
+        self.tx.progress.connect(self._tx_progress)
+        self.tx.status.connect(
+            lambda iid, msg: self.items.get(iid) and self.items[iid].card.set_state("transcribing", msg)
+        )
+        self.tx.done.connect(self._tx_done)
+        self.tx.finished.connect(self._tx_finished)
+        self.tx.start()
+        self._refresh_footer()
+
+    def _tx_progress(self, iid: int, frac: float) -> None:
+        it = self.items.get(iid)
+        if it and it.state == "transcribing":
+            it.card.set_state("transcribing", f"Captions {int(frac * 100)}%")
+            it.card.set_progress(frac)
+
+    def _tx_done(self, iid: int, transcript, error: str) -> None:
+        it = self.items.get(iid)
+        if not it:
+            return
+        it.state = "ready"
+        it.card.set_state("ready")
+        if transcript is not None:
+            it.transcript = transcript
+        elif error and error != "Canceled":
+            it.notes.append(error)
+            self.toast.show_message(f"{Path(it.path).name}: {error}")
+        self._sync_captions()
+
+    def _tx_finished(self) -> None:
+        self.tx = None
+        then, self._tx_then = self._tx_then, None
+        self._refresh_footer()
+        if then is not None:
+            then()
 
     @staticmethod
     def _previewable(it: Item) -> bool:
@@ -774,6 +912,7 @@ class MainWindow(QMainWindow):
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
                 self._update_output_name(it)
+        self._sync_captions()
 
     def _format_menu(self, iid: int, anchor: QWidget) -> None:
         it = self.items.get(iid)
@@ -986,7 +1125,9 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ converting
     def start(self) -> None:
-        if self.running:
+        if self.running or self.tx is not None:
+            return
+        if not self._captions_ready(then=self.start):
             return
         if not self.caps.ok and any(it.kind != "photo" for it in self.items.values()):
             self._missing_ffmpeg()
@@ -1057,7 +1198,12 @@ class MainWindow(QMainWindow):
         if it.base is None:
             it.base = self.settings.copy()
         s = self.eff(it)
-        conv = Conversion(it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim)
+        cues = None
+        if s.captions and it.transcript is not None:
+            cues = it.transcript.cues_for(s.caption_words, s.caption_lines)
+        conv = Conversion(
+            it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues
+        )
         it.state, it.processed, it.speed = "converting", 0.0, 0.0
         it.started = time.monotonic()
         it.card.set_state("converting", "Starting…")
@@ -1159,6 +1305,10 @@ class MainWindow(QMainWindow):
         self._refresh_footer()
 
     def stop(self) -> None:
+        if self.tx is not None:
+            self._tx_then = None
+            self.tx.cancel()
+            return
         if not self.running:
             return
         self.running = False
@@ -1225,6 +1375,17 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         convertible = [it for it in items if it.state not in ("unsupported",)]
+        if self.tx is not None:
+            n_tx = sum(1 for it in items if it.state == "transcribing")
+            self.f_title.setText("Making captions")
+            self.f_sub.setText(
+                f"Listening to {n_tx} clip{'s' if n_tx != 1 else ''}… you'll check the words next"
+            )
+            for b in (self.btn_start, self.btn_export, self.btn_preview, self.btn_pause):
+                b.hide()
+            self.btn_cancel.show()
+            self.f_bar.hide()
+            return
         if self.running:
             batch = [self.items[i] for i in self.batch if i in self.items]
             total_w = sum(it.weight for it in batch) or 1.0
