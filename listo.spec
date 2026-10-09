@@ -65,6 +65,22 @@ a = Analysis(
     excludes=excludes,
     noarchive=False,
 )
+# ---- trim things Listo never uses (keeps the download smaller)
+def _keep(entry) -> bool:
+    d = entry[0].replace("\\", "/").lower()
+    if "/qt/translations/" in d or d.endswith(".qm"):
+        return False  # Qt's own UI translations (Listo's text is its own)
+    if "opengl32sw" in d:
+        return False  # Windows software-OpenGL fallback; Listo draws plain widgets
+    for plug in ("/plugins/tls/", "/plugins/networkinformation/", "/plugins/qmltooling/", "/plugins/sqldrivers/"):
+        if plug in d:
+            return False
+    return True
+
+
+a.datas = [x for x in a.datas if _keep(x)]
+a.binaries = [x for x in a.binaries if _keep(x)]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(

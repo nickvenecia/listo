@@ -19,6 +19,17 @@ A ground-up rewrite in Python so it runs on Mac, Windows and Linux, ships with f
 - Files dropped in during a batch were never converted; duplicates could be added.
 - Python port: drag-and-drop was broken and the done counter never moved.
 
+### Also fixed during review
+- "Replace" can no longer overwrite a *different* original (e.g. the JPEG in a RAW+JPEG pair)
+- Naming keeps original file names exactly (proxies relink in Resolve/Premiere)
+- WebM/H.264 no longer fail on 4-channel or 5.1 camera audio (downmixed to stereo for share formats)
+- Correct color matrix when converting HDR to standard range
+- 16-bit / float grayscale and CMYK photos convert with correct tones and colors; RAW no longer double-rotates
+- Clear messages for Rewrap of VP9/AV1 and for clips too small for DNxHR/AV1
+- Batch no longer gets stuck if a file is removed while it's still being read
+- Clear dropdown replaced with "Remove finished" / "Clear list" above the queue
+- Smaller app: unused Qt translations and plugins left out
+
 ### New
 - New name, new UI: queue cards with thumbnails and file info, per-file progress and ETA, details for every result
 - Photos: HEIC, camera RAW, JPEG, PNG, TIFF and WebP in and out (HEIC out too), with resize and EXIF kept

@@ -10,7 +10,7 @@ from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
+    QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -174,13 +174,7 @@ class MainWindow(QMainWindow):
         self.btn_folder = QPushButton(" Add folder")
         self.btn_folder.setIcon(theme.icon("folder"))
         self.btn_folder.clicked.connect(self.pick_folder)
-        self.btn_clear = QPushButton("Clear")
-        self.btn_clear.setObjectName("Ghost")
-        clear_menu = QMenu(self)
-        clear_menu.addAction("Clear finished", self.clear_finished)
-        clear_menu.addAction("Clear everything", self.clear_all)
-        self.btn_clear.setMenu(clear_menu)
-        for b in (self.btn_add, self.btn_folder, self.btn_clear):
+        for b in (self.btn_add, self.btn_folder):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             h.addWidget(b)
         v.addWidget(header)
@@ -196,16 +190,39 @@ class MainWindow(QMainWindow):
         ew.addWidget(self.drop)
         self.queue_stack.addWidget(empty_wrap)
 
+        queue_page = QWidget()
+        qp = QVBoxLayout(queue_page)
+        qp.setContentsMargins(0, 0, 0, 0)
+        qp.setSpacing(0)
+        bar = QHBoxLayout()
+        bar.setContentsMargins(24, 14, 18, 0)
+        self.q_count = QLabel()
+        self.q_count.setObjectName("SectionLabel")
+        bar.addWidget(self.q_count)
+        bar.addStretch(1)
+        self.btn_rm_done = QPushButton("Remove finished")
+        self.btn_rm_done.setObjectName("Ghost")
+        self.btn_rm_done.setToolTip("Take converted, skipped and failed files off the list")
+        self.btn_rm_done.clicked.connect(self.clear_finished)
+        self.btn_clear_all = QPushButton("Clear list")
+        self.btn_clear_all.setObjectName("Ghost")
+        self.btn_clear_all.setToolTip("Empty the list (your files aren't touched)")
+        self.btn_clear_all.clicked.connect(self.clear_all)
+        for b in (self.btn_rm_done, self.btn_clear_all):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            bar.addWidget(b)
+        qp.addLayout(bar)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lst = QWidget()
         self.list_lay = QVBoxLayout(lst)
-        self.list_lay.setContentsMargins(22, 18, 16, 18)
+        self.list_lay.setContentsMargins(22, 8, 16, 18)
         self.list_lay.setSpacing(8)
         self.list_lay.addStretch(1)
         self.scroll.setWidget(lst)
-        self.queue_stack.addWidget(self.scroll)
+        qp.addWidget(self.scroll, 1)
+        self.queue_stack.addWidget(queue_page)
         body.addWidget(self.queue_stack, 1)
 
         self.sidebar = Sidebar(self.settings)
@@ -515,11 +532,10 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ converting
     def start(self) -> None:
-        if self.running or not self.caps.ok and any(
-            it.kind != "photo" for it in self.items.values()
-        ):
-            if not self.caps.ok:
-                self._missing_ffmpeg()
+        if self.running:
+            return
+        if not self.caps.ok and any(it.kind != "photo" for it in self.items.values()):
+            self._missing_ffmpeg()
             return
         todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing")]
         if not todo:
@@ -688,7 +704,16 @@ class MainWindow(QMainWindow):
             reveal(outs[0])
 
     # ------------------------------------------------------------------ footer
+    def _refresh_queue_bar(self) -> None:
+        items = [self.items[i] for i in self.order]
+        n = len(items)
+        self.q_count.setText(f"{n} FILE{'S' if n != 1 else ''}")
+        finished = sum(1 for it in items if it.state in ("done", "failed", "skipped", "canceled"))
+        self.btn_rm_done.setVisible(0 < finished < n)
+        self.btn_clear_all.setVisible(n > 0 and not self.running)
+
     def _refresh_footer(self, finished: bool = False) -> None:
+        self._refresh_queue_bar()
         if finished:
             self._show_summary = True
         elif self.running:
@@ -750,14 +775,14 @@ class MainWindow(QMainWindow):
             if it.info and it.kind in ("video", "audio"):
                 dur += it.info.duration
         bits = [f"{c} {k}{'s' if c != 1 else ''}" for k, c in (("video", kinds["video"]), ("photo", kinds["photo"]), ("audio file", kinds["audio"])) if c]
-        self.f_title.setText(f"{n} file{'s' if n != 1 else ''} in the list")
-        sub = " · ".join(bits)
+        self.f_title.setText(" · ".join(bits) or "Nothing Listo can convert yet")
+        sub = []
         if dur:
-            sub += f" · {fmt_duration(dur)} of media"
+            sub.append(f"{fmt_duration(dur)} of media")
         bad = sum(1 for it in items if it.state == "unsupported")
         if bad:
-            sub += f" · {bad} can't be converted"
-        self.f_sub.setText(sub)
+            sub.append(f"{bad} file{'s' if bad != 1 else ''} can't be converted")
+        self.f_sub.setText(" · ".join(sub) or "Pick your formats on the right, then hit Convert.")
 
     def _scroll_to(self, w: QWidget) -> None:
         QTimer.singleShot(50, lambda: self.scroll.ensureWidgetVisible(w, 0, 60))
