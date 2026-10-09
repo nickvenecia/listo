@@ -151,6 +151,9 @@ QProgressBar#Warn::chunk {{ background: {WARN}; }}
 #DropZone[hot="true"] {{ border-color: {ACCENT}; background: rgba(245,165,36,0.06); }}
 #DropTitle {{ font-size: 18px; font-weight: 600; }}
 #DropSub {{ color: {MUTED}; font-size: 13px; }}
+QLineEdit#PathField {{ padding: 6px 8px; color: {TEXT}; }}
+QLineEdit#PathField:hover {{ border-color: #4A4A54; }}
+QComboBox QAbstractItemView::separator {{ height: 1px; background: {BORDER_STRONG}; margin: 4px 6px; }}
 QLineEdit#LinkBox {{ background: {CARD}; padding: 8px 12px; border-radius: 9px; }}
 #DropFormats {{ color: {FAINT}; font-size: 12px; }}
 

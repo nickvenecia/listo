@@ -5,6 +5,8 @@
   yt-dlp and Deno are fetched the first time and yt-dlp keeps itself up to date (daily check)
 - **Trim** any video or audio file: pick start and end with frame previews; timecode follows the cut
 - Paste a link right in the drop area
+- Recipe is always a dropdown (save / update / delete live inside it)
+- Format, flavor and quality are dropdowns; the LUT shows as a file field you click to choose
 - Menus and dropdowns have truly rounded corners; menu icons stay readable when highlighted
 - One **+ Add** button (files, a folder or a link) and a trash icon to clear the list
 - Adding new files after a batch clears the ones that converted fine (failed / flagged ones stay)
