@@ -35,6 +35,14 @@ def fmt_time(sec: float) -> str:
     return f"{int(h)}:{int(m):02d}:{s:04.1f}" if h >= 1 else f"{int(m)}:{s:04.1f}"
 
 
+def fmt_clock(sec: float, longest: float = 0.0) -> str:
+    """A player's clock: 00:18, 07:29, or 1:02:03 once the clip runs an hour or more."""
+    s = max(0, int(sec))
+    h, rem = divmod(s, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h}:{m:02d}:{s:02d}" if max(sec, longest) >= 3600 else f"{m:02d}:{s:02d}"
+
+
 def parse_time(text: str) -> float | None:
     t = text.strip()
     if not t:

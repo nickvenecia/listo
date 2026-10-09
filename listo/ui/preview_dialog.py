@@ -48,7 +48,9 @@ class PreviewDialog(QDialog):
         top.addWidget(self.view)
         lay.addLayout(top)
 
+        self._play_next = False  # the arrows keep playing if the clip was playing
         self.player = ClipPlayer(VIEWER_W, VIEWER_H)
+        self.player.step.connect(self._step)
         self.player.settled.connect(self._render)
         self.player.clicked.connect(self.player.toggle)
         lay.addWidget(self.player)
@@ -75,7 +77,17 @@ class PreviewDialog(QDialog):
     def _original(self) -> bool:
         return self.view.value() == "original"
 
+    def _step(self, direction: int) -> None:
+        """The previous / next arrows: the clip before or after this one in the list."""
+        n = self.pick.currentIndex() + direction
+        if 0 <= n < len(self.clips):
+            self._play_next = self.player.is_playing()
+            self.pick.setCurrentIndex(n)
+
     def _clip_changed(self, play: bool = False) -> None:
+        play, self._play_next = play or self._play_next, False
+        i = max(0, self.pick.currentIndex())
+        self.player.set_steps(i > 0, i < len(self.clips) - 1)
         _, path, info, s, cues = self._clip()
         w, h = naming.output_size(info, s, "video")
         size = f"{w}×{h}" if w and h else ""

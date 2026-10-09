@@ -381,6 +381,9 @@ BUILTIN_RECIPES: tuple[tuple[str, dict], ...] = ()
 
 # What a per-file override may change (just the output format).
 OVERRIDE_KEYS = ("video_preset", "video_variant", "photo_format", "audio_format")
+# Off again every time Listo opens (everything else is remembered): captions start heavy background
+# work as soon as files arrive, and joining changes what comes out. Recipes still carry them.
+SESSION_ONLY = ("captions", "join")
 
 
 def format_label(kind: str, s: Settings) -> str:

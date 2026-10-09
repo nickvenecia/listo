@@ -118,6 +118,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
   starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
+- presets.SESSION_ONLY (captions, join) reset to off at every launch; everything else in Settings is remembered.
+- ClipPlayer.step(-1/+1) = the previous / next clip arrows; owners call set_steps(has_prev, has_next).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.
 - Long lists (hundreds of clips): never do list-wide work per file. Use MainWindow._refresh_soon() (bundles the
   footer / captions status / sample into one pass, waiting longer for longer lists); card setters skip unchanged

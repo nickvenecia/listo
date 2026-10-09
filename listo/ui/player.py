@@ -42,8 +42,8 @@ from ..core import burnin, naming
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from . import theme
-from .tokens import ICON, MUTED, SPACE_2, TEXT_SM, WELL
-from .trim_dialog import fmt_time
+from .tokens import ICON, MUTED, SPACE_1, SPACE_2, TEXT_SM, WELL
+from .trim_dialog import fmt_clock
 from .widgets import hbox, vbox
 
 # No hardware decoding for playback: Qt's player crashed on MPEG-2 (.MOD) when the Mac's decoder
@@ -96,6 +96,7 @@ class _Stage(QGraphicsView):
 class ClipPlayer(QWidget):
     position_changed = Signal(float)  # seconds, while playing and after every move
     playing_changed = Signal(bool)
+    step = Signal(int)  # -1 previous clip, +1 next clip (owners decide what that means)
     settled = Signal(float)  # paused somewhere new: owners can show the exact result frame there
     clicked = Signal()
 
@@ -152,7 +153,9 @@ class ClipPlayer(QWidget):
         lay.addWidget(self.stage)
 
         self.transport = QWidget()
-        tr = hbox(self.transport, spacing=SPACE_2)
+        tr = hbox(self.transport, spacing=SPACE_1)
+        self.btn_prev = self._nav_button("chevron-left", "Previous clip", -1)
+        tr.addWidget(self.btn_prev)
         self.btn_play = QToolButton()
         self.btn_play.setObjectName("IconBtn")
         self.btn_play.setIconSize(QSize(ICON, ICON))
@@ -161,6 +164,9 @@ class ClipPlayer(QWidget):
         self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_play.clicked.connect(self.toggle)
         tr.addWidget(self.btn_play)
+        self.btn_next = self._nav_button("chevron-right", "Next clip", 1)
+        tr.addWidget(self.btn_next)
+        tr.addSpacing(SPACE_1)
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setCursor(Qt.CursorShape.PointingHandCursor)
         self.slider.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -197,6 +203,25 @@ class ClipPlayer(QWidget):
             self.player.mediaStatusChanged.connect(self._status)
             self.player.errorOccurred.connect(self._error)
         self._state()
+
+    def _nav_button(self, icon: str, tip: str, direction: int) -> QToolButton:
+        b = QToolButton()
+        b.setObjectName("IconBtn")
+        b.setIcon(theme.icon(icon, theme.TEXT))
+        b.setIconSize(QSize(ICON, ICON))
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setToolTip(tip)
+        b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        b.clicked.connect(lambda: self.step.emit(direction))
+        b.hide()  # until the owner says there's more than one clip
+        return b
+
+    def set_steps(self, has_prev: bool, has_next: bool) -> None:
+        """Show the previous / next clip arrows (shown, but dimmed at either end of the list)."""
+        many = has_prev or has_next
+        for b, on in ((self.btn_prev, has_prev), (self.btn_next, has_next)):
+            b.setVisible(many)
+            b.setEnabled(on)
 
     # ------------------------------------------------------------------ loading
     def load(
@@ -422,7 +447,7 @@ class ClipPlayer(QWidget):
             return
         self._sync_slider(int(t * 1000))
         total = self.info.duration if self.info else 0.0
-        self.clock.setText(f"{fmt_time(t)} / {fmt_time(total)}")
+        self.clock.setText(f"{fmt_clock(t, total)} / {fmt_clock(total)}")
         self._draw_caption()
         self._still_visibility()
         self.position_changed.emit(t)

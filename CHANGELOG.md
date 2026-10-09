@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Player clocks read like time (00:18 / 07:29, hours when needed)
+- Previous / next clip arrows beside Play in the Export preview, the Preview window and Check Captions; in the Export preview they also select that clip in the list, and a playing clip keeps playing
+- Captions and Join Into One Video start off each time Listo opens (everything else is remembered; recipes still carry them)
 - Every player (Export preview, Preview window, caption check, double-click) opens on the first frame instead of partway in
 - **Much faster with big lists**: reading 400 clips used to keep the window busy for over 3 minutes; now about 10 seconds, and it stays responsive the whole time
 - **Debug console**: the terminal icon in the bottom bar (or Help › Open Debug Console) opens a terminal window that shows everything Listo does as it happens: each file, the exact ffmpeg command, how long it took, and what went wrong if something fails. Run from a terminal, Listo prints the same there

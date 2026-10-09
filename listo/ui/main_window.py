@@ -43,6 +43,7 @@ from ..core.presets import (
     AUDIO_FORMATS,
     OVERRIDE_KEYS,
     PHOTO_FORMATS,
+    SESSION_ONLY,
     VIDEO_PRESETS,
     Settings,
     format_label,
@@ -238,6 +239,8 @@ class MainWindow(QMainWindow):
             self.settings = Settings.from_dict(json.loads(self.qs.value("settings", "{}") or "{}"))
         except Exception:
             self.settings = Settings()
+        for key in SESSION_ONLY:  # captions / join start off each launch (presets.SESSION_ONLY)
+            setattr(self.settings, key, getattr(Settings(), key))
         self._caption_choice = (self.settings.caption_model, self.settings.caption_language)
 
         self.items: dict[int, Item] = {}
@@ -272,6 +275,7 @@ class MainWindow(QMainWindow):
         self._live_note = ""
         self._live_at = 0.0
         self._live_loaded: object = None  # which clip the Export preview's player has open
+        self._live_play_next = False  # the preview's arrows keep playing if it was playing
         self._sample_probe: tuple[str, MediaInfo] | None = None
         self._anchor: int | None = None  # where a Shift-click range starts
 
@@ -281,6 +285,7 @@ class MainWindow(QMainWindow):
         self._live_signals = PreviewSignals(self)
         self._live_signals.done.connect(self._live_got)
         self.export_panel.player.settled.connect(self._live_settled)
+        self.export_panel.player.step.connect(self._live_step)
         # List-wide refreshes (footer, captions status, live preview) wait a moment and run once:
         # reading 500 files must not redo them 500 times (that took minutes).
         self._soon_captions = False
@@ -1062,9 +1067,13 @@ class MainWindow(QMainWindow):
             rng = (start, start + length) if it.trim else None
             at = start  # players open on the first frame (of the trimmed part)
         cues = self._clip_cues(it, s)
+        clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+        n = clips.index(it) if it in clips else -1
+        player.set_steps(n > 0, 0 <= n < len(clips) - 1)
         if key != self._live_loaded and path and info is not None:
             self._live_loaded = key
-            player.load(path, info, s, at, range_=rng)
+            play, self._live_play_next = self._live_play_next, False
+            player.load(path, info, s, at, play=play, range_=rng)
         elif key == self._live_loaded:
             at = player.position()
         player.set_settings(s)
@@ -1094,6 +1103,22 @@ class MainWindow(QMainWindow):
                 self._live_seq, path, info, s, at, False, self._live_signals, captions=self._clip_cues(it, s)
             )
         )
+
+    def _live_step(self, direction: int) -> None:
+        """The Export preview's arrows: select the previous / next clip in the list and show it."""
+        clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+        cur = self._live_clip()
+        if cur not in clips:
+            return
+        n = clips.index(cur) + direction
+        if 0 <= n < len(clips):
+            self._live_play_next = self.export_panel.player.is_playing()
+            self.export_panel.player.pause()
+            self._select({clips[n].id})
+            self._anchor = clips[n].id
+            self._scroll_to(clips[n].card)
+            self._live_timer.stop()
+            self._render_live()  # at once: an arrow press shouldn't wait
 
     def _live_settled(self, at: float) -> None:
         """The Export preview was paused or moved: show the exact result there."""

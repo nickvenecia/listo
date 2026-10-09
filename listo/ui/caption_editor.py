@@ -31,7 +31,7 @@ from .tokens import (
     SPACE_5,
     TIME_FIELD_W,
 )
-from .trim_dialog import fmt_time
+from .trim_dialog import fmt_clock
 from .widgets import ClickLabel, combo, hbox, hint, repolish, vbox
 from .workers import PreviewSignals, PreviewTask
 
@@ -92,7 +92,9 @@ class CaptionEditor(QDialog):
 
         body = hbox(spacing=SPACE_3)
         left = vbox(spacing=SPACE_2)
+        self._play_next = False  # the arrows keep playing if the clip was playing
         self.player = ClipPlayer(EDITOR_PIC_W, EDITOR_PIC_H, captions_over_stills=True)
+        self.player.step.connect(self._step)
         self.player.position_changed.connect(self._followed)
         self.player.settled.connect(self._settled)
         self.player.clicked.connect(self.player.toggle)
@@ -155,8 +157,17 @@ class CaptionEditor(QDialog):
         at = 0.0  # from the first frame, like every player in Listo
         self.player.set_still(None)
         self.player.set_message("Making a preview…")
-        self.player.load(path, info, s, at)
+        play, self._play_next = self._play_next, False
+        self.player.set_steps(i > 0, i < len(self.clips) - 1)
+        self.player.load(path, info, s, at, play=play)
         self.player.set_cues(self.cues[i])
+
+    def _step(self, direction: int) -> None:
+        """The previous / next arrows: the clip before or after this one (edits are kept)."""
+        n = self._i() + direction
+        if 0 <= n < len(self.clips):
+            self._play_next = self.player.is_playing()
+            self.pick.setCurrentIndex(n)
 
     def _rows(self, focus: int | None = None) -> None:
         """(Re)build the caption list for the current clip."""
@@ -167,7 +178,7 @@ class CaptionEditor(QDialog):
         self.current = None
         for n, c in enumerate(self.cues[i]):
             row = hbox(spacing=SPACE_2)
-            when = ClickLabel(fmt_time(c.start))
+            when = ClickLabel(fmt_clock(c.start, self.clips[i][2].duration))
             when.setObjectName("CueTime")
             when.setAlignment(Qt.AlignmentFlag.AlignTop)
             when.setFixedWidth(TIME_FIELD_W - SPACE_5)
