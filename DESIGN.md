@@ -17,7 +17,8 @@ If you need a value that doesn't exist, add a token, give it a comment, and add 
 |---|---|---|
 | `CONTROL_H` | 34 | **Every** button, dropdown, text field and segmented control |
 | `SMALL_H` | 24 | Chips on file cards, naming token buttons, icon-only buttons |
-| `INDICATOR` | 16 | Checkbox box |
+| `INDICATOR` | 16 | Standard icon box |
+| `TOGGLE_ROW_H` · `TOGGLE_W`×`TOGGLE_H` | 32 · 36×20 | An on/off row and its switch |
 | `BAR_H` | 6 | Progress bars |
 | `TRACK_H` / `HANDLE` | 4 / 14 | Slider groove / handle |
 | `SCROLL_W` / `SCROLL_MIN` | 10 / 30 | Scrollbar width / shortest handle |
@@ -85,7 +86,7 @@ Weights: `WEIGHT_REGULAR` 400 for text, `WEIGHT_MEDIUM` 500 for controls,
 
 | Token | px | Used for |
 |---|---|---|
-| `RADIUS_XS` | 4 | Checkbox box |
+| `RADIUS_XS` | 4 | Small inner corners |
 | `RADIUS_SM` | 6 | Chips, menu and list rows, small buttons |
 | `RADIUS` | 8 | Buttons, fields, dropdowns, segmented controls |
 | `RADIUS_LG` | 12 | File cards, popups and menus, boxes inside dialogs |
@@ -140,7 +141,7 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Token button | `Token` | "+ Name" buttons in the naming pattern builder |
 | Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio). Not for settings |
 | Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
-| Checkbox | `QCheckBox` | On/off settings. Label says what happens when it's **on** |
+| On/off setting | `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, whole row clickable. Never side-by-side |
 | Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
 | Preview window | `preview_dialog.PreviewDialog` | One frame rendered with the real conversion steps |
 | Fold-away group | `widgets.Disclosure` | "Advanced options": a chevron header with a changed-count summary |
@@ -199,13 +200,18 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
 - The clear-list icon (`list-x`) opens a menu: Remove selected, Clear finished, Clear all. Actions that remove
   things always go through a menu or a confirmation, never a single click. They only take files off the list; nothing on disk is touched.
 - A value along a range (opacity, photo quality) is a slider with its value shown as text next to it or in the section title.
-- Use `&&` for a literal "&" in Qt labels (a single `&` becomes a keyboard-shortcut underline).
+- Use `&&` for a literal "&" in Qt buttons and labels (a single `&` becomes a keyboard-shortcut underline);
+  `ToggleRow` draws its text as-is, so write a single `&` there.
 - Every keyboard shortcut needs a visible way to do the same thing (a button, icon or menu item).
 - **Only show what applies.** A control that depends on another appears only when that one is on
   (burn-in style only when a burn-in is ticked, fit only when the shape changes, bar opacity only for
   cinema bars). A feature this computer or these files can't use is hidden, not greyed out
   (hardware encoding without a hardware encoder; deinterlacing with no interlaced files in the list).
   The one exception: items in a format list stay, disabled with a tooltip saying why.
+- **Nothing moves when a group opens.** Scrolling panels use `widgets.FitScroll`, which always keeps the scroll
+  bar's space (invisible until there's something to scroll); give the content `SCROLL_GUTTER` less right margin.
+- **Menus open on click, never on hover** (accidental opens, especially for the clear-list menu). Hover shows a tip.
+  Tips and menus have rounded corners (`app._RoundPopups` makes their windows see-through).
 - **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
 - **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)

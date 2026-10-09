@@ -209,6 +209,7 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 QScrollBar:vertical {{ background: transparent; width: {SCROLL_W}px; margin: {SEG_INSET}px; }}
 QScrollBar::handle:vertical {{ background: {BORDER_STRONG}; border-radius: {(SCROLL_W - 2 * SEG_INSET) // 2}px; min-height: {SCROLL_MIN}px; }}
 QScrollBar::handle:vertical:hover {{ background: {BORDER_HOVER}; }}
+QScrollBar:vertical:disabled, QScrollBar::handle:vertical:disabled {{ background: transparent; }}
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; background: none; }}
 
 /* ---------- file cards */

@@ -7,7 +7,6 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFileDialog,
     QFrame,
     QLabel,
@@ -21,7 +20,7 @@ from ..core.log import get_logger
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
-from .tokens import EXPORT_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4
+from .tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from .widgets import (
     ClickLabel,
     Disclosure,
@@ -29,6 +28,7 @@ from .widgets import (
     FlowLayout,
     Section,
     StepHeader,
+    ToggleRow,
     combo,
     hbox,
     hint,
@@ -104,11 +104,11 @@ class ExportPanel(QFrame):
         outer.addWidget(scroll, 1)
         inner = QWidget()
         scroll.setWidget(inner)
-        lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4, SPACE_4), SPACE_3)
+        lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
 
         # ---- live preview: the selected (or first) clip with every setting applied
         prev = Section("Preview")
-        pic_w = EXPORT_W - 2 * SPACE_4
+        pic_w = EXPORT_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
         self.picture = ClickLabel("Making a preview…")
         self.picture.setObjectName("Preview")
         self.picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -216,11 +216,11 @@ class ExportPanel(QFrame):
         self.adv.add(taken)
 
         after = Section("After Converting")
-        self.k_dates = QCheckBox("Keep the Original File Dates")
+        self.k_dates = ToggleRow("Keep the Original File Dates")
         self.k_dates.setChecked(self.s.keep_dates)
         self.k_dates.toggled.connect(lambda v: self._set("keep_dates", v))
         after.add(self.k_dates)
-        self.k_verify = QCheckBox("Double-Check Each File")
+        self.k_verify = ToggleRow("Double-Check Each File")
         self.k_verify.setToolTip(
             "Re-reads every new video and audio file and flags it if the length doesn't match the original"
         )

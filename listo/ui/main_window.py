@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
-    QScrollArea,
     QStackedWidget,
     QToolButton,
     QVBoxLayout,
@@ -61,7 +60,7 @@ from .export_panel import ExportPanel
 from .job_card import JobCard
 from .sidebar import Sidebar
 from .trim_dialog import TrimDialog, fmt_time
-from .widgets import StepHeader, Toast, repolish
+from .widgets import FitScroll, StepHeader, Toast, repolish
 from .workers import ConvertThread, DownloadThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
 
 log = get_logger(__name__)
@@ -319,13 +318,13 @@ class MainWindow(QMainWindow):
         qp = QVBoxLayout(queue_page)
         qp.setContentsMargins(0, 0, 0, 0)
         qp.setSpacing(0)
-        self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll = FitScroll()
         lst = _ListArea()
         lst.blank_clicked.connect(lambda: self._select(set()))
         self.list_lay = QVBoxLayout(lst)
-        self.list_lay.setContentsMargins(tokens.SPACE_4, tokens.SPACE_1, tokens.SPACE_3, tokens.SPACE_4)
+        self.list_lay.setContentsMargins(
+            tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_4 - tokens.SCROLL_GUTTER, tokens.SPACE_4
+        )
         self.list_lay.setSpacing(tokens.SPACE_2)
         self.list_lay.addStretch(1)
         self.scroll.setWidget(lst)

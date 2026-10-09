@@ -16,7 +16,10 @@ SPACE_5 = 24  # padding of dialogs and the empty-state drop zone
 # ---------------------------------------------------------------- control sizes
 CONTROL_H = 34  # EVERY button, dropdown, text field and segmented control
 SMALL_H = 24  # chips, token buttons, icon-only buttons
-INDICATOR = 16  # checkbox box, standard icon size
+INDICATOR = 16  # standard icon size
+TOGGLE_ROW_H = 32  # an on/off setting: label left, switch right
+TOGGLE_W, TOGGLE_H = 36, 20  # the switch
+TOGGLE_INSET = 3  # gap between the switch's track and its knob
 ICON = 16
 ICON_SM = 14
 ICON_LG = 24  # placeholder icons in empty thumbnails
@@ -25,6 +28,7 @@ BAR_H = 6  # progress bars
 TRACK_H = 4  # slider groove
 HANDLE = 14  # slider handle
 SCROLL_W = 10  # scrollbar width
+SCROLL_GUTTER = SCROLL_W  # space always kept for it (see widgets.FitScroll)
 SCROLL_MIN = 30  # shortest scrollbar handle
 
 # ---------------------------------------------------------------- corner radius

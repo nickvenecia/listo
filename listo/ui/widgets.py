@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QButtonGroup,
     QComboBox,
     QFrame,
@@ -302,13 +303,21 @@ class ComboItemDelegate(QStyledItemDelegate):
 
 
 class FitScroll(QScrollArea):
-    """Scroll area whose content always matches the visible width (no clipped edges)."""
+    """Scroll area whose content always matches the visible width (no clipped edges).
+
+    The scroll bar's space is always reserved (it's invisible while there's nothing to scroll), so
+    content never shifts or squeezes when a group opens. Put SCROLL_GUTTER less margin on the
+    right of the content so both sides look the same."""
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        bar = self.verticalScrollBar()
+        bar.setEnabled(False)
+        bar.rangeChanged.connect(lambda lo, hi: bar.setEnabled(hi > lo))
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
@@ -347,3 +356,60 @@ class StepHeader(QFrame):
         lay.addStretch(1)
         self.actions = hbox(spacing=tokens.SPACE_2)
         lay.addLayout(self.actions)
+
+
+class ToggleRow(QAbstractButton):
+    """An on/off setting: the label on the left, a switch on the right, the whole row clickable.
+    Works like a QCheckBox (setChecked, isChecked, toggled, text)."""
+
+    def __init__(self, text: str, checked: bool = False, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setText(text)
+        self.setCheckable(True)
+        self.setChecked(checked)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setFixedHeight(tokens.TOGGLE_ROW_H)
+        self._hover = False
+
+    def sizeHint(self) -> QSize:
+        w = self.fontMetrics().horizontalAdvance(self.text()) + tokens.SPACE_3 + tokens.TOGGLE_W
+        return QSize(w, tokens.TOGGLE_ROW_H)
+
+    def enterEvent(self, e):
+        self._hover = True
+        self.update()
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self._hover = False
+        self.update()
+        super().leaveEvent(e)
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        on, enabled = self.isChecked(), self.isEnabled()
+        r = self.rect()
+        # label
+        p.setPen(QColor(tokens.TEXT if enabled else tokens.FAINT))
+        text_rect = r.adjusted(0, 0, -(tokens.TOGGLE_W + tokens.SPACE_3), 0)
+        label = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, text_rect.width())
+        p.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)
+        # switch
+        tw, th = tokens.TOGGLE_W, tokens.TOGGLE_H
+        track = QRectF(r.right() - tw + 1, r.center().y() - th / 2 + 1, tw - 1, th - 1)
+        if on:
+            fill = tokens.ACCENT_HOVER if self._hover and enabled else tokens.ACCENT
+        else:
+            fill = tokens.BORDER_HOVER if self._hover and enabled else tokens.BORDER_STRONG
+        if not enabled:
+            fill = tokens.ACCENT_OFF if on else tokens.BORDER
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(fill))
+        p.drawRoundedRect(track, th / 2, th / 2)
+        knob = th - 2 * tokens.TOGGLE_INSET
+        x = track.right() - tokens.TOGGLE_INSET - knob if on else track.left() + tokens.TOGGLE_INSET
+        p.setBrush(QColor(tokens.ON_ACCENT if on else tokens.TEXT) if enabled else QColor(tokens.FAINT))
+        p.drawEllipse(QRectF(x, track.top() + tokens.TOGGLE_INSET, knob, knob))
+        p.end()

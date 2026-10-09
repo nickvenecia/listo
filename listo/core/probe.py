@@ -232,8 +232,10 @@ class MediaInfo:
         return {"smpte2084": "HDR PQ", "arib-std-b67": "HDR HLG"}.get(self.color_transfer, "")
 
     def summary_bits(self) -> list[str]:
-        """Short badges for the UI: 1920×1080 · 29.97i · H.264 · 2 audio · 3:24"""
+        """Short badges for the UI: 3:24 · 1920×1080 · 29.97i · H.264 · 2 audio"""
         bits: list[str] = []
+        if self.duration and self.kind != "photo":
+            bits.append(fmt_duration(self.duration))  # first: the most useful, never cut off
         if self.width and self.height:
             bits.append(f"{self.width}×{self.height}")
         if self.kind == "video":
@@ -254,8 +256,6 @@ class MediaInfo:
                 bits.append(
                     f"{n} audio tracks" if n > 1 else ({1: "mono", 2: "stereo"}.get(ch, f"{ch}ch audio"))
                 )
-        if self.duration and self.kind != "photo":
-            bits.append(fmt_duration(self.duration))
         return [b for b in bits if b]
 
 

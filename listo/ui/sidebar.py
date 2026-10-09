@@ -7,11 +7,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QFileDialog,
     QFrame,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
     QMessageBox,
@@ -38,13 +36,14 @@ from ..core.presets import (
     Settings,
 )
 from ..core.tools import Capabilities
-from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
+from .tokens import SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
 from .widgets import (
     Disclosure,
     FitScroll,
     Section,
     Segmented,
     StepHeader,
+    ToggleRow,
     combo,
     disable_item,
     hbox,
@@ -79,24 +78,22 @@ def _page() -> tuple[QScrollArea, QVBoxLayout]:
     area.setWidgetResizable(True)
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     inner = QWidget()
-    lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4, SPACE_4), SPACE_3)
+    lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
     area.setWidget(inner)
     return area, lay
 
 
-def _checks(*boxes: QCheckBox, row: bool = False) -> QHBoxLayout | QVBoxLayout:
-    """Checkboxes in a row (short labels) or a stack, SPACE_2 apart."""
-    lay = hbox(spacing=SPACE_4) if row else vbox(spacing=SPACE_1)
-    for b in boxes:
-        lay.addWidget(b)
-    if row:
-        lay.addStretch(1)
+def _checks(*rows: ToggleRow, row: bool = False) -> QVBoxLayout:
+    """On/off settings stacked as full-width rows (label left, switch right). `row` is ignored:
+    side-by-side boxes made the panel look cluttered and left-leaning."""
+    lay = vbox(spacing=0)
+    for r in rows:
+        lay.addWidget(r)
     return lay
 
 
-def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> QCheckBox:
-    box = QCheckBox(text)
-    box.setChecked(value)
+def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> ToggleRow:
+    box = ToggleRow(text, value)
     box.toggled.connect(on_toggle)
     if tip:
         box.setToolTip(tip)
@@ -257,13 +254,12 @@ class Sidebar(QFrame):
             "File Name", self.s.burn_filename, lambda v: self._burn("burn_filename", v)
         )
         self.burn_dt = _checkbox(
-            "Date && Time",
+            "Date & Time",
             self.s.burn_datetime,
             lambda v: self._burn("burn_datetime", v),
             "When the clip was shot, read from the clip itself, with a clock that runs as it plays",
         )
-        self.sec_burn.add(_checks(self.burn_tc, self.burn_name, row=True))
-        self.sec_burn.add(self.burn_dt)
+        self.sec_burn.add(_checks(self.burn_tc, self.burn_name, self.burn_dt))
         self.burn_style = combo(
             [
                 ("clean", "Clean Look", "Small labels on dark boxes in the corners"),
@@ -365,8 +361,7 @@ class Sidebar(QFrame):
         )  # fmt: skip
         for w in (self.cc_lang, self.cc_model, self.cc_style, self.cc_size, self.cc_lines, words_row):
             cb.addWidget(w)
-        cb.addWidget(self.cc_bg)
-        cb.addWidget(self.cc_srt)
+        cb.addLayout(_checks(self.cc_bg, self.cc_srt))
         self.sec_cc.add(self.cc_box)
         self.sec_burn.add(self.burn_style)
         self.sec_burn.add(self.burn_badge)

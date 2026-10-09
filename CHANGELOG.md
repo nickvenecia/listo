@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- On/off settings are now switches in full-width rows (label left, switch right) instead of checkboxes
+- Panels no longer shift or squeeze when a group opens (the scroll bar's space is always kept)
+- Hover tips have rounded corners
+- Each clip's length comes first in its details, so it's never cut off
 - The window reads as three numbered steps: **1 Files → 2 Convert To → 3 Export**, with matching headers and equal side panels; the logo sits in the empty drop area
 - Cleaner sample picture for the preview: a soft colour gradient instead of a test pattern
 - Fix: Preview window crashed when opened with clips in the list

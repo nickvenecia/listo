@@ -119,8 +119,8 @@ class _RoundPopups(QObject):
                 QApplication.sendEvent(area.verticalScrollBar(), ev)
             return True
         if ev.type() == QEvent.Type.Polish and isinstance(obj, QWidget):
-            if isinstance(obj, QMenu) and obj.isWindow():
-                self._see_through(obj)
+            if (isinstance(obj, QMenu) and obj.isWindow()) or obj.inherits("QTipLabel"):
+                self._see_through(obj)  # menus and hover tips get real rounded corners
             elif isinstance(obj, QComboBox):
                 # The default menu-style painter ignores the stylesheet's rounded, padded
                 # items (square highlight on macOS); the standard one follows it.
