@@ -66,3 +66,22 @@ def test_replace_never_hits_another_original(tmp_path: Path):
     r = Conversion(str(png), probe(png), s, capabilities(), reserved).run()
     assert r.status == "done" and r.output.name == "IMG_1_2.jpg"
     assert jpg.read_bytes() == before
+
+
+def test_same_name_clips_from_prg_folders_never_skip_each_other(tmp_path: Path):
+    """JVC restarts MOV01A in every PRG folder; into one export folder, both must come out."""
+    out = tmp_path / "out"
+    out.mkdir()
+    a, b = tmp_path / "PRG001" / "MOV01A.MOD", tmp_path / "PRG002" / "MOV01A.MOD"
+    reserved = {naming.reserve_key(a), naming.reserve_key(b)}
+    first, _ = naming.resolve_output(a, out / "MOV01A.mp4", "skip", reserved)
+    assert first.name == "MOV01A.mp4"
+    reserved.add(naming.reserve_key(first))
+    first.write_bytes(b"done")  # the first conversion finished
+    for policy in ("skip", "replace", "number"):
+        second, _ = naming.resolve_output(b, out / "MOV01A.mp4", policy, reserved)
+        assert second is not None and second.name == "MOV01A_PRG002.mp4", policy
+    # a file left over from an earlier day is still handled by the policy
+    old = out / "MOV02A.mp4"
+    old.write_bytes(b"old")
+    assert naming.resolve_output(b, old, "skip", reserved)[0] is None

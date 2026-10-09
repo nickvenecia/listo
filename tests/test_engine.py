@@ -52,4 +52,5 @@ def test_two_at_once_never_share_a_name(tmp_path: Path):
     [t.start() for t in ts]
     [t.join() for t in ts]
     names = sorted(r.output.name for r in results)
-    assert names == ["00000.mp4", "00000_2.mp4"]
+    # the second one gets its card folder's name (which one depends on which finished planning first)
+    assert names[0] == "00000.mp4" and names[1] in ("00000_card1.mp4", "00000_card2.mp4")

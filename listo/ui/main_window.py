@@ -1201,7 +1201,18 @@ class MainWindow(QMainWindow):
         self.q_count.setVisible(n > 0)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
 
+    def _label_duplicates(self) -> None:
+        """Same file name twice (e.g. MOV01A.MOD in PRG001 and PRG002)? Show each one's folder."""
+        files = [it for it in self.items.values() if it.kind != "link"]
+        counts: dict[str, int] = {}
+        for it in files:
+            counts[Path(it.path).name.lower()] = counts.get(Path(it.path).name.lower(), 0) + 1
+        for it in files:
+            p = Path(it.path)
+            it.card.set_name(f"{p.parent.name} / {p.name}" if counts[p.name.lower()] > 1 else p.name)
+
     def _refresh_footer(self, finished: bool = False) -> None:
+        self._label_duplicates()
         self.sidebar.set_queue_info(
             any(it.info is not None and it.info.interlaced for it in self.items.values())
         )

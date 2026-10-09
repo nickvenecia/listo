@@ -152,18 +152,29 @@ def resolve_output(src: str | Path, target: Path, policy: str, reserved: set[str
     def taken(p: Path) -> bool:
         return p.exists() or _key(p) in reserved
 
+    extra: list[str] = []
     if _same_file(target, src):
         policy = "number"
-    elif taken(target):
+    elif _key(target) in reserved:
+        # Another file in this batch already has this name (e.g. two MOV01A.MOD from different
+        # PRG folders, or the original itself): never skip or replace it. Its folder tells them apart.
+        policy = "number"
+        from_elsewhere = _key(src.parent) != _key(target.parent)
+        if from_elsewhere and src.parent.name and src.parent.name.lower() not in target.stem.lower():
+            extra.append(f"{target.stem}_{src.parent.name}")
+    elif target.exists():
         if policy == "skip":
             return None, "Skipped — a file with that name already exists"
-        if policy == "replace" and _key(target) not in reserved:
+        if policy == "replace":
             return target, "Replaced the existing file"
-        policy = "number"
     else:
         return target, ""
 
     stem, suffix = target.stem, target.suffix
+    for name in extra:
+        cand = target.with_name(f"{name}{suffix}")
+        if not taken(cand) and not _same_file(cand, src):
+            return cand, f"Saved as {cand.name} (another file has the same name)"
     i = 2
     while True:
         cand = target.with_name(f"{stem}_{i}{suffix}")

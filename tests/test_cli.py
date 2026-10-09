@@ -169,5 +169,13 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     assert "skipped 1 file that isn't" in w.toast.text().lower()  # only notes.txt counts as skipped
     w.add_paths([str(folder / "MOV01A.MOI")])  # dropped on its own: still not listed
     assert len(w.items) == 1
+    second = tmp_path / "PRG002"
+    second.mkdir()
+    (second / "MOV01A.MOD").write_bytes(b"x")
+    w.add_paths([str(second / "MOV01A.MOD")])
+    assert sorted(it.card.name.text() for it in w.items.values()) == [
+        "PRG002 / MOV01A.MOD",
+        "SD_VIDEO / MOV01A.MOD",
+    ]
     w.close()
     app.processEvents()
