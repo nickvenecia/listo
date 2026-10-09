@@ -17,7 +17,9 @@ listo/
   core/            Converting. No Qt imports.
     engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates, verify)
     video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here;
-                   burn_filters(): clean / VHS drawtext burn-ins (fonts in listo/assets/fonts)
+                   preview_plan(): one PNG frame through the exact same steps (used by the Preview window)
+    burnin.py      burn-ins drawn by Listo (Pillow PNGs + overlay; digits via crop-expression "strips"), so they
+                   work with ANY ffmpeg (no drawtext). Timecode math mirrors probe.tc_add (drop-frame aware)
     frame.py       picture shape: desqueeze, aspect crop / black bars / cinema bars, short-edge resize
                    (shared by video.build and naming.output_size so names and files agree)
     photo.py       photo decode (incl. RAW/HEIC) + save
@@ -37,6 +39,7 @@ listo/
     widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), Segmented (tabs), FlowLayout, repolish
     main_window.py queue + batch controller, toolbar, drop zone, footer
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
+    preview_dialog.py  "Preview": one rendered frame (PreviewTask in workers), converted vs original
     export_dialog.py  "Export options": where files go + naming + collisions (opened from the footer)
     trim_dialog.py start/end sliders with ffmpeg frame-grab previews
     job_card.py    one file in the list
@@ -64,9 +67,10 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
 - Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins.
-- `frame.frame_plan` also returns the picture area (fractions, without bars); burn_filters keeps everything inside it.
+- `frame.frame_plan` also returns the picture area (fractions, without bars); burnin.plan keeps everything inside it.
 - Sidebar.VIDEO_ADVANCED / PHOTO_ADVANCED list the settings counted in the "Advanced options · N changed" header; add new advanced settings there.
-- Burn-ins need ffmpeg's drawtext (FreeType + HarfBuzz). Homebrew's ffmpeg doesn't have it; the bundled builds do.
+- Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
+  starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.
 - Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click; cards emit `pressed`; the clear-list icon opens a menu (Remove selected / Clear finished / Clear all).
 - Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.

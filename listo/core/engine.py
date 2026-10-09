@@ -125,6 +125,7 @@ class Conversion:
         # no half-written files if something fails or you cancel.
         tmp = target.with_name(f".{target.stem}.listo-{uuid.uuid4().hex[:6]}{target.suffix}")
         cmd: list[str] = []
+        plan = None
         try:
             if self._canceled:
                 raise Canceled()
@@ -161,5 +162,10 @@ class Conversion:
                     tmp.unlink()
             except OSError:
                 pass
+            if plan is not None:
+                try:
+                    plan.cleanup()  # burn-in images
+                except OSError:
+                    pass
             if not target.exists():
                 self.reserved.discard(key)

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
 
-from .frame import FULL, Area, frame_plan, resized
+from . import burnin
+from .burnin import BurnPlan
+from .frame import Area, frame_plan, resized
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
 from .probe import MediaInfo, tc_add, tc_double_frames
 from .tools import Capabilities
@@ -22,6 +23,11 @@ class Plan:
     args: list[str]
     muxer: str
     notes: list[str] = field(default_factory=list)
+    burn: BurnPlan | None = None  # images for burn-ins; call cleanup() when ffmpeg is done
+
+    def cleanup(self) -> None:
+        if self.burn:
+            self.burn.cleanup()
 
 
 H264_CRF = {"high": 18, "standard": 21, "small": 24}
@@ -46,18 +52,6 @@ def fesc(value: str) -> str:
     return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
 
 
-def fesc_expanding(value: str) -> str:
-    """Like fesc, but keeps %{...} so drawtext can fill in values (a running clock)."""
-    lvl1 = "".join("\\" + c if c in "\\:'[],;=" else c for c in value)
-    return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
-
-
-def clock_text(start: datetime, fmt: str) -> str:
-    """drawtext text for a clock that starts at `start` (wall time) and runs with the video."""
-    epoch = round((start.replace(tzinfo=None) - datetime(1970, 1, 1)).total_seconds())
-    return "%{pts:gmtime:" + str(epoch) + ":" + fmt.replace(":", "\\:") + "}"
-
-
 def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
     try:
         r = Fraction(info.rate) if info.rate else Fraction(info.fps).limit_denominator(1001)
@@ -69,138 +63,54 @@ def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
     return f"{r.numerator}/{r.denominator}"
 
 
-def look_filters(
+def lut_filters(s: Settings, caps: Capabilities, notes: list[str]) -> list[str]:
+    if not s.lut_path:
+        return []
+    if not Path(s.lut_path).is_file():
+        raise PlanError(f"The LUT file is missing: {s.lut_path}")
+    if not caps.has_filter("lut3d"):
+        notes.append("LUT skipped — this copy of ffmpeg can't apply LUTs.")
+        return []
+    notes.append(f"LUT applied: {Path(s.lut_path).name}.")
+    return [f"lut3d=file={fesc(s.lut_path)}"]
+
+
+def burn_plan(
     info: MediaInfo,
     s: Settings,
-    caps: Capabilities,
     frame: tuple[int, int],
+    area: Area,
     doubled: bool,
     src: str,
     notes: list[str],
     start_tc: str = "",
     start_s: float = 0.0,
-    area: Area = FULL,
-) -> tuple[list[str], list[str]]:
-    """(LUT filters to run before scaling, burn-in filters to run after)."""
-    pre: list[str] = []
-    if s.lut_path:
-        if not Path(s.lut_path).is_file():
-            raise PlanError(f"The LUT file is missing: {s.lut_path}")
-        if not caps.has_filter("lut3d"):
-            notes.append("LUT skipped — this copy of ffmpeg can't apply LUTs.")
-        else:
-            pre.append(f"lut3d=file={fesc(s.lut_path)}")
-            notes.append(f"LUT applied: {Path(s.lut_path).name}.")
+) -> BurnPlan:
+    """Burn-in images for this conversion (drawn by Listo, so any ffmpeg works)."""
     if not s.burns:
-        return pre, []
-    if not caps.has_filter("drawtext"):
-        notes.append("Burn-ins skipped — this copy of ffmpeg can't draw text.")
-        return pre, []
-    post = burn_filters(info, s, frame, doubled, src, notes, start_tc, start_s, area)
-    if post:
-        notes.append("Burn-ins added" + (" (VHS style)." if s.burn_style == "vhs" else "."))
-    return pre, post
-
-
-def _timecode_and_rate(info: MediaInfo, s: Settings, doubled: bool, start_tc: str, notes: list[str]):
-    rate = _out_rate(info, s, doubled)
-    if not rate:
-        notes.append("Timecode burn-in skipped — frame rate unknown.")
-        return "", ""
-    tc = start_tc or info.timecode or "00:00:00:00"
-    if ";" in tc and rate not in ("30000/1001", "60000/1001"):
-        tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
-    return tc, rate
-
-
-def _shot_start(src: str, info: MediaInfo, start_s: float, notes: list[str]) -> datetime:
-    from .probe import file_date
-
-    if not info.created:
-        notes.append("No recording time inside the clip — the date comes from the file instead.")
-    return file_date(src, info) + timedelta(seconds=start_s)
-
-
-def burn_filters(
-    info: MediaInfo,
-    s: Settings,
-    frame: tuple[int, int],
-    doubled: bool,
-    src: str,
-    notes: list[str],
-    start_tc: str = "",
-    start_s: float = 0.0,
-    area: Area = FULL,
-) -> list[str]:
-    """drawtext filters for the chosen burn-ins.
-
-    Everything stays inside `area` (the picture, without black bars or cinema bars) and is sized
-    to it, so burn-ins never sit on the bars."""
-    fw, fh = frame
-    ax, ay, aw, ah = area
-    pic_w, pic_h = (fw * aw, fh * ah) if fw and fh else (1920.0, 1080.0)
-    ref = min(pic_w, pic_h) or 1080
-    # Edges of the picture, as drawtext expressions (w, h = the frame being drawn on).
-    left, top = f"w*{ax:.5f}", f"h*{ay:.5f}"
-    right, bottom = f"w*{ax + aw:.5f}", f"h*{ay + ah:.5f}"
-    out: list[str] = []
-
-    def draw(style: str, text: str, x: str, y: str, expand: bool = False) -> None:
-        value = fesc_expanding(text) if expand else fesc(text)
-        mode = "normal" if expand else "none"
-        out.append(f"drawtext={style}:expansion={mode}:text={value}:x={x}:y={y}")
-
-    if s.burn_style == "vhs":
-        # Camcorder on-screen display: chunky mono font, soft glow, hard shadow, title-safe margins.
-        size = max(12, round(ref / 15))
-        mx, my = round(ref * 0.09), round(ref * 0.07)
-        line = round(size * 1.25)
-        sh = max(1, size // 14)
-        base = f"fontfile={fesc(str(VHS_FONT))}:fontsize={size}"
-        glow = f"{base}:fontcolor=white@0.0:borderw={max(2, size // 12)}:bordercolor=white@0.12"
-        style = f"{base}:fontcolor=0xF4F4F0:shadowcolor=black@0.6:shadowx={sh}:shadowy={sh}"
-
-        def vhs(text: str, x: str, y: str, expand: bool = False) -> None:
-            draw(glow, text, x, y, expand)
-            draw(style, text, x, y, expand)
-
-        vhs("PLAY ►", f"{left}+{mx}", f"{top}+{my}")
-        if s.burn_timecode:
-            tc, rate = _timecode_and_rate(info, s, doubled, start_tc, notes)
-            if tc:
-                for st in (glow, style):
-                    out.append(
-                        f"drawtext={st}:timecode={fesc(tc)}:rate={rate}:x={right}-tw-{mx}:y={top}+{my}"
-                    )
-        if s.burn_datetime:
-            shot = _shot_start(src, info, start_s, notes)
-            vhs(clock_text(shot, "%p %I:%M:%S"), f"{left}+{mx}", f"{bottom}-{my + size + line}", expand=True)
-            vhs(shot.strftime("%b. %d %Y").upper(), f"{left}+{mx}", f"{bottom}-{my + size}")
-        if s.burn_filename:
-            name_size = max(10, round(size * 0.6))
-            name_style = style.replace(f"fontsize={size}", f"fontsize={name_size}")
-            draw(name_style, Path(src).name, f"{right}-tw-{mx}", f"{bottom}-{my + name_size}")
-        return out
-
-    # Clean: small labels on dark boxes in the corners of the picture.
-    size = max(12, round(ref / 26))
-    pad = max(8, size)
-    style = (
-        f"fontfile={fesc(str(FONT))}:fontsize={size}:fontcolor=white:"
-        f"box=1:boxcolor=black@0.55:boxborderw={max(4, size // 3)}"
-    )
-    if s.burn_filename:
-        draw(style, Path(src).name, f"{left}+{pad}", f"{bottom}-th-{pad}")
+        return BurnPlan()
+    if not frame[0] or not frame[1]:
+        notes.append("Burn-ins skipped — couldn't read the picture size.")
+        return BurnPlan()
+    tc, rate = "", None
     if s.burn_timecode:
-        tc, rate = _timecode_and_rate(info, s, doubled, start_tc, notes)
-        if tc:
-            out.append(
-                f"drawtext={style}:timecode={fesc(tc)}:rate={rate}:x={right}-tw-{pad}:y={bottom}-th-{pad}"
-            )
+        r = _out_rate(info, s, doubled)
+        if r:
+            rate = Fraction(r)
+            tc = start_tc or info.timecode or "00:00:00:00"
+            if ";" in tc and r not in ("30000/1001", "60000/1001"):
+                tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
+        else:
+            notes.append("Timecode burn-in skipped — frame rate unknown.")
+    shot = None
     if s.burn_datetime:
-        shot = _shot_start(src, info, start_s, notes)
-        draw(style, clock_text(shot, "%Y-%m-%d  %H:%M:%S"), f"{left}+{pad}", f"{top}+{pad}", expand=True)
-    return out
+        if not info.created:
+            notes.append("No recording time inside the clip — the date comes from the file instead.")
+        shot = burnin.shot_start(src, info, start_s)
+    bp = burnin.plan(info, s, frame, area, src, shot, tc, rate)
+    if bp.layers:
+        notes.append("Burn-ins added" + (" (VHS style)." if s.burn_style == "vhs" else "."))
+    return bp
 
 
 def preset_available(key: str, caps: Capabilities) -> bool:
@@ -349,20 +259,18 @@ def build(
 
     # Shape first (desqueeze, crop / bars), so the LUT and burn-ins see the final frame.
     shape_vf, fw, fh, area = frame_plan(info.width, info.height, info.sar, s)
-    burn_frame = (fw, fh) if p.key == "gif" else out_size
     if doubled and start_tc:
         start_tc = tc_double_frames(start_tc)
-    look_pre, look_post = look_filters(
-        info, s, caps, burn_frame, doubled, src, notes, start_tc, trim[0] if trim else 0.0, area
-    )
-    vf += look_pre
+    vf += lut_filters(s, caps, notes)
     vf += shape_vf
     if shape_vf:
         bars_only = s.aspect_fit == "matte" and s.desqueeze == "1"
         notes.append(f"Cinema bars added ({s.aspect})." if bars_only else f"Reshaped to {fw}×{fh}.")
-    if p.key == "gif":  # burn in before the GIF's frame-rate drop so timecode counts real frames
-        vf += look_post
-        look_post = []
+    burn = burn_plan(
+        info, s, (fw, fh) if p.key == "gif" else out_size, area, doubled, src, notes, start_tc,
+        trim[0] if trim else 0.0,
+    )  # fmt: skip
+    burn_at = len(vf) if p.key == "gif" else -1  # GIF: burn in before the frame-rate drop
 
     if p.key == "proxy":
         vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
@@ -381,14 +289,17 @@ def build(
             rw, rh = resized(fw, fh, s.video_resize)
             if (rw, rh) != (fw, fh):
                 vf.append(f"scale={rw}:{rh}:flags=lanczos")
+                if rh * rw > fh * fw:
+                    notes.append(f"Upscaled from {fw}×{fh} to {rw}×{rh}.")
         elif s.video_resize == "half":
             vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
         else:
-            vf.append(f"scale=-2:'min({int(s.video_resize)},ih)':flags=lanczos")
+            vf.append(f"scale=-2:{int(s.video_resize)}:flags=lanczos")
     # 4:2:0 encoders need even dimensions (screen recordings and crops often aren't).
     if p.key not in ("gif",):
         vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
-    vf += look_post
+    if burn_at < 0:
+        burn_at = len(vf)
 
     ten_bit_hdr = info.hdr and p.key in ("hevc", "av1")
     hw_enc = ""
@@ -489,11 +400,29 @@ def build(
     elif tonemap and caps.has_filter("zscale"):
         vargs += ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
 
-    if vf:
+    if burn.layers:
+        # Burn-in images are extra inputs, so the picture goes through a filter graph.
+        first = args.index("-i") + 2
+        images = burn.images()
+        extra: list[str] = []
+        for img in images:
+            extra += ["-framerate", _out_rate(info, s, doubled) or "25", "-loop", "1", "-i", str(img)]
+        args[first:first] = extra
+        # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
+        # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
+        pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
+        graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(1, "bin", "bout" if post else "vout")
+        if post:
+            graph += f";[bout]{post}[vout]"
+        args += ["-filter_complex", graph]
+        args[args.index(f"0:{info.video_index}")] = "[vout]"
+    elif vf:
         args += ["-vf", ",".join(vf)]
     args += vargs
 
     # ---- audio codec
+    if tracks and burn.layers:
+        args += ["-af", "asetpts=PTS-STARTPTS"]  # keep in step with the picture (see above)
     if tracks:
         if p.edit_format:
             args += ["-c:a", _pcm_for(info)]
@@ -515,7 +444,7 @@ def build(
     if muxer == "mp4":
         args += ["-movflags", "+faststart"]
     args += ["-map_metadata", "0", "-f", muxer, out]
-    return Plan(args, muxer, notes)
+    return Plan(args, muxer, notes, burn)
 
 
 def _hw_rate(enc: str, info: MediaInfo, variant: str, size: tuple[int, int]) -> list[str]:
@@ -538,3 +467,35 @@ def _hw_rate(enc: str, info: MediaInfo, variant: str, size: tuple[int, int]) -> 
             str(int(bitrate * 1.5)),
         ]
     return ["-b:v", str(bitrate), "-maxrate", str(int(bitrate * 1.5))]
+
+
+def preview_plan(
+    src: str, info: MediaInfo, s: Settings, caps: Capabilities, at: float, out_png: str
+) -> tuple[list[str], Plan]:
+    """ffmpeg args that save ONE frame at `at` seconds, with exactly the picture steps the real
+    conversion would use (LUT, frame, size, burn-ins). Call plan.cleanup() afterwards."""
+    if s.video_preset in ("gif", "audio"):
+        s = s.copy()
+        s.video_preset = "h264"  # same look; a GIF's palette step needs the whole clip
+    length = max(info.duration, 0.1)
+    at = min(max(0.0, at), max(0.0, length - 0.05))
+    plan = build(src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)))
+    a = plan.args
+    first_map = a.index("-map")
+    args = [*a[:first_map], "-map", a[first_map + 1]]
+    for flag in ("-filter_complex", "-vf"):
+        if flag in a:
+            args += [flag, a[a.index(flag) + 1]]
+            break
+    args += ["-frames:v", "1", "-an", "-update", "1", "-f", "image2", "-c:v", "png", "-y", out_png]
+    return args, plan
+
+
+def original_frame_args(src: str, info: MediaInfo, at: float, out_png: str) -> list[str]:
+    """One untouched frame at `at` seconds (pixels made square so it looks like the real thing)."""
+    vf = "scale='trunc(iw*sar/2)*2':ih,setsar=1" if abs(info.sar - 1) > 1e-3 else "null"
+    return [
+        "-hide_banner", "-v", "error", "-ss", f"{max(0.0, at):.3f}", "-i", src,
+        "-map", f"0:{info.video_index}", "-vf", vf, "-frames:v", "1", "-an",
+        "-update", "1", "-f", "image2", "-c:v", "png", "-y", out_png,
+    ]  # fmt: skip

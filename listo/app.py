@@ -8,7 +8,15 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
-from PySide6.QtWidgets import QApplication, QComboBox, QMenu, QWidget
+from PySide6.QtWidgets import (
+    QAbstractScrollArea,
+    QAbstractSlider,
+    QApplication,
+    QComboBox,
+    QMenu,
+    QScrollBar,
+    QWidget,
+)
 
 from . import APP_NAME, __version__
 from .core.log import get_logger, setup_logging
@@ -101,6 +109,15 @@ class _RoundPopups(QObject):
             win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
     def eventFilter(self, obj, ev):
+        wheel_on_control = isinstance(obj, (QComboBox, QAbstractSlider)) and not isinstance(obj, QScrollBar)
+        if ev.type() == QEvent.Type.Wheel and wheel_on_control:
+            # Scrolling over a dropdown or slider scrolls the panel; it never changes the value.
+            area = obj.parent()
+            while area is not None and not isinstance(area, QAbstractScrollArea):
+                area = area.parent()
+            if area is not None:
+                QApplication.sendEvent(area.verticalScrollBar(), ev)
+            return True
         if ev.type() == QEvent.Type.Polish and isinstance(obj, QWidget):
             if isinstance(obj, QMenu) and obj.isWindow():
                 self._see_through(obj)
@@ -186,11 +203,6 @@ def main() -> int:
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)
-        print(
-            "burn-ins:",
-            "yes" if caps.has_filter("drawtext") else "NO (this ffmpeg can't draw text)",
-            flush=True,
-        )
         QTimer.singleShot(1500, app.quit)
         code = app.exec()
         return code if caps.ok else 3

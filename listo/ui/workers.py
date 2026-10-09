@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import subprocess
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
@@ -208,3 +209,67 @@ class ConvertThread(QThread):
         except Exception as e:
             r = Result("failed", message=f"{e.__class__.__name__}: {e}")
         self.finished_item.emit(self.item_id, r)
+
+
+class PreviewSignals(QObject):
+    done = Signal(int, bytes, str)  # request number, PNG bytes, error message
+
+
+class PreviewTask(QRunnable):
+    """Render one frame exactly as the conversion would (or the untouched original)."""
+
+    def __init__(
+        self,
+        seq: int,
+        path: str,
+        info: MediaInfo,
+        settings,
+        at: float,
+        original: bool,
+        signals: PreviewSignals,
+    ):
+        super().__init__()
+        self.seq, self.path, self.info, self.s = seq, path, info, settings
+        self.at, self.original, self.signals = at, original, signals
+        self.setAutoDelete(True)
+
+    def run(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        from ..core.video import PlanError, original_frame_args, preview_plan
+
+        caps = capabilities()
+        data, error, plan = b"", "", None
+        fd, name = tempfile.mkstemp(prefix="listo-preview-", suffix=".png")
+        os.close(fd)
+        try:
+            if self.original:
+                args = original_frame_args(self.path, self.info, self.at, name)
+            else:
+                args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name)
+            cp = subprocess.run(
+                [caps.ffmpeg, *args],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=60,
+                **popen_kwargs(),
+            )
+            if cp.returncode == 0:
+                data = Path(name).read_bytes()
+            else:
+                error = "Couldn't make a preview of this file."
+                log.warning("preview failed: %s", cp.stderr[-2000:].decode("utf-8", "replace"))
+        except PlanError as e:
+            error = str(e)
+        except (OSError, subprocess.SubprocessError, ValueError) as e:
+            error = "Couldn't make a preview of this file."
+            log.warning("preview failed", exc_info=e)
+        finally:
+            if plan is not None:
+                plan.cleanup()
+            Path(name).unlink(missing_ok=True)
+        try:
+            self.signals.done.emit(self.seq, data, error)
+        except RuntimeError:  # the dialog closed meanwhile
+            pass

@@ -181,8 +181,14 @@ def test_gif_burnin_timecode_runs_at_real_speed(tmp_path: Path):
         Settings(video_preset="gif", burn_timecode=True),
         capabilities(),
     )
-    vf = plan.args[plan.args.index("-vf") + 1]
-    assert vf.index("drawtext") < vf.index("fps=15")
+    graph = plan.args[plan.args.index("-filter_complex") + 1]
+    plan.cleanup()
+    assert graph.index("overlay") < graph.index("fps=15")  # burned in before the frame-rate drop
+    from listo.core.engine import Conversion
+
+    r = Conversion(str(src), probe(src), Settings(video_preset="gif", burn_timecode=True, burn_filename=True),
+                   capabilities(), set()).run()  # fmt: skip
+    assert r.status == "done", r.message
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")

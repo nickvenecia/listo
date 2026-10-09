@@ -1,10 +1,15 @@
 # Changelog
 
 ## Unreleased
+- **Burn-ins work with any copy of ffmpeg**: Listo draws the text itself (no more greyed-out checkboxes with Homebrew's ffmpeg); timecode is frame-accurate, drop-frame included
+- **Preview**: see one frame of the selected clip (or the first) exactly as it will come out, compare with the original, scrub to any moment
+- **Upscaling**: Size is the size you get, up or down (720×480 4:3 camcorder footage at 1080 → 1440×1080, true shape)
+- Scrolling over a dropdown or slider scrolls the panel instead of changing it
+- Options only show when they apply (burn-in style, hardware encoding, interlaced footage, …)
+- Camcorder .MOD / .VOB: burned-in timecode starts on the first frame, sound stays in sync
 - **Advanced options**: the sidebar shows Format, Quality and Size; Frame, Interlaced footage, LUT, Burn in, Speed and Audio fold away (the header says how many are changed). Export options folds away Name taken and After converting the same way
 - Burn-ins stay inside the picture: never on cinema bars or black bars, and sized to the picture
 - **Burn in** is its own section: Timecode, File name and new **Date & time** (when the clip was shot, read from the clip, with a clock that runs as it plays), in a **Clean** or **VHS camcorder** style (VCR OSD Mono font)
-- Burn-ins explain themselves when this copy of ffmpeg can't draw text (Homebrew's ffmpeg can't); `--smoke-test` reports it too
 - **Frame** section: anamorphic desqueeze (1.33×–2×), aspect ratios (16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35, 2.39) with Crop to fill, Add black bars, or Cinema bars on top with adjustable opacity
 - Size now means the short edge (vertical video stays sharp), plus a 1440 option
 - Phone clips: the recording time is read in the time zone it was shot in

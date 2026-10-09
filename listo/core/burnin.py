@@ -1,0 +1,332 @@
+"""Burn-ins drawn by Listo itself (Pillow), so they work with ANY copy of ffmpeg.
+
+Each line of text becomes a small transparent PNG laid over the video with ffmpeg's `overlay`
+filter. Text that changes while the clip plays (timecode, the running clock) uses a "digit strip":
+one PNG with the glyphs 0-9 stacked vertically, and a `crop` per digit position whose y-offset is
+an expression of the frame's time, so ffmpeg picks the right digit on every frame.
+`overlay` and `crop` are built into every ffmpeg, unlike `drawtext` (which needs FreeType and
+HarfBuzz and is missing from e.g. Homebrew's ffmpeg).
+"""
+
+from __future__ import annotations
+
+import tempfile
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from fractions import Fraction
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+from .frame import FULL, Area
+from .presets import Settings
+from .probe import MediaInfo
+
+FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+CLEAN_FONT = FONTS / "Inter-SemiBold.otf"
+VHS_FONT = FONTS / "VCR_OSD_Mono.ttf"
+
+
+# ---------------------------------------------------------------------------- plan
+@dataclass
+class Layer:
+    """One image placed at (x, y). With `expr`, the image is a strip of equal cells and the
+    cell shown is chosen per frame: crop y = cell_h * expr."""
+
+    image: Path
+    x: int
+    y: int
+    cell: tuple[int, int] | None = None
+    expr: str = ""
+
+
+@dataclass
+class BurnPlan:
+    layers: list[Layer] = field(default_factory=list)
+    folder: Path | None = None  # temp folder holding the PNGs (delete after the conversion)
+
+    def images(self) -> list[Path]:
+        seen: list[Path] = []
+        for layer in self.layers:
+            if layer.image not in seen:
+                seen.append(layer.image)
+        return seen
+
+    def graph(self, first_input: int, src_label: str, out_label: str) -> str:
+        """Filtergraph text that lays every layer over [src_label] and names the result [out_label].
+        Images are ffmpeg inputs first_input, first_input+1, ... in images() order."""
+        images = self.images()
+        index = {img: first_input + i for i, img in enumerate(images)}
+        uses: dict[Path, int] = {img: sum(1 for la in self.layers if la.image == img) for img in images}
+        parts: list[str] = []
+        pads: dict[Path, list[str]] = {}
+        for img in images:
+            n = uses[img]
+            names = [f"i{index[img]}_{k}" for k in range(n)]
+            pads[img] = names
+            if n == 1:
+                parts.append(f"[{index[img]}:v]format=rgba[{names[0]}]")
+            else:
+                parts.append(f"[{index[img]}:v]format=rgba,split={n}" + "".join(f"[{x}]" for x in names))
+        cur = src_label
+        for k, la in enumerate(self.layers):
+            pad = pads[la.image].pop(0)
+            if la.cell:
+                cw, ch = la.cell
+                cropped = f"c{k}"
+                parts.append(f"[{pad}]crop={cw}:{ch}:0:'{ch}*({la.expr})'[{cropped}]")
+                pad = cropped
+            nxt = out_label if k == len(self.layers) - 1 else f"b{k}"
+            parts.append(f"[{cur}][{pad}]overlay={la.x}:{la.y}:format=auto:shortest=1[{nxt}]")
+            cur = nxt
+        return ";".join(parts)
+
+    def cleanup(self) -> None:
+        if self.folder and self.folder.exists():
+            for p in self.folder.iterdir():
+                p.unlink(missing_ok=True)
+            self.folder.rmdir()
+
+
+# ---------------------------------------------------------------------------- expressions
+def frame_index(rate: Fraction) -> str:
+    """Frames since the start of the output, from the frame time t."""
+    return f"floor(t*{float(rate):.10f}+0.5)"
+
+
+def tc_to_frames(tc: str, nominal: int, drop: int) -> int:
+    h, m, s, f = (int(x) for x in tc.replace(";", ":").split(":"))
+    total_min = h * 60 + m
+    return ((total_min * 60 + s) * nominal + f) - drop * (total_min - total_min // 10)
+
+
+def timecode_fields(tc: str, rate: Fraction) -> tuple[list[str], bool]:
+    """[hours, minutes, seconds, frames] as ffmpeg expressions, and whether it's drop-frame."""
+    nominal = round(rate)
+    drop = (nominal // 30) * 2 if ";" in tc and nominal in (30, 60) else 0
+    start = tc_to_frames(tc, nominal, drop)
+    f = f"({start}+{frame_index(rate)})"
+    if drop:  # real frame count -> the frame number drop-frame timecode displays
+        per10, per1 = nominal * 600 - drop * 9, nominal * 60 - drop
+        r = f"mod({f},{per10})"
+        f = f"({f}+{drop * 9}*floor({f}/{per10})+if(gte({r},{drop}),{drop}*floor(({r}-{drop})/{per1}),0))"
+    n = nominal
+    return [
+        f"mod(floor({f}/{n * 3600}),24)",
+        f"mod(floor({f}/{n * 60}),60)",
+        f"mod(floor({f}/{n}),60)",
+        f"mod({f},{n})",
+    ], bool(drop)
+
+
+def clock_fields(start: datetime) -> tuple[str, str, str, str]:
+    """(hour 0-23, minute, second, is-PM) expressions for a clock starting at `start` (wall time)."""
+    base = start.hour * 3600 + start.minute * 60 + start.second + start.microsecond / 1e6
+    sec = f"floor({base:.3f}+t)"
+    h24 = f"mod(floor({sec}/3600),24)"
+    return h24, f"mod(floor({sec}/60),60)", f"mod({sec},60)", f"gte({h24},12)"
+
+
+def tens(x: str) -> str:
+    return f"floor(({x})/10)"
+
+
+def ones(x: str) -> str:
+    return f"mod({x},10)"
+
+
+# ---------------------------------------------------------------------------- drawing
+@dataclass
+class Look:
+    font: ImageFont.FreeTypeFont
+    color: tuple[int, int, int, int]
+    pad: int  # transparent margin around the text (room for glow / box)
+    box: tuple[int, int, int, int] | None = None  # clean style: box behind the text
+    glow: bool = False
+    shadow: int = 0
+
+    @property
+    def line_h(self) -> int:
+        ascent, descent = self.font.getmetrics()
+        return ascent + descent
+
+
+def _look(style: str, size: int) -> Look:
+    if style == "vhs":
+        return Look(
+            ImageFont.truetype(str(VHS_FONT), size), (244, 244, 240, 255), max(4, size // 5),
+            glow=True, shadow=max(1, size // 14),
+        )  # fmt: skip
+    return Look(
+        ImageFont.truetype(str(CLEAN_FONT), size), (255, 255, 255, 255), max(4, size // 3), box=(0, 0, 0, 140)
+    )
+
+
+def _finish(text_layer: Image.Image, look: Look) -> Image.Image:
+    """Add the style's glow / shadow / box under a layer of plain text."""
+    out = Image.new("RGBA", text_layer.size, (0, 0, 0, 0))
+    if look.box:
+        out.paste(Image.new("RGBA", text_layer.size, look.box), (0, 0))
+    alpha = text_layer.getchannel("A")
+    if look.glow:
+        glow = Image.new("RGBA", text_layer.size, (255, 255, 255, 0))
+        glow.putalpha(alpha.filter(ImageFilter.GaussianBlur(max(1, look.pad // 2))).point(lambda a: a * 0.35))
+        out.alpha_composite(glow)
+    if look.shadow:
+        shadow = Image.new("RGBA", text_layer.size, (0, 0, 0, 0))
+        shadow.putalpha(alpha.point(lambda a: a * 0.6))
+        out.alpha_composite(shadow, (look.shadow, look.shadow))
+    out.alpha_composite(text_layer)
+    return out
+
+
+def _text_image(parts: list[tuple[str, float]], width: int, look: Look) -> Image.Image:
+    """Draw text pieces at x positions into one padded image."""
+    layer = Image.new("RGBA", (width + 2 * look.pad, look.line_h + 2 * look.pad), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    for text, x in parts:
+        d.text((look.pad + x, look.pad), text, font=look.font, fill=look.color)
+    return _finish(layer, look)
+
+
+def _strip(glyphs: list[str], cell_w: int, look: Look) -> tuple[Image.Image, tuple[int, int]]:
+    """Glyphs stacked vertically in equal cells (each centred), with no box (the line's box is under it)."""
+    plain = Look(look.font, look.color, look.pad, None, look.glow, look.shadow)
+    cw, ch = cell_w + 2 * look.pad, look.line_h + 2 * look.pad
+    strip = Image.new("RGBA", (cw, ch * len(glyphs)), (0, 0, 0, 0))
+    for i, g in enumerate(glyphs):
+        x = (cell_w - look.font.getlength(g)) / 2
+        strip.alpha_composite(_text_image([(g, x)], cell_w, plain), (0, i * ch))
+    return strip, (cw, ch)
+
+
+@dataclass
+class _Slot:
+    glyphs: list[str]
+    expr: str
+
+
+Token = str | _Slot
+
+
+class _Builder:
+    def __init__(self, folder: Path, frame: tuple[int, int], area: Area):
+        self.folder = folder
+        self.W, self.H = frame
+        ax, ay, aw, ah = area
+        self.left, self.top = round(self.W * ax), round(self.H * ay)
+        self.right, self.bottom = round(self.W * (ax + aw)), round(self.H * (ay + ah))
+        self.layers: list[Layer] = []
+        self._strips: dict[tuple, tuple[Path, tuple[int, int]]] = {}
+        self._n = 0
+
+    def _save(self, img: Image.Image) -> Path:
+        self._n += 1
+        p = self.folder / f"burn{self._n}.png"
+        img.save(p)
+        return p
+
+    def line(self, tokens: list[Token], look: Look, anchor: str, mx: int, my: int) -> int:
+        """Place one line in a corner of the picture ('tl', 'tr', 'bl', 'br'). Returns its height."""
+        digit_w = max(look.font.getlength(str(d)) for d in range(10))
+        x, parts, slots = 0.0, [], []
+        for tok in tokens:
+            if isinstance(tok, _Slot):
+                w = digit_w if tok.glyphs[0].isdigit() else max(look.font.getlength(g) for g in tok.glyphs)
+                slots.append((tok, x, w))
+                x += w
+            else:
+                parts.append((tok, x))
+                x += look.font.getlength(tok)
+        width = round(x)
+        bg = _text_image(parts, width, look)
+        # Text edge sits mx / my inside the picture; the padding (glow / box) hangs outside it.
+        ox = self.left + mx - look.pad if anchor[1] == "l" else self.right - mx - width - look.pad
+        oy = self.top + my - look.pad if anchor[0] == "t" else self.bottom - my - look.line_h - look.pad
+        self.layers.append(Layer(self._save(bg), ox, oy))
+        for slot, sx, w in slots:
+            key = (tuple(slot.glyphs), round(w), id(look))
+            if key not in self._strips:
+                img, cell = _strip(slot.glyphs, round(w), look)
+                self._strips[key] = (self._save(img), cell)
+            path, cell = self._strips[key]
+            self.layers.append(Layer(path, ox + round(sx), oy, cell, slot.expr))
+        return look.line_h
+
+
+DIGITS = [str(d) for d in range(10)]
+
+
+def _two(expr: str) -> list[Token]:
+    return [_Slot(DIGITS, tens(expr)), _Slot(DIGITS, ones(expr))]
+
+
+def plan(
+    info: MediaInfo,
+    s: Settings,
+    frame: tuple[int, int],
+    area: Area,
+    src: str,
+    shot: datetime | None,
+    tc: str,
+    rate: Fraction | None,
+) -> BurnPlan:
+    """Render the burn-ins for one conversion. `shot` is the wall-clock time of the first frame,
+    `tc` the timecode of the first frame (with `rate` the output frame rate)."""
+    W, H = frame
+    if not W or not H or not s.burns:
+        return BurnPlan()
+    folder = Path(tempfile.mkdtemp(prefix="listo-burn-"))
+    b = _Builder(folder, frame, area if area else FULL)
+    _, _, aw, ah = area
+    ref = min(W * aw, H * ah) or 1080
+    timecode: list[Token] = []
+    if s.burn_timecode and tc and rate:
+        (hh, mm, ss, ff), df = timecode_fields(tc, rate)
+        timecode = [*_two(hh), ":", *_two(mm), ":", *_two(ss), ";" if df else ":", *_two(ff)]
+
+    if s.burn_style == "vhs":
+        size = max(12, round(ref / 15))
+        look = _look("vhs", size)
+        mx, my = round(ref * 0.09), round(ref * 0.07)
+        gap = round(size * 0.25)
+        b.line(["PLAY ►"], look, "tl", mx, my)
+        if timecode:
+            b.line(timecode, look, "tr", mx, my)
+        if s.burn_datetime and shot:
+            h24, m, sec, pm = clock_fields(shot)
+            h12 = f"(mod({h24}+11,12)+1)"
+            date_h = b.line([shot.strftime("%b. %d %Y").upper()], look, "bl", mx, my)
+            b.line(
+                [_Slot(["AM", "PM"], pm), " ", *_two(h12), ":", *_two(m), ":", *_two(sec)],
+                look,
+                "bl",
+                mx,
+                my + date_h + gap,
+            )
+        if s.burn_filename:
+            b.line([Path(src).name], _look("vhs", max(10, round(size * 0.6))), "br", mx, my)
+    else:
+        size = max(12, round(ref / 26))
+        look = _look("clean", size)
+        pad = max(8, size)
+        if s.burn_filename:
+            b.line([Path(src).name], look, "bl", pad, pad)
+        if timecode:
+            b.line(timecode, look, "br", pad, pad)
+        if s.burn_datetime and shot:
+            h24, m, sec, _ = clock_fields(shot)
+            b.line(
+                [shot.strftime("%Y-%m-%d  "), *_two(h24), ":", *_two(m), ":", *_two(sec)],
+                look,
+                "tl",
+                pad,
+                pad,
+            )
+    return BurnPlan(b.layers, folder)
+
+
+def shot_start(src: str, info: MediaInfo, start_s: float) -> datetime:
+    from .probe import file_date
+
+    return file_date(src, info) + timedelta(seconds=start_s)

@@ -55,6 +55,7 @@ CARD_H = THUMB_H + 2 * SPACE_2
 STATUS_W = 215  # right-hand status column on file cards
 CARD_BAR_W = 170  # progress bar inside a card
 PREVIEW_W, PREVIEW_H = 240, 135  # trim previews (16:9)
+VIEWER_W, VIEWER_H = 768, 432  # the Preview window's picture area (16:9)
 TIME_FIELD_W = 92  # h:mm:ss.s entry boxes
 LINK_BOX_W = 380  # the link field in the drop zone
 DETAILS_SIZE = (640, 420)  # the file details dialog

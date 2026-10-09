@@ -107,3 +107,36 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     ]
     w.close()
     app.processEvents()
+
+
+def test_scrolling_over_a_dropdown_never_changes_it():
+    import os
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication, QComboBox, QScrollArea, QVBoxLayout, QWidget
+
+    from listo.app import _RoundPopups
+
+    app = QApplication.instance() or QApplication([])
+    guard = _RoundPopups(app)
+    app.installEventFilter(guard)
+    area = QScrollArea()
+    inner = QWidget()
+    inner.setMinimumHeight(2000)
+    lay = QVBoxLayout(inner)
+    c = QComboBox()
+    c.addItems(["a", "b", "c"])
+    lay.addWidget(c)
+    area.setWidget(inner)
+    area.resize(200, 200)
+    area.show()
+    ev = QWheelEvent(
+        QPointF(5, 5), QPointF(5, 5), QPoint(0, 0), QPoint(0, -120),
+        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False,
+    )  # fmt: skip
+    QApplication.sendEvent(c, ev)
+    assert c.currentIndex() == 0
+    assert area.verticalScrollBar().value() > 0
+    app.removeEventFilter(guard)

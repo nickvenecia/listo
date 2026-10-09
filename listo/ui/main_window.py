@@ -344,6 +344,15 @@ class MainWindow(QMainWindow):
         left.addWidget(self.f_sub)
         left.addWidget(self.f_bar)
         f.addLayout(left, 1)
+        self.btn_preview = QPushButton("  Preview")
+        self.btn_preview.setObjectName("Secondary")
+        self.btn_preview.setIcon(theme.icon("eye", theme.MUTED))
+        self.btn_preview.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_preview.setToolTip(
+            "See one frame of the selected clip (or the first one) with your settings"
+        )
+        self.btn_preview.clicked.connect(self.open_preview)
+        f.addWidget(self.btn_preview)
         self.btn_export = QPushButton("  Export options")
         self.btn_export.setObjectName("Secondary")
         self.btn_export.setIcon(theme.icon("export", theme.MUTED))
@@ -684,6 +693,26 @@ class MainWindow(QMainWindow):
         self._refresh_footer()
         if self.running:
             self._kick()
+
+    @staticmethod
+    def _previewable(it: Item) -> bool:
+        return (
+            it.kind == "video"
+            and it.info is not None
+            and it.info.video_index is not None
+            and not it.info.error
+        )
+
+    def open_preview(self) -> None:
+        from .preview_dialog import PreviewDialog
+
+        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        if not clips:
+            return
+        start = next((n for n, it in enumerate(clips) if it.id in self.selected), 0)
+        PreviewDialog(
+            [(Path(it.path).name, it.path, it.info, self.eff(it)) for it in clips], start, self
+        ).exec()
 
     def eff(self, it: Item) -> Settings:
         """The settings this file will actually convert with."""
@@ -1164,6 +1193,9 @@ class MainWindow(QMainWindow):
         self.btn_clear_all.setVisible(n > 0 and not self.running)
 
     def _refresh_footer(self, finished: bool = False) -> None:
+        self.sidebar.set_queue_info(
+            any(it.info is not None and it.info.interlaced for it in self.items.values())
+        )
         self._refresh_queue_bar()
         if finished:
             self._show_summary = True
@@ -1200,12 +1232,14 @@ class MainWindow(QMainWindow):
                 self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
             self.btn_start.hide()
             self.btn_export.hide()
+            self.btn_preview.hide()
             self.btn_pause.show()
             self.btn_cancel.show()
             self.btn_add.setEnabled(True)
             return
         self.btn_start.show()
         self.btn_export.show()
+        self.btn_preview.setVisible(any(self._previewable(it) for it in items))
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()

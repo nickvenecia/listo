@@ -37,7 +37,7 @@ from ..core.presets import (
 )
 from ..core.tools import Capabilities
 from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import Disclosure, Section, Segmented, combo, disable_item, hbox, hint, set_combo, vbox
+from .widgets import Disclosure, Section, Segmented, combo, disable_item, hbox, set_combo, vbox
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
@@ -110,7 +110,8 @@ class Sidebar(QFrame):
         self.s = settings
         self.qs = QSettings("Listo", "Listo")
         self._loading = False
-        self._can_draw = True  # set by apply_capabilities
+        self._hw_ok: bool | None = None  # None until the hardware check finishes
+        self._has_interlaced = False  # any interlaced file in the list
         self._current_recipe: str | None = None
         self._emit_timer = QTimer(self)
         self._emit_timer.setSingleShot(True)
@@ -264,13 +265,6 @@ class Sidebar(QFrame):
             lambda: self._set("burn_style", self.burn_style.currentData())
         )
         self.sec_burn.add(self.burn_style)
-        self.burn_hint = hint("Burn-ins need a copy of ffmpeg that can draw text.")
-        self.burn_hint.setToolTip(
-            "The downloaded Listo app includes one. Running from source? "
-            "Run  python scripts/fetch_ffmpeg.py  once, then restart Listo."
-        )
-        self.burn_hint.hide()
-        self.sec_burn.add(self.burn_hint)
 
         speed = Section("Speed")
         self.v_hw = _checkbox(
@@ -430,7 +424,7 @@ class Sidebar(QFrame):
 
     def _burn(self, attr: str, value: bool) -> None:
         self._set(attr, value)
-        self.burn_style.setEnabled(self.s.burns and self._can_draw)
+        self.burn_style.setVisible(self.s.burns)
 
     def _variant_picked(self) -> None:
         if self._loading or self.v_variant.signalsBlocked():
@@ -451,13 +445,14 @@ class Sidebar(QFrame):
         self.sec_variant.set_title(p.variant_label)
         self.sec_variant.setVisible(bool(p.variants))
         self.sec_size.setVisible(p.key not in ("rewrap", "proxy", "gif", "audio"))
-        self.sec_deint.setVisible(p.key not in ("rewrap", "audio"))
+        self.sec_deint.setVisible(p.key not in ("rewrap", "audio") and self._has_interlaced)
+        self.v_hw.setVisible(bool(self._hw_ok) and p.key in ("h264", "hevc"))
         looks = p.key not in ("rewrap", "audio")
         self.sec_lut.setVisible(looks)
         self.sec_burn.setVisible(looks)
         self.sec_frame.setVisible(looks)
         self._sync_frame()
-        self.burn_style.setEnabled(self.s.burns and self._can_draw)
+        self.burn_style.setVisible(self.s.burns)
         self.sec_audio.setVisible(p.edit_format)
 
     def _sync_photo(self) -> None:
@@ -694,11 +689,6 @@ class Sidebar(QFrame):
         if not caps.has_filter("lut3d"):
             self.lut.setEnabled(False)
             self.lut.setToolTip("This copy of ffmpeg can't apply LUTs")
-        self._can_draw = caps.has_filter("drawtext")
-        if not self._can_draw:
-            for w in (self.burn_tc, self.burn_name, self.burn_dt, self.burn_style):
-                w.setEnabled(False)
-            self.burn_hint.show()
 
     def apply_hardware(self, hw: dict) -> None:
         if hw:
@@ -707,8 +697,12 @@ class Sidebar(QFrame):
                     {("Apple VideoToolbox" if "videotoolbox" in e else "NVIDIA NVENC") for e in hw.values()}
                 )
             )
-            self.v_hw.setEnabled(True)
             self.v_hw.setToolTip(f"Uses {names} — much faster for H.264 and HEVC")
-        else:
-            self.v_hw.setEnabled(False)
-            self.v_hw.setToolTip("No hardware encoder found on this computer")
+        self._hw_ok = bool(hw)
+        self._sync_video()
+
+    def set_queue_info(self, has_interlaced: bool) -> None:
+        """What's in the list decides which settings matter (e.g. deinterlacing only for interlaced files)."""
+        if has_interlaced != self._has_interlaced:
+            self._has_interlaced = has_interlaced
+            self._sync_video()

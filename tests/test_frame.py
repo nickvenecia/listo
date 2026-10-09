@@ -67,7 +67,13 @@ def test_non_square_pixels_are_respected():
 def test_size_means_the_short_edge():
     assert resized(3840, 2160, "1080") == (1920, 1080)
     assert resized(1080, 1920, "720") == (720, 1280)  # vertical stays vertical
-    assert resized(1280, 720, "1080") == (1280, 720)  # never upscales
+    assert resized(1280, 720, "1080") == (1920, 1080)  # upscales too
+
+
+def test_sd_camcorder_upscale_fixes_pixel_shape():
+    # 720×480 4:3 DV / MOD: pixels are 10:11 wide -> square 654×480 -> 1080 tall = 1472×1080
+    _, w, h = frame_filters(720, 480, 10 / 11, Settings(video_resize="1080"))
+    assert resized(w, h, "1080") == (1472, 1080)
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
@@ -131,3 +137,23 @@ def test_cinema_bars_render(tmp_path: Path):
     im = Image.open(png).convert("L")
     assert im.size == (640, 360)
     assert im.getpixel((320, 10)) < 30 and im.getpixel((320, 180)) > 220  # black bar, white picture
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_preview_frame_matches_the_output_size(tmp_path: Path):
+    import subprocess
+
+    from PIL import Image
+
+    from listo.core.video import preview_plan
+
+    src = tmp_path / "in.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=640x480:d=2", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(src))
+    s = Settings(video_preset="gif", aspect="16:9", aspect_fit="bars", video_resize="720", burn_filename=True)
+    png = tmp_path / "p.png"
+    args, plan = preview_plan(str(src), probe(src), s, capabilities(), 1.0, str(png))
+    try:
+        subprocess.run(["ffmpeg", *args], check=True, capture_output=True)
+    finally:
+        plan.cleanup()
+    assert Image.open(png).size == (1280, 720)

@@ -142,6 +142,7 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
 | Checkbox | `QCheckBox` | On/off settings. Label says what happens when it's **on** |
 | Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
+| Preview window | `preview_dialog.PreviewDialog` | One frame rendered with the real conversion steps |
 | Fold-away group | `widgets.Disclosure` | "Advanced options": a chevron header with a changed-count summary |
 
 Choosing a control:
@@ -190,6 +191,13 @@ Listo talks like a helpful person, not like software.
 - A value along a range (opacity, photo quality) is a slider with its value shown as text next to it or in the section title.
 - Use `&&` for a literal "&" in Qt labels (a single `&` becomes a keyboard-shortcut underline).
 - Every keyboard shortcut needs a visible way to do the same thing (a button, icon or menu item).
+- **Only show what applies.** A control that depends on another appears only when that one is on
+  (burn-in style only when a burn-in is ticked, fit only when the shape changes, bar opacity only for
+  cinema bars). A feature this computer or these files can't use is hidden, not greyed out
+  (hardware encoding without a hardware encoder; deinterlacing with no interlaced files in the list).
+  The one exception: items in a format list stay, disabled with a tooltip saying why.
+- **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
+  (`app._RoundPopups` enforces it); values change only by clicking or dragging.
 - **Basic first, the rest folded away.** Each panel shows only what most people change every time
   (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; Export options: Where, Name).
   Everything else lives under **Advanced options** (`widgets.Disclosure`), closed by default and remembered.
@@ -198,7 +206,7 @@ Listo talks like a helpful person, not like software.
   nearly everyone needs them.
 - Burn-ins always sit inside the picture: inside cinema bars, inside black bars, and on the cropped frame.
 - The sidebar holds **what** the files become; Export options holds **where** they go and **what they're called**.
-- The footer's right side is always: Show files / Pause / Stop (when relevant), Export options, then the Primary action.
+- The footer's right side is always: Show files / Pause / Stop (when relevant), Preview (when there's a video), Export options, then the Primary action.
 - New settings go into an existing section if they fit; a new section needs a short caps label.
 
 ---

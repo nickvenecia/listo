@@ -49,9 +49,9 @@ def frame_plan(w: int, h: int, sar: float, s: Settings) -> tuple[list[str], int,
         squeeze = float(s.desqueeze)
     except ValueError:
         squeeze = 1.0
-    reshaping = squeeze != 1.0 or s.aspect in ASPECTS
+    reshaping = squeeze != 1.0 or s.aspect in ASPECTS or s.video_resize != "orig"
     if reshaping and abs(sar - 1) > 1e-3:
-        squeeze *= sar  # make pixels square first, or every ratio below would be off
+        squeeze *= sar  # make pixels square first (DV / HDV), or every size and ratio below would be off
     if abs(squeeze - 1) > 1e-3:
         nw, nh = w * squeeze, float(h)
         if nw > MAX_W:  # too wide to encode: shrink the height instead of growing the width
@@ -94,14 +94,15 @@ def _matte(w: int, h: int, ratio: float, opacity: int) -> tuple[list[str], Area]
 
 
 def resized(w: int, h: int, resize: str) -> tuple[int, int]:
-    """Apply a Size choice. Numbers mean the SHORT edge (1080 = 1920×1080 or 1080×1920); never upscales."""
+    """Apply a Size choice. Numbers mean the SHORT edge (1080 = 1920×1080 or 1080×1920),
+    scaling down or up (e.g. 720×480 4:3 -> 1440×1080)."""
     if resize == "half":
         return _even(w / 2), _even(h / 2)
     if resize == "orig" or not w or not h:
         return w, h
     target = int(resize)
     short = min(w, h)
-    if short <= target:
+    if short == target:
         return w, h
     k = target / short
     return _even(w * k), _even(h * k)
