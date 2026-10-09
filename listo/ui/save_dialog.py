@@ -161,6 +161,11 @@ class SaveDialog(QDialog):
         self.k_dates.setChecked(self.s.keep_dates)
         self.k_dates.toggled.connect(lambda v: self._set("keep_dates", v))
         lay.addWidget(self.k_dates)
+        self.k_verify = QCheckBox("Double-check each file after converting")
+        self.k_verify.setToolTip("Re-reads every new video and audio file and flags it if the length doesn't match the original")
+        self.k_verify.setChecked(self.s.verify)
+        self.k_verify.toggled.connect(lambda v: self._set("verify", v))
+        lay.addWidget(self.k_verify)
 
         lay.addSpacing(14)
         done_row = QHBoxLayout()
@@ -223,6 +228,26 @@ class SaveDialog(QDialog):
         self.custom_box.setVisible(self.styles.value() == "custom")
         self._update_example()
         self.adjustSize()
+
+    def reload(self) -> None:
+        """Refresh controls from the settings (after a recipe is applied)."""
+        widgets = (self.where, self.d_sub, self.styles, self.n_edit, self.c_seg, self.k_dates, self.k_verify)
+        for w in widgets:
+            w.blockSignals(True)
+        try:
+            self.where.set_value(self.s.destination)
+            self.d_sub.setText(self.s.subfolder_name)
+            style = style_for(self.s.naming)
+            self.styles.set_value(style)
+            if style == "custom":
+                self.n_edit.setText(self.s.naming)
+            self.c_seg.set_value(self.s.collision)
+            self.k_dates.setChecked(self.s.keep_dates)
+            self.k_verify.setChecked(self.s.verify)
+        finally:
+            for w in widgets:
+                w.blockSignals(False)
+        self._sync()
 
     def set_sample(self, path: str | None, info: MediaInfo | None, kind: str) -> None:
         self._sample = (path, info, kind) if path else None

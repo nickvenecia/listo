@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from fractions import Fraction
+from pathlib import Path
 
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
 from .probe import MediaInfo
@@ -27,6 +29,63 @@ VP9_CRF = {"high": 26, "standard": 32, "small": 37}
 HW_BPP = {"high": 0.16, "standard": 0.10, "small": 0.06}
 
 MOV_SAFE_AUDIO = {"pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_f32le", "aac", "alac"}
+
+
+FONT = Path(__file__).resolve().parent / "assets" / "fonts" / "Inter-SemiBold.otf"
+
+
+def fesc(value: str) -> str:
+    """Escape a value for use inside an ffmpeg filter graph (handles Windows paths, quotes, colons)."""
+    value = value.replace("\\", "/") if (len(value) > 2 and value[1] == ":") else value
+    lvl1 = "".join("\\" + c if c in "\\:'[],;=%" else c for c in value)
+    return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
+
+
+def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
+    try:
+        r = Fraction(info.rate) if info.rate else Fraction(info.fps).limit_denominator(1001)
+    except (ValueError, ZeroDivisionError):
+        return ""
+    if r <= 0:
+        return ""
+    r = r * 2 if doubled else r
+    return f"{r.numerator}/{r.denominator}"
+
+
+def look_filters(info: MediaInfo, s: Settings, caps: Capabilities, out_h: int, doubled: bool,
+                 src: str, notes: list[str]) -> tuple[list[str], list[str]]:
+    """(LUT filters to run before scaling, burn-in filters to run after)."""
+    pre: list[str] = []
+    post: list[str] = []
+    if s.lut_path:
+        if not Path(s.lut_path).is_file():
+            raise PlanError(f"The LUT file is missing: {s.lut_path}")
+        if not caps.has_filter("lut3d"):
+            notes.append("LUT skipped — this copy of ffmpeg can't apply LUTs.")
+        else:
+            pre.append(f"lut3d=file={fesc(s.lut_path)}")
+            notes.append(f"LUT applied: {Path(s.lut_path).name}.")
+    if (s.burn_timecode or s.burn_filename) and not caps.has_filter("drawtext"):
+        notes.append("Burn-ins skipped — this copy of ffmpeg can't draw text.")
+        return pre, post
+    size = max(12, round((out_h or 1080) / 26))
+    pad = max(8, size)
+    style = (f"fontfile={fesc(str(FONT))}:fontsize={size}:fontcolor=white:"
+             f"box=1:boxcolor=black@0.55:boxborderw={max(4, size // 3)}")
+    if s.burn_filename:
+        post.append(f"drawtext={style}:expansion=none:text={fesc(Path(src).name)}:x={pad}:y=h-th-{pad}")
+    if s.burn_timecode:
+        rate = _out_rate(info, s, doubled)
+        if rate:
+            tc = info.timecode if info.timecode else "00:00:00:00"
+            if ";" in tc and rate not in ("30000/1001", "60000/1001"):
+                tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
+            post.append(f"drawtext={style}:timecode={fesc(tc)}:rate={rate}:x=w-tw-{pad}:y=h-th-{pad}")
+        else:
+            notes.append("Timecode burn-in skipped — frame rate unknown.")
+    if post:
+        notes.append("Burn-ins added.")
+    return pre, post
 
 
 def preset_available(key: str, caps: Capabilities) -> bool:
@@ -103,14 +162,21 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
                 args += ["-c:a", _pcm_for(info)]
         if info.interlaced:
             notes.append("Still interlaced — Rewrap doesn't change the picture.")
+        if s.lut_path or s.burn_timecode or s.burn_filename:
+            notes.append("LUT and burn-ins skipped — Rewrap doesn't re-encode.")
         if info.timecode:
             args += ["-timecode", info.timecode]
         args += ["-map_metadata", "0", "-f", "mov", out]
         return Plan(args, "mov", notes)
 
     # ---- picture filters
+    from .naming import output_size
+
+    out_size = output_size(info, s, "video")
     vf: list[str] = []
+    doubled = False
     if info.interlaced and s.deinterlace != "off":
+        doubled = s.deinterlace == "smooth"
         mode = "send_field" if s.deinterlace == "smooth" else "send_frame"
         if caps.has_filter("bwdif"):
             vf.append(f"bwdif=mode={mode}:parity=auto:deint=all")
@@ -129,6 +195,13 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
         else:
             notes.append(f"{info.hdr_label} source — colors may look flat (tone-mapping unavailable).")
 
+    burn_h = info.height if p.key == "gif" else out_size[1]
+    look_pre, look_post = look_filters(info, s, caps, burn_h, doubled, src, notes)
+    vf += look_pre
+    if p.key == "gif":  # burn in before the GIF's frame-rate drop so timecode counts real frames
+        vf += look_post
+        look_post = []
+
     if p.key == "proxy":
         vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
     elif p.key == "gif":
@@ -146,15 +219,13 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
     # 4:2:0 encoders need even dimensions (screen recordings and crops often aren't).
     if p.key not in ("gif",):
         vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
+    vf += look_post
 
     ten_bit_hdr = info.hdr and p.key in ("hevc", "av1")
     hw_enc = ""
     if p.hw_codec and s.hardware and not ten_bit_hdr:
         hw_enc = caps.hw.get(p.hw_codec, "")
 
-    from .naming import output_size
-
-    out_size = output_size(info, s, "video")
     vargs: list[str] = []
     if p.key == "prores":
         pix = "yuva444p10le" if variant == "4" else "yuv422p10le"

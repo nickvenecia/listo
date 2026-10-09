@@ -30,6 +30,8 @@ Source: "..\..\dist\Listo\*"; DestDir: "{app}"; Flags: recursesubdirs ignorevers
 [Icons]
 Name: "{group}\Listo"; Filename: "{app}\Listo.exe"
 Name: "{userdesktop}\Listo"; Filename: "{app}\Listo.exe"; Tasks: desktopicon
+; Right-click any file > Send to > Listo
+Name: "{usersendto}\Listo"; Filename: "{app}\Listo.exe"
 
 [Run]
 Filename: "{app}\Listo.exe"; Description: "Open Listo now"; Flags: nowait postinstall skipifsilent

@@ -35,7 +35,12 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Always drain ffmpeg's stderr while it runs (pipe-fill deadlock was a real bug in the old app).
 - On Windows, every subprocess call needs `popen_kwargs()` (no console window flashes).
 - UI work happens on the main thread; conversions run in `ConvertThread`, probes and thumbnails in a `QThreadPool`. Communicate with signals.
-- Settings are locked in the sidebar while a batch runs; each Conversion gets a copy of Settings.
+- Settings never lock. When a file joins a batch it captures `Item.base` (a copy of the panel's Settings);
+  `MainWindow.eff(item)` = base (or live panel) + the file's own `Item.override` (format only, see presets.OVERRIDE_KEYS).
+- Up to 2 conversions run at once (`Settings.parallel`); `MainWindow.active` maps item id -> ConvertThread.
+  Output names are reserved under `engine._plan_lock`, and every queued source path is pre-reserved so "Replace" can't hit another original.
+- Recipes: built-ins in `presets.BUILTIN_RECIPES` (partial dicts); user recipes are full Settings dicts in QSettings "recipes".
+- A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
 
 ## Commands
@@ -55,9 +60,7 @@ Bump `__version__` in `listo/__init__.py`, commit, `git tag vX.Y.Z && git push -
 CI attaches: Listo-mac-apple-silicon.dmg, Listo-mac-intel.dmg, Listo-windows-setup.exe, Listo-windows-portable.zip, Listo-linux-x64.tar.gz.
 
 ## Ideas not done yet
-- Run two conversions at once when using hardware encoders
 - Watch folder ("anything dropped in here gets converted")
-- Finder Quick Action / Windows right-click "Convert with Listo"
-- LUT on export (.cube via ffmpeg `lut3d`)
+- A real Finder Quick Action (today: right-click > Open With > Listo on Mac, Send to > Listo on Windows)
+- LUTs on photos
 - 16-bit TIFF from RAW (Pillow is 8-bit for RGB; would need tifffile)
-- Save/load named preset combos

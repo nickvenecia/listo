@@ -41,6 +41,14 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 
+**Workflow:**
+- **Recipes**: one click sets format + folder + naming (built-ins like "Client review + burn-ins", or save your own).
+- **Per-file formats**: click the format tag on any file to give just that one a different format.
+- **Look for review copies**: apply a `.cube` LUT and burn in timecode and/or the file name.
+- **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.
+- **Two at once**: optionally convert two files side by side.
+- **Right-click**: on Mac, *Open With → Listo* (or drop on the Dock icon); on Windows, *Send to → Listo*. Files go into the open window.
+
 **Naming:** build the output name from tokens, with a live preview:
 
 | Token | Example |

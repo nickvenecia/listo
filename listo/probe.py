@@ -61,6 +61,7 @@ class AudioTrack:
     channels: int
     sample_rate: int
     bits: int  # 16 / 24 / 32, best guess
+    duration: float = 0.0
 
 
 @dataclass
@@ -70,6 +71,7 @@ class MediaInfo:
     width: int = 0
     height: int = 0
     fps: float = 0.0
+    rate: str = ""  # exact frame rate, e.g. "30000/1001"
     vcodec: str = ""
     pix_fmt: str = ""
     bit_depth: int = 8
@@ -139,6 +141,29 @@ def fmt_duration(sec: float) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
 
+def _float(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+STANDARD_RATES = ("24000/1001", "24/1", "25/1", "30000/1001", "30/1", "48/1", "50/1", "60000/1001", "60/1")
+
+
+def nominal_rate(*candidates: str) -> str:
+    """Pick a sensible fixed frame rate (for timecode) from ffprobe's avg/r rates."""
+    vals = [(c, _fps(c)) for c in candidates if c and _fps(c) > 0]
+    for c, f in vals:  # an exact standard rate wins
+        for std in STANDARD_RATES:
+            if abs(_fps(std) - f) / _fps(std) < 0.0005:
+                return std
+    if vals:  # otherwise snap the first usable one to the nearest standard
+        f = vals[0][1]
+        return min(STANDARD_RATES, key=lambda std: abs(_fps(std) - f))
+    return ""
+
+
 def _fps(rate: str) -> float:
     try:
         if "/" in rate:
@@ -187,11 +212,13 @@ def _parse_time(value: str) -> datetime | None:
         return None
 
 
-def probe(path: str | Path) -> MediaInfo:
+def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
     path = str(path)
     kind = kind_from_ext(path)
-    if kind == "photo":
+    if kind == "photo" and not as_media:
         return probe_photo(path)
+    if as_media:
+        kind = "unknown"
     caps = capabilities()
     info = MediaInfo(kind=kind)
     if not caps.ffprobe:
@@ -240,6 +267,7 @@ def probe(path: str | Path) -> MediaInfo:
                     channels=int(s.get("channels") or 0),
                     sample_rate=int(s.get("sample_rate") or 0),
                     bits=_bits_from_audio(s),
+                    duration=_float(s.get("duration")),
                 )
             )
         elif st == "data" and stags.get("timecode") and not info.timecode:
@@ -254,6 +282,8 @@ def probe(path: str | Path) -> MediaInfo:
         info.pix_fmt = video.get("pix_fmt", "") or ""
         info.bit_depth = _bit_depth(info.pix_fmt, video)
         info.fps = _fps(video.get("avg_frame_rate", "")) or _fps(video.get("r_frame_rate", ""))
+        # avg first: interlaced AVCHD often reports the *field* rate as r_frame_rate
+        info.rate = nominal_rate(video.get("avg_frame_rate", ""), video.get("r_frame_rate", ""))
         info.field_order = (video.get("field_order") or "").lower()
         info.interlaced = info.field_order in ("tt", "bb", "tb", "bt")
         info.color_transfer = video.get("color_transfer", "") or ""

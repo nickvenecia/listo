@@ -72,8 +72,8 @@ class Option(QFrame):
         self.setObjectName("Option")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 8, 12, 8)
-        lay.setSpacing(1)
+        lay.setContentsMargins(11, 6, 11, 6)
+        lay.setSpacing(0)
         self.title = QLabel(title)
         self.title.setObjectName("OptionTitle")
         lay.addWidget(self.title)
@@ -114,6 +114,12 @@ class OptionList(QWidget):
         lay.setSpacing(2)
         self.options: dict[str, Option] = {}
         for key, title, sub in items:
+            if key.startswith("#"):  # group header
+                lbl = QLabel(title)
+                lbl.setObjectName("GroupLabel")
+                lay.addSpacing(4 if self.options else 0)
+                lay.addWidget(lbl)
+                continue
             o = Option(key, title, sub)
             o.clicked.connect(self._pick)
             lay.addWidget(o)

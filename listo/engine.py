@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -15,6 +16,9 @@ from .runner import Canceled, FFmpegFailed, FFmpegRun
 from .tools import Capabilities
 
 
+_plan_lock = threading.Lock()  # two conversions at once must not pick the same output name
+
+
 @dataclass
 class Result:
     status: str  # done | skipped | failed | canceled
@@ -23,6 +27,7 @@ class Result:
     notes: list[str] = field(default_factory=list)
     log: str = ""
     command: list[str] = field(default_factory=list)
+    warning: str = ""
 
 
 class Conversion:
@@ -68,15 +73,43 @@ class Conversion:
         name = naming.planned_name(self.src, self.info, self.s, kind, self.counter)
         return naming.resolve_output(self.src, out_dir / name, self.s.collision, self.reserved)
 
+    def _verify(self, out: Path, notes: list[str]) -> str:
+        """Re-read the new file and compare it to the original. Returns a warning or ''."""
+        from .probe import fmt_duration, probe
+
+        got = probe(out, as_media=True)
+        if got.error:
+            return f"Couldn't read the new file back: {got.error}"
+        audio_only = self.info.kind == "audio" or self.s.video_preset == "audio"
+        if not audio_only and got.kind != "video":
+            return "The new file has no picture."
+        if self.info.audio and not got.audio and (audio_only or self.s.video_preset != "gif"):
+            return "The new file has no sound, but the original does."
+        want = self.info.duration
+        if audio_only and self.info.audio:
+            if self.info.audio[0].codec == "mp3":
+                notes.append("Length not checked (MP3 files only estimate their length).")
+                return ""
+            want = self.info.audio[0].duration or want
+        if self.s.video_preset == "gif" and not audio_only:
+            want = min(want, 30.0)
+        if want > 0 and got.duration > 0:
+            diff = abs(got.duration - want)
+            if diff > max(0.5, want * 0.01):
+                return f"Length doesn't match: original {fmt_duration(want)}, new file {fmt_duration(got.duration)}."
+        notes.append("Checked — length matches.")
+        return ""
+
     def run(self, on_progress: Callable[[float, float], None] | None = None) -> Result:
         kind = self.info.kind
         if kind == "unknown":
             return Result("failed", message=self.info.error or "Listo can't read this file.")
-        target, note = self.plan_target()
-        if target is None:
-            return Result("skipped", message=note)
-        key = naming.reserve_key(target)
-        self.reserved.add(key)
+        with _plan_lock:
+            target, note = self.plan_target()
+            if target is None:
+                return Result("skipped", message=note)
+            key = naming.reserve_key(target)
+            self.reserved.add(key)
         notes = [note] if note else []
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +141,8 @@ class Conversion:
             os.replace(tmp, target)
             if self.s.keep_dates:
                 copy_dates(self.src, target)
-            return Result("done", output=target, notes=notes, command=cmd)
+            warning = self._verify(target, notes) if (self.s.verify and kind != "photo") else ""
+            return Result("done", output=target, notes=notes, command=cmd, warning=warning)
         except Canceled:
             return Result("canceled", message="Canceled", command=cmd)
         except video.PlanError as e:

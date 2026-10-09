@@ -23,6 +23,7 @@ class VideoPreset:
     needs: tuple[str, ...] = ()  # ffmpeg encoders that must exist
     edit_format: bool = False  # keeps every audio track as uncompressed PCM
     hw_codec: str = ""  # "h264" / "hevc" if a hardware encoder can be used
+    group: str = "share"  # edit | share | extract  (how the Video tab groups them)
 
 
 QUALITY = (Choice("high", "High"), Choice("standard", "Standard"), Choice("small", "Small file"))
@@ -80,6 +81,15 @@ VIDEO_PRESETS: tuple[VideoPreset, ...] = (
     ),
 )
 
+_GROUPS = {"prores": "edit", "dnxhr": "edit", "proxy": "edit", "rewrap": "edit", "audio": "extract"}
+_ORDER = ["prores", "dnxhr", "proxy", "rewrap", "h264", "hevc", "av1", "webm", "gif", "audio"]
+VIDEO_PRESETS = tuple(
+    sorted(
+        (VideoPreset(**{**p.__dict__, "group": _GROUPS.get(p.key, "share")}) for p in VIDEO_PRESETS),
+        key=lambda p: _ORDER.index(p.key),
+    )
+)
+VIDEO_GROUPS = (("edit", "For editing"), ("share", "For sharing"), ("extract", "Pull out"))
 VIDEO_BY_KEY = {p.key: p for p in VIDEO_PRESETS}
 
 
@@ -175,6 +185,11 @@ class Settings:
     naming: str = "{name}"
     collision: str = "number"
     keep_dates: bool = True
+    lut_path: str = ""
+    burn_timecode: bool = False
+    burn_filename: bool = False
+    verify: bool = True
+    parallel: bool = False
 
     def variant_for(self, preset_key: str) -> str:
         p = VIDEO_BY_KEY[preset_key]
@@ -185,6 +200,32 @@ class Settings:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def copy(self) -> "Settings":
+        return Settings.from_dict(self.to_dict())
+
+    def apply(self, values: dict) -> None:
+        """Apply a partial dict (a recipe or a per-file override) in place."""
+        for k, v in (values or {}).items():
+            if k == "video_variant" and isinstance(v, dict):
+                self.video_variant.update(v)
+            elif hasattr(self, k) and type(v) is type(getattr(self, k)):
+                setattr(self, k, v)
+
+    def matches(self, values: dict) -> bool:
+        cur = self.to_dict()
+        for k, v in (values or {}).items():
+            if k == "video_variant" and isinstance(v, dict):
+                if any(self.variant_for(pk) != pv for pk, pv in v.items() if pk in VIDEO_BY_KEY):
+                    return False
+            elif k in cur and cur[k] != v:
+                return False
+        return True
+
+    def with_override(self, override: dict) -> "Settings":
+        s = self.copy()
+        s.apply(override)
+        return s
 
     @classmethod
     def from_dict(cls, d: dict) -> "Settings":
@@ -199,6 +240,50 @@ class Settings:
         if s.photo_format not in PHOTO_BY_KEY:
             s.photo_format = "jpeg"
         return s
+
+
+# Recipes: a few useful starting points. Each only sets the fields it lists.
+BUILTIN_RECIPES: tuple[tuple[str, dict], ...] = (
+    ("ProRes 422 master", {
+        "video_preset": "prores", "video_variant": {"prores": "2"}, "video_resize": "orig",
+        "destination": "source", "naming": "{name}", "lut_path": "", "burn_timecode": False,
+        "burn_filename": False}),
+    ("Cards → ProRes LT, dated", {
+        "video_preset": "prores", "video_variant": {"prores": "1"}, "video_resize": "orig",
+        "destination": "subfolder", "subfolder_name": "ProRes", "naming": "{date}_{name}",
+        "lut_path": "", "burn_timecode": False, "burn_filename": False}),
+    ("Edit proxies", {
+        "video_preset": "proxy", "destination": "source", "naming": "{name}",
+        "lut_path": "", "burn_timecode": False, "burn_filename": False}),
+    ("Client review + burn-ins", {
+        "video_preset": "h264", "video_variant": {"h264": "standard"}, "video_resize": "1080",
+        "destination": "subfolder", "subfolder_name": "Review", "naming": "{name}_review",
+        "burn_timecode": True, "burn_filename": True}),
+    ("Web / social 1080p", {
+        "video_preset": "h264", "video_variant": {"h264": "standard"}, "video_resize": "1080",
+        "destination": "source", "naming": "{name}_web", "lut_path": "",
+        "burn_timecode": False, "burn_filename": False}),
+    ("Photos for the web", {
+        "photo_format": "jpeg", "photo_quality": 85, "photo_resize": "2048",
+        "destination": "subfolder", "subfolder_name": "Web", "naming": "{name}"}),
+)
+
+# What a per-file override may change (just the output format).
+OVERRIDE_KEYS = ("video_preset", "video_variant", "photo_format", "audio_format")
+
+
+def format_label(kind: str, s: Settings) -> str:
+    """Short name of what this file will become, e.g. 'ProRes 422' or 'JPEG'."""
+    if kind == "photo":
+        return PHOTO_BY_KEY[s.photo_format].title.split(" ·")[0]
+    if kind == "audio" or (kind == "video" and s.video_preset == "audio"):
+        return AUDIO_BY_KEY[s.audio_format].title.replace(" · ", " ")
+    p = VIDEO_BY_KEY[s.video_preset]
+    if p.variants and p.key in ("prores", "dnxhr"):
+        v = s.variant_for(p.key)
+        label = next(c.label for c in p.variants if c.key == v)
+        return f"{p.title} {label}"
+    return p.title
 
 
 def output_ext(kind: str, s: Settings) -> str:

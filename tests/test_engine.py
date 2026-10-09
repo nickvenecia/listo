@@ -160,3 +160,111 @@ def test_rewrap_vp9_explains(tmp_path: Path):
     ff("-f", "lavfi", "-i", "testsrc2=s=320x240:d=1", "-c:v", "libvpx-vp9", "-deadline", "realtime", str(src))
     r = Conversion(str(src), probe(src), Settings(video_preset="rewrap"), capabilities(), set()).run()
     assert r.status == "failed" and "rewrapped" in r.message
+
+
+# ---------- recipes, per-file formats, look, verify, parallel
+
+
+def test_recipe_apply_and_match():
+    from listo.presets import BUILTIN_RECIPES
+
+    s = Settings()
+    name, vals = next(r for r in BUILTIN_RECIPES if r[0].startswith("Client review"))
+    assert not s.matches(vals)
+    s.apply(vals)
+    assert s.matches(vals) and s.video_preset == "h264" and s.burn_timecode
+    s.naming = "{name}"
+    assert not s.matches(vals)
+
+
+def test_per_file_override_leaves_panel_alone():
+    s = Settings(video_preset="prores")
+    o = s.with_override({"video_preset": "dnxhr", "video_variant": {"dnxhr": "dnxhr_sq"}})
+    assert o.video_preset == "dnxhr" and o.variant_for("dnxhr") == "dnxhr_sq"
+    assert s.video_preset == "prores" and "dnxhr" not in s.video_variant
+
+
+def test_filter_escaping():
+    from listo.video import fesc
+
+    assert fesc("C:\\Users\\me\\a.cube") == "C\\\\:/Users/me/a.cube"
+    assert "\\\\\\'" in fesc("it's")
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_lut_and_burnins(tmp_path: Path):
+    d = tmp_path / "odd: dir, with 'quotes'"
+    d.mkdir()
+    lut = d / "look.cube"
+    lut.write_text("LUT_3D_SIZE 2\n" + "\n".join(f"{r} {g} {b}" for b in (0, 1) for g in (0, 1) for r in (0, 1)) + "\n")
+    src = d / "A001.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:r=24:d=1", "-c:v", "libx264", "-timecode", "01:00:00:00", str(src))
+    s = Settings(video_preset="h264", lut_path=str(lut), burn_timecode=True, burn_filename=True)
+    r = Conversion(str(src), probe(src), s, capabilities(), set()).run()
+    assert r.status == "done", r.message + r.log[-400:]
+    assert "LUT applied: look.cube." in r.notes and "Burn-ins added." in r.notes
+    assert "Checked — length matches." in r.notes
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_verify_catches_short_output(tmp_path: Path, monkeypatch):
+    from listo import engine
+
+    src = tmp_path / "a.mp4"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:d=3", "-c:v", "libx264", str(src))
+    info = probe(src)
+    info.duration = 60.0  # pretend the original was a minute long
+    r = engine.Conversion(str(src), info, Settings(video_preset="h264"), capabilities(), set()).run()
+    assert r.status == "done" and "doesn't match" in r.warning
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_two_at_once_never_share_a_name(tmp_path: Path):
+    import threading
+
+    srcs = []
+    for sub in ("card1", "card2"):
+        (tmp_path / sub).mkdir()
+        p = tmp_path / sub / "00000.MTS"
+        ff("-f", "lavfi", "-i", "testsrc2=s=320x240:d=1", "-c:v", "libx264", "-f", "mpegts", str(p))
+        srcs.append(p)
+    out = tmp_path / "out"
+    s = Settings(video_preset="h264", destination="folder", dest_folder=str(out))
+    reserved = {naming.reserve_key(p) for p in srcs}
+    results = []
+    ts = [threading.Thread(target=lambda p=p: results.append(
+        Conversion(str(p), probe(p), s, capabilities(), reserved).run())) for p in srcs]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    names = sorted(r.output.name for r in results)
+    assert names == ["00000.mp4", "00000_2.mp4"]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_audio_shorter_than_picture_no_false_alarm(tmp_path: Path):
+    src = tmp_path / "v.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:d=4", "-f", "lavfi", "-i", "sine=d=2",
+       "-c:v", "libx264", "-c:a", "pcm_s16le", str(src))
+    r = Conversion(str(src), probe(src), Settings(video_preset="audio"), capabilities(), set()).run()
+    assert r.status == "done" and not r.warning, r.warning
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_gif_burnin_timecode_runs_at_real_speed(tmp_path: Path):
+    from listo.video import build
+
+    src = tmp_path / "a.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:r=30000/1001:d=1", "-c:v", "libx264",
+       "-timecode", "01:00:00;00", str(src))
+    plan = build(str(src), str(tmp_path / "o.gif"), probe(src),
+                 Settings(video_preset="gif", burn_timecode=True), capabilities())
+    vf = plan.args[plan.args.index("-vf") + 1]
+    assert vf.index("drawtext") < vf.index("fps=15")
+
+
+def test_nominal_rate():
+    from listo.probe import nominal_rate
+
+    assert nominal_rate("25/1", "50/1") == "25/1"          # AVCHD field rate reported
+    assert nominal_rate("2997/100", "30000/1001") == "30000/1001"
+    assert nominal_rate("621/30", "30/1") == "30/1"         # variable-rate phone clip

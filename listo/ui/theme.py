@@ -47,7 +47,7 @@ QMainWindow, #Root {{ background: {BG}; }}
 QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRONG}; padding: 6px 8px; border-radius: 6px; }}
 
 #Header {{ background: {BG}; border-bottom: 1px solid {BORDER}; }}
-#Wordmark {{ font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }}
+#Wordmark {{ font-size: 21px; font-weight: 700; letter-spacing: -0.5px; }}
 #Tagline {{ color: {FAINT}; font-size: 12px; }}
 
 #Sidebar {{ background: {PANEL}; border-left: 1px solid {BORDER}; }}
@@ -115,7 +115,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Card[state="active"] {{ border: 1px solid {ACCENT}; }}
 #Card[state="failed"] {{ border: 1px solid #5A2A30; }}
 #Thumb {{ background: #0C0C0E; border-radius: 8px; }}
-#FileName {{ font-size: 14px; font-weight: 600; }}
+#FileName {{ font-size: 13px; font-weight: 600; }}
 #Meta {{ color: {MUTED}; font-size: 12px; }}
 #OutName {{ color: {FAINT}; font-size: 12px; }}
 #Status {{ font-size: 12px; font-weight: 600; }}
@@ -125,6 +125,12 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Option[selected="true"] {{ background: {CARD}; border: 1px solid {ACCENT}; }}
 #Option[enabled="false"] {{ background: transparent; }}
 #OptionTitle {{ font-weight: 600; font-size: 13px; }}
+#GroupLabel {{ color: {MUTED}; font-size: 11px; font-weight: 600; padding: 6px 2px 2px 2px; }}
+QPushButton#Chip {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 600; color: {MUTED}; }}
+QPushButton#Chip:hover {{ color: {TEXT}; border-color: #55555F; }}
+QPushButton#Chip[custom="true"] {{ color: {ACCENT}; border-color: rgba(245,165,36,0.55); background: rgba(245,165,36,0.08); }}
+QPushButton#Chip:disabled {{ background: transparent; border-color: {BORDER}; color: {FAINT}; }}
+QProgressBar#Warn::chunk {{ background: {WARN}; }}
 #OptionSub {{ color: {MUTED}; font-size: 12px; }}
 
 #Seg {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 9px; }}
@@ -139,7 +145,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 #DropZone {{ border: 2px dashed #3A3A42; border-radius: 18px; background: transparent; }}
 #DropZone[hot="true"] {{ border-color: {ACCENT}; background: rgba(245,165,36,0.06); }}
-#DropTitle {{ font-size: 20px; font-weight: 600; }}
+#DropTitle {{ font-size: 18px; font-weight: 600; }}
 #DropSub {{ color: {MUTED}; font-size: 13px; }}
 #DropFormats {{ color: {FAINT}; font-size: 12px; }}
 

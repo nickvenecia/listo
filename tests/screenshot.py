@@ -36,7 +36,7 @@ def main() -> None:
     w = MainWindow()
     app.aboutToQuit.connect(w.shutdown)
     w.qs.clear()
-    w.resize(1240, 800)
+    w.resize(1000, 660)
     w.show()
     steps = []
 
@@ -50,7 +50,13 @@ def main() -> None:
     if samples:
         files = sorted(str(p) for p in samples.iterdir() if p.is_file())
         steps.append((100, lambda: w.add_paths(files)))
-        steps.append((2500, shot("02-queue")))
+
+        def override_one():
+            for it in w.items.values():
+                if it.path.endswith("IMG_0001.MOV"):
+                    w._set_override(it.id, {"video_preset": "h264"})
+        steps.append((2500, override_one))
+        steps.append((300, shot("02-queue")))
         def save_shot():
             d = w.save_dialog
             d.styles.options["custom"].clicked.emit("custom")
@@ -58,9 +64,13 @@ def main() -> None:
             QTimer.singleShot(400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide()))
         steps.append((100, save_shot))
         steps.append((800, lambda: None))
-        steps.append((100, lambda: (w.sidebar.show_tab("photo"))))
-        steps.append((300, shot("04-photo-tab")))
-        steps.append((100, lambda: (w.sidebar.show_tab("video"), w.start())))
+        def recipe():
+            i = w.sidebar.recipe.findData("Client review + burn-ins")
+            w.sidebar.recipe.setCurrentIndex(i)
+            w.sidebar._recipe_picked(i)
+        steps.append((100, recipe))
+        steps.append((400, shot("04-recipe")))
+        steps.append((100, lambda: (setattr(w.settings, "parallel", True), w.start())))
         steps.append((1500, shot("05-converting")))
         steps.append((100, lambda: wait_done()))
     def wait_done():

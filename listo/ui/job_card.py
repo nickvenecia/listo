@@ -4,13 +4,14 @@ from __future__ import annotations
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QProgressBar, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+    QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from . import theme
 from .widgets import repolish
 
-THUMB_W, THUMB_H = 112, 63
+THUMB_W, THUMB_H = 96, 54
 
 
 class ElidedLabel(QLabel):
@@ -65,6 +66,7 @@ class JobCard(QFrame):
     retry = Signal(int)
     reveal = Signal(int)
     details = Signal(int)
+    format_clicked = Signal(int, object)  # item id, the chip button (to anchor a menu)
 
     def __init__(self, item_id: int, name: str, kind: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -72,11 +74,11 @@ class JobCard(QFrame):
         self.kind = kind
         self.setObjectName("Card")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(THUMB_H + 22)
+        self.setFixedHeight(THUMB_H + 18)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(11, 11, 12, 11)
-        lay.setSpacing(14)
+        lay.setContentsMargins(9, 9, 10, 9)
+        lay.setSpacing(12)
 
         self.thumb = QLabel()
         self.thumb.setObjectName("Thumb")
@@ -94,10 +96,21 @@ class JobCard(QFrame):
         self.meta.setObjectName("Meta")
         self.out = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
         self.out.setObjectName("OutName")
+        self.chip = QPushButton("")
+        self.chip.setObjectName("Chip")
+        self.chip.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.chip.setToolTip("Change the format for just this file")
+        self.chip.clicked.connect(lambda: self.format_clicked.emit(self.item_id, self.chip))
+        self.chip.hide()
+        out_row = QHBoxLayout()
+        out_row.setContentsMargins(0, 1, 0, 0)
+        out_row.setSpacing(7)
+        out_row.addWidget(self.chip)
+        out_row.addWidget(self.out, 1)
         mid.addStretch(1)
         mid.addWidget(self.name)
         mid.addWidget(self.meta)
-        mid.addWidget(self.out)
+        mid.addLayout(out_row)
         mid.addStretch(1)
         lay.addLayout(mid, 1)
 
@@ -123,7 +136,7 @@ class JobCard(QFrame):
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.bar.setTextVisible(False)
-        self.bar.setFixedWidth(210)
+        self.bar.setFixedWidth(170)
         self.bar.hide()
         bar_row = QHBoxLayout()
         bar_row.addStretch(1)
@@ -132,7 +145,7 @@ class JobCard(QFrame):
         right.addStretch(1)
         wrap = QWidget()
         wrap.setLayout(right)
-        wrap.setFixedWidth(250)
+        wrap.setFixedWidth(215)
         lay.addWidget(wrap)
         self.set_state("probing")
 
@@ -166,6 +179,13 @@ class JobCard(QFrame):
     def set_output(self, text: str) -> None:
         self.out.setText(text)
 
+    def set_format(self, label: str, overridden: bool, editable: bool) -> None:
+        self.chip.setText(label + ("  ▾" if editable else ""))
+        self.chip.setProperty("custom", "true" if overridden else "false")
+        self.chip.setEnabled(editable)
+        self.chip.setVisible(bool(label))
+        repolish(self.chip)
+
     def set_progress(self, frac: float) -> None:
         self.bar.setValue(int(max(0.0, min(1.0, frac)) * 1000))
 
@@ -174,25 +194,26 @@ class JobCard(QFrame):
             "probing": theme.FAINT, "ready": theme.MUTED, "waiting": theme.MUTED,
             "converting": theme.ACCENT, "paused": theme.WARN, "done": theme.GOOD,
             "failed": theme.BAD, "skipped": theme.MUTED, "canceled": theme.MUTED,
-            "unsupported": theme.BAD,
+            "unsupported": theme.BAD, "warning": theme.WARN,
         }
         default = {
             "probing": "Reading…", "ready": "Ready", "waiting": "Waiting",
             "converting": "Converting", "paused": "Paused", "done": "Listo",
             "failed": "Failed", "skipped": "Skipped", "canceled": "Canceled",
-            "unsupported": "Can't convert",
+            "unsupported": "Can't convert", "warning": "Check this one",
         }
         self.status.setText(text or default.get(state, state))
         self.status.setStyleSheet(f"color: {colors.get(state, theme.MUTED)};")
         busy = state in ("converting", "paused")
-        self.bar.setVisible(busy or state == "done")
-        self.bar.setObjectName("Done" if state == "done" else "")
+        finished_ok = state in ("done", "warning")
+        self.bar.setVisible(busy or finished_ok)
+        self.bar.setObjectName("Done" if state == "done" else ("Warn" if state == "warning" else ""))
         repolish(self.bar)
-        if state == "done":
+        if finished_ok:
             self.bar.setValue(1000)
         self.btn_remove.setVisible(not busy)
-        self.btn_retry.setVisible(state in ("failed", "canceled", "skipped"))
-        self.btn_reveal.setVisible(state == "done")
-        self.btn_details.setVisible(state in ("failed", "done", "skipped", "unsupported"))
+        self.btn_retry.setVisible(state in ("failed", "canceled", "skipped", "warning"))
+        self.btn_reveal.setVisible(finished_ok)
+        self.btn_details.setVisible(state in ("failed", "done", "skipped", "unsupported", "warning"))
         self.setProperty("state", "active" if busy else ("failed" if state in ("failed", "unsupported") else ""))
         repolish(self)

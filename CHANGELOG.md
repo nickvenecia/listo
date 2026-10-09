@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.1.0
+- Recipes: built-in starting points plus your own saved combos of format, folder and naming
+- Video formats grouped: For editing / For sharing / Pull out
+- Per-file formats: click a file's format tag to change just that file
+- LUT (.cube) and burn-in timecode / file name for review copies
+- Every converted video/audio file is re-read and checked against the original's length
+- Convert two files at once
+- Settings no longer lock during a batch; each file keeps the settings it was queued with
+- Save options moved next to Convert and redesigned (live example, simple name styles, friendly token buttons)
+- Add files / Add folder moved above the list; Clear dropdown replaced
+- Smaller, more compact window
+- Second launches (Open With / Send to) hand their files to the open window
+
 ## 2.0.0: SimpleConverter becomes Listo
 
 A ground-up rewrite in Python so it runs on Mac, Windows and Linux, ships with ffmpeg inside, and builds downloadable apps on GitHub.

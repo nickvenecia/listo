@@ -7,17 +7,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer
-from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
+    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .. import APP_NAME, __version__, naming
 from ..engine import Conversion, Result
 from ..fileutil import reveal
-from ..presets import Settings
+from ..presets import (
+    AUDIO_FORMATS, OVERRIDE_KEYS, PHOTO_FORMATS, VIDEO_GROUPS, VIDEO_PRESETS, Settings, format_label,
+)
 from ..probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_duration, kind_from_ext
 from ..tools import capabilities
 from . import theme
@@ -27,7 +29,7 @@ from .sidebar import Sidebar
 from .widgets import Toast, repolish
 from .workers import ConvertThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
 
-FINAL = ("done", "failed", "skipped", "canceled", "unsupported")
+FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
 
 
 @dataclass
@@ -42,6 +44,10 @@ class Item:
     card: JobCard | None = None
     message: str = ""
     notes: list[str] = field(default_factory=list)
+    override: dict = field(default_factory=dict)  # per-file format choice
+    base: Settings | None = None  # settings captured when this file joined a batch
+    started: float = 0.0
+    speed: float = 0.0
 
     @property
     def weight(self) -> float:
@@ -52,7 +58,7 @@ class Item:
 
     @property
     def frac(self) -> float:
-        if self.state == "done":
+        if self.state in ("done", "warning"):
             return 1.0
         if self.state in ("converting", "paused") and self.info and self.info.duration:
             return min(1.0, self.processed / self.info.duration)
@@ -125,10 +131,7 @@ class MainWindow(QMainWindow):
         self.batch: list[int] = []
         self.reserved: set[str] = set()
         self.counter = 0
-        self.thread: ConvertThread | None = None
-        self.active_id: int | None = None
-        self.speed = 0.0
-        self._job_started = 0.0
+        self.active: dict[int, ConvertThread] = {}
         self.caps = capabilities()
 
         self._build()
@@ -137,13 +140,15 @@ class MainWindow(QMainWindow):
         self.pool.start(HardwareTask(self.hw_signals))
         self._update_save_button()
         self._refresh_footer()
+        self.centralWidget().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        QTimer.singleShot(0, self.centralWidget().setFocus)
 
         geo = self.qs.value("geometry")
         if geo is not None:
             self.restoreGeometry(geo)
         else:
-            self.resize(1180, 760)
-        self.setMinimumSize(QSize(940, 600))
+            self.resize(1000, 660)
+        self.setMinimumSize(QSize(780, 520))
 
         if not self.caps.ok:
             QTimer.singleShot(300, self._missing_ffmpeg)
@@ -160,7 +165,7 @@ class MainWindow(QMainWindow):
         header = QFrame()
         header.setObjectName("Header")
         h = QHBoxLayout(header)
-        h.setContentsMargins(22, 14, 18, 14)
+        h.setContentsMargins(18, 9, 16, 9)
         word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
         word.setObjectName("Wordmark")
         word.setTextFormat(Qt.TextFormat.RichText)
@@ -178,7 +183,7 @@ class MainWindow(QMainWindow):
         self.queue_stack = QStackedWidget()
         empty_wrap = QWidget()
         ew = QVBoxLayout(empty_wrap)
-        ew.setContentsMargins(22, 22, 22, 22)
+        ew.setContentsMargins(18, 18, 18, 18)
         self.drop = DropZone(self.pick_files)
         ew.addWidget(self.drop)
         self.queue_stack.addWidget(empty_wrap)
@@ -188,7 +193,7 @@ class MainWindow(QMainWindow):
         qp.setContentsMargins(0, 0, 0, 0)
         qp.setSpacing(0)
         bar = QHBoxLayout()
-        bar.setContentsMargins(24, 14, 18, 0)
+        bar.setContentsMargins(20, 10, 14, 0)
         self.q_count = QLabel()
         self.q_count.setObjectName("SectionLabel")
         bar.addWidget(self.q_count)
@@ -221,8 +226,8 @@ class MainWindow(QMainWindow):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lst = QWidget()
         self.list_lay = QVBoxLayout(lst)
-        self.list_lay.setContentsMargins(22, 8, 16, 18)
-        self.list_lay.setSpacing(8)
+        self.list_lay.setContentsMargins(18, 6, 12, 14)
+        self.list_lay.setSpacing(6)
         self.list_lay.addStretch(1)
         self.scroll.setWidget(lst)
         qp.addWidget(self.scroll, 1)
@@ -233,16 +238,17 @@ class MainWindow(QMainWindow):
         self.sidebar.changed.connect(self._settings_changed)
         self.save_dialog = SaveDialog(self.settings, self)
         self.save_dialog.changed.connect(self._settings_changed)
+        self.sidebar.recipe_applied.connect(self.save_dialog.reload)
         body.addWidget(self.sidebar)
         v.addLayout(body, 1)
 
         footer = QFrame()
         footer.setObjectName("Footer")
         f = QHBoxLayout(footer)
-        f.setContentsMargins(22, 14, 18, 14)
-        f.setSpacing(14)
+        f.setContentsMargins(18, 10, 14, 10)
+        f.setSpacing(10)
         left = QVBoxLayout()
-        left.setSpacing(6)
+        left.setSpacing(4)
         self.f_title = QLabel()
         self.f_title.setObjectName("FooterTitle")
         self.f_sub = QLabel()
@@ -372,6 +378,7 @@ class MainWindow(QMainWindow):
         card.retry.connect(self.retry_item)
         card.reveal.connect(self.reveal_item)
         card.details.connect(self.show_details)
+        card.format_clicked.connect(self._format_menu)
         it.card = card
         self.items[iid] = it
         self.order.append(iid)
@@ -415,13 +422,19 @@ class MainWindow(QMainWindow):
         if self.running:
             self._kick()
 
+    def eff(self, it: Item) -> Settings:
+        """The settings this file will actually convert with."""
+        return (it.base or self.settings).with_override(it.override)
+
     def _update_output_name(self, it: Item) -> None:
         if not it.info or it.state in ("unsupported",) or it.state in FINAL and it.result and it.result.output:
             return
+        s = self.eff(it)
+        it.card.set_format(format_label(it.kind, s), bool(it.override), it.state in ("ready", "waiting"))
         try:
-            out_dir = naming.output_dir(it.path, self.settings, it.kind)
-            name = naming.planned_name(it.path, it.info, self.settings, it.kind, 1)
-            target, _ = naming.resolve_output(it.path, out_dir / name, self.settings.collision, set())
+            out_dir = naming.output_dir(it.path, s, it.kind)
+            name = naming.planned_name(it.path, it.info, s, it.kind, 1)
+            target, _ = naming.resolve_output(it.path, out_dir / name, s.collision, set())
             same = Path(out_dir) == Path(it.path).parent
             where = "" if same else f"{out_dir.name}/"
             if target is None:
@@ -451,15 +464,62 @@ class MainWindow(QMainWindow):
         import json
 
         self._update_save_button()
+        self.sidebar.notify_external_change()
         self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
                 self._update_output_name(it)
 
+    def _format_menu(self, iid: int, anchor: QWidget) -> None:
+        it = self.items.get(iid)
+        if not it or it.state not in ("ready", "waiting"):
+            return
+        s = self.eff(it)
+        m = QMenu(self)
+        group = QActionGroup(m)
+
+        def add(menu: QMenu, label: str, override: dict, checked: bool) -> None:
+            a = menu.addAction(label)
+            a.setCheckable(True)
+            a.setChecked(checked)
+            group.addAction(a)
+            a.triggered.connect(lambda _=False, o=override: self._set_override(iid, o))
+
+        add(m, "Same as the panel", {}, not it.override)
+        if it.kind == "video":
+            for gkey, glabel in VIDEO_GROUPS:
+                m.addSection(glabel)
+                for p in VIDEO_PRESETS:
+                    if p.group != gkey or (p.needs and not all(self.caps.has_encoder(e) for e in p.needs)):
+                        continue
+                    if p.key in ("prores", "dnxhr"):
+                        sub = m.addMenu(p.title)
+                        for c in p.variants:
+                            add(sub, c.label, {"video_preset": p.key, "video_variant": {p.key: c.key}},
+                                bool(it.override) and s.video_preset == p.key and s.variant_for(p.key) == c.key)
+                    else:
+                        add(m, p.title, {"video_preset": p.key}, bool(it.override) and s.video_preset == p.key)
+        elif it.kind == "photo":
+            m.addSeparator()
+            for f in PHOTO_FORMATS:
+                add(m, f.title, {"photo_format": f.key}, bool(it.override) and s.photo_format == f.key)
+        elif it.kind == "audio":
+            m.addSeparator()
+            for f in AUDIO_FORMATS:
+                add(m, f.title, {"audio_format": f.key}, bool(it.override) and s.audio_format == f.key)
+        m.exec(anchor.mapToGlobal(anchor.rect().bottomLeft()))
+
+    def _set_override(self, iid: int, override: dict) -> None:
+        it = self.items.get(iid)
+        if not it or it.state not in ("ready", "waiting"):
+            return
+        it.override = {k: v for k, v in override.items() if k in OVERRIDE_KEYS}
+        self._update_output_name(it)
+
     # ------------------------------------------------------------------ list actions
     def remove_item(self, iid: int) -> None:
         it = self.items.get(iid)
-        if not it or iid == self.active_id:
+        if not it or iid in self.active:
             return
         it.card.setParent(None)
         it.card.deleteLater()
@@ -478,7 +538,7 @@ class MainWindow(QMainWindow):
         it = self.items.get(iid)
         if not it or not it.info:
             return
-        it.result, it.processed, it.message = None, 0.0, ""
+        it.result, it.processed, it.message, it.base = None, 0.0, "", None
         it.state = "waiting" if self.running else "ready"
         if self.running and iid not in self.batch:
             self.batch.append(iid)
@@ -505,6 +565,7 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(18, 18, 18, 14)
         r = it.result
         title = {"done": "Converted", "failed": "This one didn't convert", "skipped": "Skipped",
+                 "warning": "Converted — but double-check it",
                  "unsupported": "Can't convert this file"}.get(it.state, it.state.title())
         t = QLabel(title)
         t.setObjectName("FileName")
@@ -512,6 +573,8 @@ class MainWindow(QMainWindow):
         lines = [f"From: {it.path}"]
         if r and r.output:
             lines.append(f"To:   {r.output}")
+        if r and r.warning:
+            lines += ["", "⚠ " + r.warning]
         if it.message:
             lines.append("")
             lines.append(it.message)
@@ -549,7 +612,7 @@ class MainWindow(QMainWindow):
 
     def clear_all(self) -> None:
         for iid in list(self.order):
-            if iid != self.active_id:
+            if iid not in self.active:
                 self.remove_item(iid)
 
     # ------------------------------------------------------------------ converting
@@ -561,134 +624,157 @@ class MainWindow(QMainWindow):
             return
         todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing")]
         if not todo:
-            again = [iid for iid in self.order if self.items[iid].state in ("done", "failed", "canceled", "skipped")]
+            again = [iid for iid in self.order if self.items[iid].state in ("done", "warning", "failed", "canceled", "skipped")]
             if again:
                 self.toast.show_message("Everything here is finished. Use ↻ on a file to run it again, or add more.")
             return
-        self.batch = todo
-        for iid in todo:
-            it = self.items[iid]
-            if it.state == "ready":
-                it.state = "waiting"
-                it.card.set_state("waiting")
+        self.batch = []
         self.running, self.paused = True, False
         # Every file in the list counts as "taken": Replace can never overwrite another original.
         self.reserved = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         self.counter = 0
-        self.speed = 0.0
-        self.sidebar.set_locked(True)
         self.btn_show.hide()
         self._kick()
         self._refresh_footer()
 
-    def _kick(self) -> None:
-        """Start the next file if nothing is running."""
-        if not self.running or self.thread is not None:
-            return
-        # Files added while converting join the batch.
+    def _join_batch(self) -> None:
+        """Ready files (including ones added mid-batch) join, locking in the current settings."""
         for iid in self.order:
             it = self.items[iid]
-            if it.state in ("ready",) and iid not in self.batch:
-                self.batch.append(iid)
+            if iid in self.batch:
+                if it.state == "waiting" and it.base is None:
+                    it.base = self.settings.copy()
+                continue
+            if it.state == "ready":
+                it.base = self.settings.copy()
                 it.state = "waiting"
                 it.card.set_state("waiting")
-            elif it.state == "probing" and iid not in self.batch:
+                self._update_output_name(it)
                 self.batch.append(iid)
-        nxt = next((iid for iid in self.batch if self.items.get(iid) and self.items[iid].state == "waiting"), None)
-        if nxt is None:
+            elif it.state == "probing":
+                it.base = self.settings.copy()  # same settings as the files dropped with it
+                self.batch.append(iid)
+
+    def _kick(self) -> None:
+        """Start as many waiting files as we're allowed to run at once."""
+        if not self.running:
+            return
+        self._join_batch()
+        if self.paused:
+            return
+        limit = 2 if self.settings.parallel else 1
+        while len(self.active) < limit:
+            nxt = next((i for i in self.batch if i in self.items and self.items[i].state == "waiting"), None)
+            if nxt is None:
+                break
+            self._start_item(self.items[nxt])
+        if not self.active:
             if any(self.items.get(i) and self.items[i].state == "probing" for i in self.batch):
-                return  # wait for probes to finish
+                return  # wait for files that are still being read
             self._finish()
             return
-        it = self.items[nxt]
+        self._refresh_footer()
+
+    def _start_item(self, it: Item) -> None:
         self.counter += 1
-        conv = Conversion(it.path, it.info, Settings.from_dict(self.settings.to_dict()), self.caps,
-                          self.reserved, self.counter)
-        it.state, it.processed = "converting", 0.0
+        if it.base is None:
+            it.base = self.settings.copy()
+        s = self.eff(it)
+        conv = Conversion(it.path, it.info, s, self.caps, self.reserved, self.counter)
+        it.state, it.processed, it.speed = "converting", 0.0, 0.0
+        it.started = time.monotonic()
         it.card.set_state("converting", "Starting…")
+        it.card.set_format(format_label(it.kind, s), bool(it.override), False)
         it.card.set_progress(0)
-        self.active_id = nxt
-        self._job_started = time.monotonic()
-        th = ConvertThread(nxt, conv)
+        th = ConvertThread(it.id, conv)
         th.progress.connect(self._progress)
         th.finished_item.connect(self._finished)
-        self.thread = th
+        self.active[it.id] = th
         th.start()
         self.btn_pause.setText(" Pause")
         self.btn_pause.setIcon(theme.icon("pause"))
-        self._scroll_to(it.card)
-        self._refresh_footer()
+        if len(self.active) == 1:
+            self._scroll_to(it.card)
+
+    def _total_speed(self) -> float:
+        return sum(self.items[i].speed for i in self.active if i in self.items)
 
     def _progress(self, iid: int, processed: float, speed: float) -> None:
         it = self.items.get(iid)
         if not it or it.state not in ("converting",):
             return
         it.processed = processed
-        elapsed = time.monotonic() - self._job_started
+        elapsed = time.monotonic() - it.started
         if elapsed > 1.5 and processed > 0:
             measured = processed / elapsed  # steadier than ffmpeg's own early readings
-            self.speed = measured if self.speed <= 0 else self.speed * 0.7 + measured * 0.3
+            it.speed = measured if it.speed <= 0 else it.speed * 0.7 + measured * 0.3
         frac = it.frac
         it.card.set_progress(frac)
         txt = f"{int(frac * 100)}%"
-        if it.info and it.info.duration and self.speed > 0:
-            left = max(0.0, it.info.duration - processed) / self.speed
-            txt += f" · {_eta(left)}"
+        if it.info and it.info.duration and it.speed > 0:
+            txt += f" · {_eta(max(0.0, it.info.duration - processed) / it.speed)}"
         it.card.set_state("converting", txt)
         self._refresh_footer()
 
     def _finished(self, iid: int, r: Result) -> None:
-        th = self.thread
-        self.thread = None
-        self.active_id = None
+        th = self.active.pop(iid, None)
         if th:
             th.wait(2000)
             th.deleteLater()
         it = self.items.get(iid)
         if it:
             it.result = r
-            it.state = r.status
             it.message = r.message
             card = it.card
             if r.status == "done":
-                card.set_state("done", "Listo ✓")
                 where = r.output.parent.name + "/" if r.output.parent != Path(it.path).parent else ""
-                extra = [n for n in r.notes if not n.startswith("Saved as")]
-                card.set_output(f"→  {where}{r.output.name}" + (f"   ·   {extra[0]}" if extra else ""))
-            elif r.status == "failed":
-                card.set_state("failed")
-                card.set_output(r.message)
-            elif r.status == "skipped":
-                card.set_state("skipped")
-                card.set_output(r.message)
+                if r.warning:
+                    it.state = "warning"
+                    card.set_state("warning")
+                    card.set_output(f"→  {where}{r.output.name}   ·   {r.warning}")
+                else:
+                    it.state = "done"
+                    card.set_state("done", "Listo ✓")
+                    card.set_output(f"→  {where}{r.output.name}")
             else:
-                card.set_state("canceled")
-                card.set_progress(0)
+                it.state = r.status
+                if r.status in ("failed", "skipped"):
+                    card.set_state(r.status)
+                    card.set_output(r.message)
+                else:
+                    card.set_state("canceled")
+                    card.set_progress(0)
         if self.running:
             self._kick()
         self._refresh_footer()
 
     def toggle_pause(self) -> None:
-        if not self.running or not self.thread or self.thread.conversion.canceled:
+        if not self.running or (not self.active and not self.paused):
             return
-        it = self.items.get(self.active_id) if self.active_id else None
-        conv = self.thread.conversion
+        convs = [(self.items.get(i), th.conversion) for i, th in self.active.items() if not th.conversion.canceled]
         if not self.paused:
-            if conv.pause():
+            paused_any = False
+            for it, c in convs:
+                if c.pause():  # photos and finishing steps can't pause; leave those cards as they are
+                    paused_any = True
+                    if it:
+                        it.state = "paused"
+                        it.card.set_state("paused")
+            if paused_any or convs:
                 self.paused = True
-                if it:
-                    it.state = "paused"
-                    it.card.set_state("paused")
                 self.btn_pause.setText(" Resume")
                 self.btn_pause.setIcon(theme.icon("play"))
         else:
-            conv.resume()
             self.paused = False
-            if it:
-                it.state = "converting"
-                it.card.set_state("converting", f"{int(it.frac * 100)}%")
+            for it, c in convs:
+                c.resume()
+                if it and it.state == "paused":
+                    it.state = "converting"
+                    it.started = time.monotonic() - (it.processed / it.speed if it.speed > 0 else 0)
+                    it.card.set_state("converting", f"{int(it.frac * 100)}%")
             self.btn_pause.setText(" Pause")
             self.btn_pause.setIcon(theme.icon("pause"))
+            self._kick()
         self._refresh_footer()
 
     def stop(self) -> None:
@@ -700,21 +786,22 @@ class MainWindow(QMainWindow):
             it = self.items.get(iid)
             if it and it.state == "waiting":
                 it.state = "ready"
+                it.base = None
                 it.card.set_state("ready")
-        if self.thread:
-            self.thread.conversion.cancel()
-        self.sidebar.set_locked(False)
+                self._update_output_name(it)
+        for th in self.active.values():
+            th.conversion.cancel()
         self.batch = []
         self._refresh_footer()
 
     def _finish(self) -> None:
         self.running = False
-        self.sidebar.set_locked(False)
         results = [self.items[i] for i in self.batch if i in self.items]
-        done = sum(1 for it in results if it.state == "done")
+        done = sum(1 for it in results if it.state in ("done", "warning"))
+        warned = sum(1 for it in results if it.state == "warning")
         failed = sum(1 for it in results if it.state == "failed")
         skipped = sum(1 for it in results if it.state == "skipped")
-        self._last_summary = (done, failed, skipped)
+        self._last_summary = (done, failed, skipped, warned)
         self._last_outputs = [it.result.output for it in results if it.result and it.result.output]
         self.btn_show.setVisible(bool(self._last_outputs))
         QApplication.alert(self, 0)
@@ -730,7 +817,7 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         self.q_count.setText(f"{n} FILE{'S' if n != 1 else ''}")
-        finished = sum(1 for it in items if it.state in ("done", "failed", "skipped", "canceled"))
+        finished = sum(1 for it in items if it.state in ("done", "warning", "failed", "skipped", "canceled"))
         self.btn_rm_done.setVisible(0 < finished < n)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
 
@@ -751,15 +838,17 @@ class MainWindow(QMainWindow):
             finished_n = sum(1 for it in batch if it.state in FINAL)
             self.f_bar.show()
             self.f_bar.setValue(int(done_w / total_w * 1000))
-            cur = finished_n + (1 if self.active_id else 0)
-            self.f_title.setText(("Paused — " if self.paused else "Converting ") + f"{min(cur, len(batch))} of {len(batch)}")
+            busy = len(self.active)
+            what = f"{busy} files at once" if busy > 1 else f"{min(finished_n + 1, len(batch))} of {len(batch)}"
+            self.f_title.setText(("Paused — " if self.paused else "Converting ") + what)
             remaining_media = sum(
                 (it.info.duration if it.info else 0) * (1 - it.frac)
                 for it in batch if it.state not in FINAL and it.kind in ("video", "audio")
             )
             photos_left = sum(1 for it in batch if it.state not in FINAL and it.kind == "photo")
-            if self.speed > 0 and not self.paused:
-                self.f_sub.setText(f"About {_eta(remaining_media / self.speed + photos_left * 0.6)} left · {self.speed:.1f}× speed")
+            speed = self._total_speed()
+            if speed > 0 and not self.paused:
+                self.f_sub.setText(f"{finished_n} of {len(batch)} done · about {_eta(remaining_media / speed + photos_left * 0.6)} left · {speed:.1f}× speed")
             else:
                 self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
             self.btn_start.hide()
@@ -777,14 +866,17 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(bool(ready))
         self.btn_start.setText(f"Convert {len(ready)} file{'s' if len(ready) != 1 else ''}" if ready else "Convert")
         if finished and hasattr(self, "_last_summary"):
-            d, f, s = self._last_summary
+            d, f, sk, w = self._last_summary
             parts = [f"{d} converted"]
+            if w:
+                parts.append(f"{w} to check")
             if f:
                 parts.append(f"{f} failed")
-            if s:
-                parts.append(f"{s} skipped")
-            self.f_title.setText("Listo! " + " · ".join(parts) if not f else "Finished — " + " · ".join(parts))
-            self.f_sub.setText("Click ⓘ on a file for details." if f else "Your files are ready.")
+            if sk:
+                parts.append(f"{sk} skipped")
+            ok = not f and not w
+            self.f_title.setText(("Listo! " if ok else "Finished — ") + " · ".join(parts))
+            self.f_sub.setText("Your files are ready." if ok else "Click ⓘ on a file for details.")
             return
         if n == 0:
             self.f_title.setText("Nothing here yet")
@@ -864,9 +956,10 @@ class MainWindow(QMainWindow):
         self._shut = True
         if self.running:
             self.stop()
-        if self.thread:
-            self.thread.conversion.cancel()
-            self.thread.wait(30000)
+        for th in list(self.active.values()):
+            th.conversion.cancel()
+        for th in list(self.active.values()):
+            th.wait(30000)
         self.pool.clear()
         self.pool.waitForDone(3000)
         self.qs.setValue("geometry", self.saveGeometry())
