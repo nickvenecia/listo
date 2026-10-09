@@ -1,0 +1,61 @@
+# Listo: notes for Claude Code
+
+Cross-platform (macOS / Windows / Linux) batch converter for video, photos and audio.
+Python 3.12 + PySide6 (Qt Widgets) UI, ffmpeg/ffprobe for video and audio, Pillow + pillow-heif + rawpy for photos.
+Shipped as a PyInstaller app with ffmpeg bundled; GitHub Actions builds the downloads.
+The owner is a filmmaker (director/DP/editor/colorist), not a full-time developer. Explain changes in plain words.
+
+## Layout
+```
+listo/
+  engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates)
+  video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here
+  photo.py       photo decode (incl. RAW/HEIC) + save
+  presets.py     preset/format definitions + Settings dataclass (persisted as JSON in QSettings)
+  naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
+  probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension
+  runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
+  tools.py       find bundled/system ffmpeg; encoder/filter detection; hardware encoder test
+  fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
+  cli.py         `python -m listo cli ...`: same engine, no UI (great for testing)
+  app.py         QApplication, fonts, stylesheet, Dock-icon file opens, --smoke-test
+  ui/            main_window (queue + batch controller), sidebar (settings), job_card, theme (colors/QSS/icons), widgets, workers (threads)
+scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor/ffmpeg (gitignored)
+listo.spec                PyInstaller recipe
+packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh
+.github/workflows/build.yml  build + test + smoke-test on 4 runners; tags v* publish a Release
+legacy/                   the original SimpleConverter (Swift + first Python port), for reference only
+```
+
+## Rules that matter
+- **Never overwrite the source file.** `naming.resolve_output` compares paths case-insensitively and with samefile, because macOS/Windows disks ignore case. Keep it that way.
+- ffmpeg output always goes to a hidden temp file in the destination folder, then `os.replace` on success. Pass `-f <muxer>` explicitly since the temp name's extension can't be trusted.
+- Always drain ffmpeg's stderr while it runs (pipe-fill deadlock was a real bug in the old app).
+- On Windows, every subprocess call needs `popen_kwargs()` (no console window flashes).
+- UI work happens on the main thread; conversions run in `ConvertThread`, probes and thumbnails in a `QThreadPool`. Communicate with signals.
+- Settings are locked in the sidebar while a batch runs; each Conversion gets a copy of Settings.
+- Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
+
+## Commands
+```bash
+pip install -r requirements-dev.txt
+python scripts/fetch_ffmpeg.py         # or have ffmpeg on PATH
+python -m listo                        # run the app
+python -m listo cli FILES --video prores --variant 3 --out OUT --naming "{name}_{preset}"
+python -m pytest -q                    # unit + integration tests (integration needs ffmpeg on PATH)
+python tests/samples.py OUTDIR         # generate tricky sample media
+QT_QPA_PLATFORM=offscreen python tests/screenshot.py SHOTS OUTDIR   # UI screenshots without a display
+pyinstaller listo.spec --noconfirm     # build the app into dist/
+```
+
+## Releasing
+Bump `__version__` in `listo/__init__.py`, commit, `git tag vX.Y.Z && git push --tags`.
+CI attaches: Listo-mac-apple-silicon.dmg, Listo-mac-intel.dmg, Listo-windows-setup.exe, Listo-windows-portable.zip, Listo-linux-x64.tar.gz.
+
+## Ideas not done yet
+- Run two conversions at once when using hardware encoders
+- Watch folder ("anything dropped in here gets converted")
+- Finder Quick Action / Windows right-click "Convert with Listo"
+- LUT on export (.cube via ffmpeg `lut3d`)
+- 16-bit TIFF from RAW (Pillow is 8-bit for RGB; would need tifffile)
+- Save/load named preset combos

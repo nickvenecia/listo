@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Listo
+Comment=Drop it in. Get it back edit-ready.
+Exec=LISTO_DIR/Listo %F
+Icon=LISTO_DIR/icon.png
+Terminal=false
+Categories=AudioVideo;Video;Graphics;
+MimeType=video/mp4;video/quicktime;video/x-matroska;video/mp2t;image/jpeg;image/png;image/heic;audio/x-wav;
