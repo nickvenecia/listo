@@ -122,8 +122,8 @@ def test_captions_burn_in_and_srt(tmp_path: Path, style, box):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
-def test_convert_makes_then_checks_captions_first(tmp_path: Path, monkeypatch):
-    """Convert -> captions are made -> the editor opens -> accepted -> the clip converts with them."""
+def test_convert_waits_for_captions_then_converts(tmp_path: Path, monkeypatch):
+    """Convert -> captions are still being made -> Listo waits, then converts with them (no check forced)."""
     import os
     import time
 
@@ -173,10 +173,9 @@ def test_convert_makes_then_checks_captions_first(tmp_path: Path, monkeypatch):
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
     w.start()
     assert wait(lambda: any(it.state == "done" for it in w.items.values()))
-    assert opened == [["talk.mov"]]
+    assert opened == []  # checking is its own button now
     srt = (tmp_path / "talk_cc.srt").read_text()
-    assert "Hello there, fixed." in srt
-    assert captions.load(clip).reviewed
+    assert "Hello there." in srt
     w.close()
     app.processEvents()
 
@@ -233,6 +232,12 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
     assert wait(lambda: all(it.transcript is not None for it in w.items.values()))
     assert not opened and not w.running  # nothing popped up, nothing converted
+    app.processEvents()
+    assert w.btn_check.isVisibleTo(w) and "1 New" in w.btn_check.text()
+    w.check_captions()  # the Check Captions button
+    assert opened == [["talk.mov"]]
+    assert captions.load(clip).reviewed
+    assert "1 New" not in w.btn_check.text()
     w.close()
     app.processEvents()
 
@@ -329,13 +334,21 @@ def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path,
             time.sleep(0.02)
         return cond()
 
-    assert wait(lambda: d.player.duration() > 0)
-    d.seek(1.8)
+    assert wait(lambda: d.player.player.duration() > 0)
+    d.player.seek(1.8)
     assert wait(lambda: d.current == 1)
     assert d.edits[1].property("current") and not d.edits[0].property("current")
-    assert not d.overlay.pixmap().isNull()  # the caption is drawn over the picture
+    assert not d.player.overlay.pixmap().isNull()  # the caption is drawn over the picture
     d.times[0].clicked.emit()  # click a time: jump there
     assert wait(lambda: d.current == 0)
     d.edits[0].setPlainText("")  # a cleared line shows nothing
-    assert wait(lambda: d.overlay.pixmap().isNull())
-    d.reject()
+    assert wait(lambda: d.player.overlay.pixmap().isNull())
+    d._row_focused(d.edits[1])  # clicking a line jumps there
+    assert wait(lambda: d.current == 1)
+    d.player.seek(2.65)  # a gap after the last caption: add one there
+    assert wait(lambda: d.current is None)
+    d.add_caption()
+    assert len(d.cues[0]) == 3 and abs(d.cues[0][2].start - 2.65) < 0.05
+    d.edits[2].setPlainText("Added.")
+    d._accept()
+    assert [c.text for c in captions.load(clip).cues] == ["Second one.", "Added."]

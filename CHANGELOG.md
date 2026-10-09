@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- **Play videos inside Listo**: double-click a clip to play it with sound; the Export preview and the Preview window play too. Paused shows the exact result (LUT, frame, burn-ins, captions); playing shows the clip with its captions
+- **Check Captions is its own button** (above Convert, with how many are new). Convert no longer stops to open it
+- Caption check: click any line to jump there; **Add Caption** writes a new one where the clip is paused
+- Joined videos are named after the first and last clip (e.g. MOV001-MOV014.mov), in whatever naming style you picked
+- The live preview opens on a moment with a caption, and says "No speech heard in this clip" when there's nothing to caption
 - **No more freezing when captions turn on**: speech-to-text now runs in its own low-priority process, so the window and the live preview stay smooth while the speech model loads and listens
 - **Play in Check the Captions**: play the clip with sound; the caption on screen is drawn over the picture in the real look, its line lights up and the list follows along. Click a time to jump there; Space plays and pauses
 - **Join Into One Video** (Export → Videos, with 2+ videos in the list): every clip, in list order, becomes one long video. Clips are matched to the first one (size, frame rate, sound; silent clips get silence) and put together without a second re-encode. Burn-ins, captions and trims still apply per clip, and the .srt covers the whole video

@@ -47,9 +47,12 @@ listo/
     widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), Segmented (tabs), FlowLayout, repolish
     main_window.py queue + batch controller, toolbar, drop zone, footer
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
-    caption_editor.py  "Check the captions": edit each cue's text with a live preview; accepting marks clips reviewed
-    preview_dialog.py  "Preview": one rendered frame (PreviewTask in workers), converted vs original
-    export_panel.py  the right panel: live preview (MainWindow._render_live), Saves As example, Where, Name,
+    player.py      ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
+                   result frame while paused (owners render it on `settled`); still-frame fallback without Qt's player
+    caption_editor.py  "Check the Captions" (its own button over Convert): plays the clip, lights up the current line,
+                   click a line to jump, Add Caption at the playhead; accepting marks clips reviewed
+    preview_dialog.py  "Preview": ClipPlayer at full size, converted vs original; double-clicking a clip opens it playing
+    export_panel.py  the right panel: live preview (a small ClipPlayer; MainWindow._render_live / _live_settled), Saves As example, Where, Name,
                    Advanced (Name taken / After converting), and the Convert button (MainWindow adds it to .bottom)
     trim_dialog.py start/end sliders with ffmpeg frame-grab previews
     job_card.py    one file in the list
@@ -83,14 +86,17 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   progress only on the card's CC icon). Never run speech-to-text on a thread in the app process: it holds Python's
   lock and froze the window for 10-15 s. Entry points (listo/__main__.py, launcher.py) call
   multiprocessing.freeze_support() and keep their code under `if __name__ == "__main__"` (spawn re-imports them).
-  Tests swap the process's target (TranscribeThread.target -> tests/speech_standin.py). Convert ->
-  _captions_ready(): waits if some are still being made (then restarts itself), opens CaptionEditor for unchecked ones,
-  then converts with Conversion(captions=cues). Previews use captions.sample_cues() until the real words exist. Captions are the last overlay
+  Tests swap the process's target (TranscribeThread.target -> tests/speech_standin.py). Checking is separate:
+  the "Check Captions" button (MainWindow.check_captions, shows "N New") opens CaptionEditor. Convert ->
+  _captions_ready() only waits if some are still being made (then restarts itself), then converts with
+  Conversion(captions=cues) using the captions as they are. Previews use captions.sample_cues() until the real words exist. Captions are the last overlay
   (BurnPlan.captions: an ffconcat list of per-cue PNGs), so they sit on top of bars and burn-ins.
-- Caption check (ui/caption_editor.py) plays the clip with Qt's player (PySide6-Addons QtMultimedia, QGraphicsVideoItem)
-  and draws the caption with burnin.caption_still (the exact burned-in look) on top; the row on screen gets
-  property current=true. No player or a file it can't open -> still frames via PreviewTask. No sound output in
-  headless runs (offscreen): asking Qt for an audio device there can crash.
+- Playback (ui/player.py ClipPlayer, used by the Export preview, Preview window and caption check): Qt's player
+  (PySide6-Addons QtMultimedia, QGraphicsVideoItem) with the caption drawn by burnin.caption_still on top. Paused =
+  the exact result frame (owners render on `settled`, set_still(pm, at)); playing = the clip as shot + captions.
+  No player or a file it can't open -> still frames only (`fallback`). No sound output in headless runs
+  (offscreen): asking Qt for an audio device there can crash. Call release() when a dialog closes.
+- Joined videos are named with {name} = "FIRST-LAST" (join.joined_name), every naming style still applies.
 - Join: Settings.join + 2+ videos (not GIF). MainWindow.start() makes a JoinJob; each clip converts as a "part"
   (Conversion(target=hidden parts folder, conform=first clip's size/rate/48 kHz stereo; silent clips get a silent
   track; per-file format overrides don't apply), then _start_join() runs JoinThread (core/join.Join: concat demuxer,

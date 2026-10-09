@@ -218,9 +218,13 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
   run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
   Heavy Python work (loading the speech model, listening) runs in its **own process**, not a thread: Python runs
   one thread at a time, so a busy thread makes the window stutter. Nothing slow is imported on the UI thread.
-- **Checking is watching.** Where people review timing (captions), they can play the clip with sound; the item
-  on screen right now lights up (`CARD_SELECTED` + `ACCENT_EDGE`, time in `ACCENT`) and the list follows it.
-  Clicking a time jumps there. Space plays/pauses when you're not typing.
+- **Checking is watching.** Every picture of a clip can play with sound (double-click a clip, the Export
+  preview, the Preview window, the caption check). Paused shows the exact result; playing shows the clip
+  with its captions. In lists that follow time (captions), the item on screen right now lights up
+  (`CARD_SELECTED` + `ACCENT_EDGE`, time in `ACCENT`) and the list follows it. Clicking a line or a time
+  jumps there. Space plays/pauses when you're not typing.
+- **Optional steps are buttons, not interruptions.** Checking captions is its own button ("Check Captions · 2 New")
+  above Convert; Convert never opens a window in your way (it only waits for work that must finish).
 - **Captions read like their era.** The VHS caption look is ALL CAPS (tape closed captions were);
   the clean look keeps the words as spoken. The .srt file always keeps the real case.
 - **Menus hold commands, the panel holds settings.** File / Edit / View / Help list actions with their

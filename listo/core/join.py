@@ -64,10 +64,13 @@ def part_path(folder: Path, n: int, s: Settings) -> Path:
     return folder / f"part{n:04d}.{naming.output_ext('video', s)}"
 
 
-def joined_name(first_src: str, info: MediaInfo, s: Settings) -> str:
-    """The first clip's name (by the naming rules) + "_joined"."""
-    name = Path(naming.planned_name(first_src, info, s, "video", 1))
-    return f"{name.stem}_joined{name.suffix}"
+def joined_name(first_src: str, info: MediaInfo | None, s: Settings, last_src: str = "") -> str:
+    """The naming rules applied to the first clip, with {name} = "FIRST-LAST" (the range it covers),
+    e.g. MOV001-MOV014.mov. Same names (PRG folders) or no last clip: "FIRST_joined"."""
+    ctx = naming.make_context(first_src, info, s, "video", 1)
+    first, last = Path(first_src).stem, Path(last_src).stem if last_src else ""
+    ctx["name"] = f"{first}-{last}" if last and last.lower() != first.lower() else f"{first}_joined"
+    return f"{naming.render(s.naming or '{name}', ctx)}.{naming.output_ext('video', s)}"
 
 
 def _rate(r: str) -> float:
@@ -110,6 +113,7 @@ class Join:
         caps: Capabilities,
         reserved: set[str],
         captions: list[list | None] | None = None,
+        last_src: str = "",
     ):
         """captions: for each part, its cues on the part's own timeline (already trimmed), or None."""
         self.parts = parts
@@ -119,6 +123,7 @@ class Join:
         self.caps = caps
         self.reserved = reserved
         self.captions = captions or [None] * len(parts)
+        self.last_src = last_src
         self._ff: FFmpegRun | None = None
         self._canceled = False
         self.length = 0.0  # total, known once the parts are read
@@ -180,7 +185,7 @@ class Join:
 
             with _plan_lock:
                 out_dir = naming.output_dir(self.first_src, self.s, "video")
-                name = joined_name(self.first_src, self.first_info, self.s)
+                name = joined_name(self.first_src, self.first_info, self.s, self.last_src)
                 target, note = naming.resolve_output(
                     self.first_src, out_dir / name, self.s.collision, self.reserved
                 )

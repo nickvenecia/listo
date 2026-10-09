@@ -80,11 +80,17 @@ class JobCard(QFrame):
     trim_clicked = Signal(int)
     captions_clicked = Signal(int)
     pressed = Signal(int, object)  # item id, keyboard modifiers (for selecting)
+    opened = Signal(int)  # double-click: play it
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             self.pressed.emit(self.item_id, e.modifiers())
         e.accept()  # don't let the list behind the card see it (that would deselect)
+
+    def mouseDoubleClickEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.opened.emit(self.item_id)
+        e.accept()
 
     def set_selected(self, on: bool) -> None:
         if self.property("selected") != on:
@@ -237,8 +243,8 @@ class JobCard(QFrame):
         tips = {
             "working": detail or "Making captions in the background…",
             "failed": (detail or "Couldn't make captions") + " — click to try again",
-            "review": "Captions ready — click to check them",
-            "reviewed": "Captions checked — click to edit",
+            "review": (f"{detail} — " if detail else "Captions ready — ") + "click to check them",
+            "reviewed": (f"{detail} — " if detail else "Captions checked — ") + "click to edit",
         }
         self.btn_cc.setToolTip(tips.get(status, ""))
         color = {"review": theme.ACCENT, "reviewed": theme.GOOD, "failed": theme.BAD}.get(status, theme.FAINT)

@@ -21,6 +21,12 @@ GRADIENT = (
 )
 
 
+def sample_clip_if_made() -> str | None:
+    """The sample clip if it's already been made (no waiting on ffmpeg)."""
+    target = data_dir() / "sample" / NAME
+    return str(target) if target.is_file() else None
+
+
 def sample_clip() -> str | None:
     target = data_dir() / "sample" / NAME
     if target.is_file():

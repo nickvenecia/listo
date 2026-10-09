@@ -61,10 +61,10 @@ def test_clips_of_different_shapes_join_into_one_video(tmp_path: Path, preset: s
     folder = join.parts_folder(str(a), s)
     parts = _convert_parts([a, b, c], s, folder, trims={3: (1.0, 3.0)})
     cues = [[Cue(0.2, 1.0, "First clip.")], None, [Cue(0.5, 1.5, "Third clip.")]]
-    r = join.Join(parts, str(a), probe(a), s, capabilities(), set(), cues).run()
+    r = join.Join(parts, str(a), probe(a), s, capabilities(), set(), cues, last_src=str(c)).run()
     assert r.status == "done", (r.message, r.log)
     assert not r.warning, r.warning
-    assert r.output.name == f"a_joined.{'mov' if preset == 'prores' else 'mp4'}"
+    assert r.output.name == f"a-c.{'mov' if preset == 'prores' else 'mp4'}"
     got = probe(r.output)
     assert (got.width, got.height) == (640, 360)
     assert abs(got.duration - 6.0) < 0.3  # 2 + 2 + the trimmed 2
@@ -149,9 +149,20 @@ def test_window_joins_the_list_into_one_video(tmp_path: Path, monkeypatch):
     ok = wait(lambda: not w.running and all(it.state == "done" for it in w.items.values()))
     assert ok, [(it.state, it.message) for it in w.items.values()]
     outs = sorted(p.name for p in src.iterdir() if p.suffix == ".mp4" and p.stem not in ("a", "b"))
-    assert outs == ["a_joined.mp4"], outs
+    assert outs == ["a-b.mp4"], outs
     assert not any(p.name.startswith(".listo-join-") for p in src.iterdir())
-    assert abs(probe(src / "a_joined.mp4").duration - 3.0) < 0.2
-    assert all(it.result.output == src / "a_joined.mp4" for it in w.items.values())
+    assert abs(probe(src / "a-b.mp4").duration - 3.0) < 0.2
+    assert all(it.result.output == src / "a-b.mp4" for it in w.items.values())
     w.close()
     app.processEvents()
+
+
+def test_joined_name_covers_first_to_last():
+    s = Settings(video_preset="prores")
+    assert join.joined_name("/f/MOV001.MOD", None, s, "/f/MOV014.MOD") == "MOV001-MOV014.mov"
+    s.naming = "{name}_{preset}"
+    assert join.joined_name("/f/A.mov", None, s, "/f/B.mov") == "A-B_prores422.mov"
+    # PRG001/MOV01A + PRG002/MOV01A: same name twice -> no "MOV01A-MOV01A"
+    assert join.joined_name("/a/PRG001/MOV01A.MOD", None, Settings(), "/a/PRG002/MOV01A.MOD").startswith(
+        "MOV01A_joined"
+    )

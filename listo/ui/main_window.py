@@ -57,7 +57,7 @@ from ..core.probe import (
     kind_from_ext,
     probe,
 )
-from ..core.sample import sample_clip
+from ..core.sample import sample_clip, sample_clip_if_made
 from ..core.tools import capabilities
 from . import theme, tokens
 from .caption_editor import CaptionEditor
@@ -265,6 +265,9 @@ class MainWindow(QMainWindow):
         self.join_job: JoinJob | None = None
         self._live_seq = 0
         self._live_note = ""
+        self._live_at = 0.0
+        self._live_loaded: object = None  # which clip the Export preview's player has open
+        self._sample_probe: tuple[str, MediaInfo] | None = None
         self._anchor: int | None = None  # where a Shift-click range starts
 
         self._build()
@@ -272,6 +275,7 @@ class MainWindow(QMainWindow):
 
         self._live_signals = PreviewSignals(self)
         self._live_signals.done.connect(self._live_got)
+        self.export_panel.player.settled.connect(self._live_settled)
         self._live_timer = QTimer(self)
         self._live_timer.setSingleShot(True)
         self._live_timer.setInterval(350)  # wait until a slider or a few clicks settle
@@ -405,6 +409,13 @@ class MainWindow(QMainWindow):
         for b in (self.btn_show, self.btn_pause, self.btn_cancel):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
+        self.btn_check = QPushButton("Check Captions")
+        self.btn_check.setIcon(theme.icon("captions", theme.TEXT))
+        self.btn_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_check.setToolTip("Watch each clip with its captions and fix any words before converting")
+        self.btn_check.clicked.connect(self.check_captions)
+        self.btn_check.hide()
+        self.export_panel.bottom.addWidget(self.btn_check)
         self.btn_start = QPushButton("Convert")
         self.btn_start.setObjectName("Primary")
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -462,12 +473,39 @@ class MainWindow(QMainWindow):
             bar.hide()
 
     def _menu_captions(self) -> None:
+        self.check_captions()
+
+    def check_captions(self) -> None:
+        """Check (watch and fix) the captions: the selected clips, or every clip that has them.
+        Separate from Convert: Convert uses the captions as they are."""
         sel = [i for i in self.order if i in self.selected] or list(self.order)
-        target = next((i for i in sel if self._wants_captions(self.items[i])), None)
-        if target is None:
-            self.toast.show_message("Turn on Captions (Text on screen) and add a video with sound first.")
+        wanted = [self.items[i] for i in sel if self._wants_captions(self.items[i])]
+        if not wanted:
+            self.toast.show_message("Turn on Captions (in Burn-In) and add a video with sound first.")
             return
-        self.open_captions(target)
+        ready = [it for it in wanted if it.transcript is not None]
+        if not ready:
+            self.toast.show_message("Still making the captions. The button lights up when they're ready.")
+            return
+        start = next((n for n, it in enumerate(ready) if not it.transcript.reviewed), 0)
+        clips = [(Path(it.path).name, it.path, it.info, self.eff(it), it.transcript) for it in ready]
+        CaptionEditor(clips, start, "Done", self).exec()
+        self._sync_captions()
+        self._schedule_live()
+
+    def _update_check_button(self) -> None:
+        wanted = [it for it in self.items.values() if self._wants_captions(it)]
+        self.btn_check.setVisible(bool(wanted) and not self.running)
+        ready = [it for it in wanted if it.transcript is not None]
+        new = sum(1 for it in ready if not it.transcript.reviewed)
+        making = len(wanted) - len(ready) - sum(1 for it in wanted if it.id in self._tx_failed)
+        self.btn_check.setEnabled(bool(ready))
+        if not ready and making:
+            self.btn_check.setText(" Making Captions…")
+        elif new:
+            self.btn_check.setText(f" Check Captions · {new} New")
+        else:
+            self.btn_check.setText(" Check Captions")
 
     def _show_log(self) -> None:
         from ..core.fileutil import reveal
@@ -715,6 +753,7 @@ class MainWindow(QMainWindow):
         card.trim_clicked.connect(self.trim_item)
         card.captions_clicked.connect(self.open_captions)
         card.pressed.connect(self._card_pressed)
+        card.opened.connect(self.play_item)
         it.card = card
         self.items[iid] = it
         self.order.append(iid)
@@ -787,7 +826,11 @@ class MainWindow(QMainWindow):
             if not self._wants_captions(it):
                 it.card.set_captions("")
             elif it.transcript is not None:
-                it.card.set_captions("reviewed" if it.transcript.reviewed else "review")
+                silent = not any(c.text.strip() for c in it.transcript.cues)
+                it.card.set_captions(
+                    "reviewed" if it.transcript.reviewed else "review",
+                    "No speech heard in this clip" if silent else "",
+                )
             elif it.id in self._tx_failed:
                 it.card.set_captions("failed", self._tx_failed[it.id])
             else:
@@ -801,6 +844,7 @@ class MainWindow(QMainWindow):
             self._queue_captions(missing)
         if self.tx is not None and not any(self._wants_captions(it) for it in self.items.values()):
             self.tx.cancel()  # captions switched off: stop listening
+        self._update_check_button()
 
     def _queue_captions(self, items: list[Item]) -> None:
         jobs = [(it.id, it.path, it.info, self.eff(it)) for it in items]
@@ -864,14 +908,10 @@ class MainWindow(QMainWindow):
             n = len(making)
             self.toast.show_message(
                 f"Still making captions for {n} clip{'s' if n != 1 else ''}. "
-                "You'll check them as soon as they're ready, then Listo converts."
+                "Listo converts as soon as they're ready."
             )
             self._refresh_footer()
             return False
-        unchecked = [it for it in todo if it.transcript is not None and not it.transcript.reviewed]
-        if unchecked:
-            n = len([i for i in self.order if self.items[i].state == "ready"])
-            return self._edit_captions(unchecked, f"Convert {n} File{'s' if n != 1 else ''}")
         return True
 
     def open_captions(self, iid: int) -> None:
@@ -921,26 +961,96 @@ class MainWindow(QMainWindow):
         return sample_cues(s.caption_words, s.caption_lines)  # shows the look before the words exist
 
     def _render_live(self) -> None:
+        """Settings or the list changed: (re)load the Export preview's clip, then show the exact
+        result where it's paused. While it plays, the new look shows when it pauses."""
+        it = self._live_clip()
+        player = self.export_panel.player
+        if it is None:
+            s, path, info = self.settings, sample_clip_if_made(), None
+            key: object = ("sample",)
+            at, rng = 1.5, None
+            if path:
+                info = self._sample_info(path)
+        else:
+            s, path, info = self.eff(it), it.path, it.info
+            key = (it.id, it.trim)
+            start, length = (it.trim[0], it.trim[1] - it.trim[0]) if it.trim else (0.0, info.duration)
+            rng = (start, start + length) if it.trim else None
+            at = start + min(length / 3, 10.0)
+            cues = self._clip_cues(it, s)
+            if s.captions and it.transcript is not None:  # open on a moment with a caption on screen
+                inside = [c for c in cues or [] if c.end > start and c.start < start + length]
+                if inside:
+                    at = max(start, inside[0].start) + min(0.3, (inside[0].end - inside[0].start) / 2)
+        cues = self._clip_cues(it, s)
+        if key != self._live_loaded and path and info is not None:
+            self._live_loaded = key
+            player.load(path, info, s, at, range_=rng)
+        elif key == self._live_loaded:
+            at = player.position()
+        player.set_settings(s)
+        player.set_cues(cues)
+        if not player.is_playing():
+            self._live_render_at(at)
+
+    def _live_render_at(self, at: float) -> None:
         it = self._live_clip()
         self._live_seq += 1
+        self._live_at = at
         if it is None:
-            s, path, info, at = self.settings, "", None, 1.5
+            s, path, info = self.settings, "", None
             self._live_note = "Sample picture — add a clip to see yours"
         else:
             s, path, info = self.eff(it), it.path, it.info
-            start, length = (it.trim[0], it.trim[1] - it.trim[0]) if it.trim else (0.0, info.duration)
-            at = start + min(length / 3, 10.0)
-            self._live_note = f"{Path(it.path).name} · {fmt_duration(at)}"
-        task = PreviewTask(
-            self._live_seq, path, info, s, at, False, self._live_signals, captions=self._clip_cues(it, s)
+            heard = ""
+            if (
+                s.captions
+                and it.transcript is not None
+                and not any(c.text.strip() for c in it.transcript.cues)
+            ):
+                heard = " · No speech heard in this clip"
+            self._live_note = f"{Path(it.path).name} · {fmt_duration(at)}{heard}"
+        self.pool.start(
+            PreviewTask(
+                self._live_seq, path, info, s, at, False, self._live_signals, captions=self._clip_cues(it, s)
+            )
         )
-        self.pool.start(task)
+
+    def _live_settled(self, at: float) -> None:
+        """The Export preview was paused or moved: show the exact result there."""
+        if self._live_loaded is not None:
+            self._live_render_at(at)
+
+    def _sample_info(self, path: str) -> MediaInfo:
+        if self._sample_probe is None or self._sample_probe[0] != path:
+            self._sample_probe = (path, probe(path))
+        return self._sample_probe[1]
 
     def _live_got(self, seq: int, data: bytes, error: str) -> None:
         if seq == self._live_seq:
-            self.export_panel.show_preview(data, self._live_note if data else error)
+            self.export_panel.show_preview(data, self._live_note if data else error, self._live_at)
+            if self._live_clip() is None and self._live_loaded != ("sample",) and sample_clip_if_made():
+                self._render_live()  # the sample clip exists now: load it so it can play
+
+    def play_item(self, iid: int) -> None:
+        """Double-click a clip: play it (in the Preview window, with sound)."""
+        it = self.items.get(iid)
+        if it is None or not self._previewable(it):
+            return
+        self.export_panel.player.pause()
+        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        PreviewDialog(
+            [
+                (Path(c.path).name, c.path, c.info, self.eff(c), self._clip_cues(c, self.eff(c)))
+                for c in clips
+            ],
+            clips.index(it),
+            self,
+            play=True,
+        ).exec()
 
     def open_preview(self) -> None:
+        self.export_panel.player.pause()  # one thing playing at a time
         clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
         if not clips:
             sample = sample_clip()
@@ -974,11 +1084,10 @@ class MainWindow(QMainWindow):
         s = self.eff(it)
         it.card.set_format(format_label(it.kind, s), bool(it.override), it.state in ("ready", "waiting"))
         if self.export_panel.joining() and it.kind == "video" and it.state in ("ready", "waiting"):
-            first = next(
-                (self.items[i] for i in self.order if self.items[i].kind == "video" and self.items[i].info),
-                it,
-            )
-            it.card.set_output(f"→  {join.joined_name(first.path, first.info, self.settings)}  (joined)")
+            vids = [self.items[i] for i in self.order if self.items[i].kind == "video" and self.items[i].info]
+            first, last = (vids[0], vids[-1]) if vids else (it, it)
+            name = join.joined_name(first.path, first.info, self.settings, last.path)
+            it.card.set_output(f"→  {name}  (joined)")
             return
         try:
             out_dir = naming.output_dir(it.path, s, it.kind)
@@ -1437,7 +1546,7 @@ class MainWindow(QMainWindow):
             return
         conv = join.Join(
             [job.parts[i] for i in ids], first.path, first.info, job.settings, self.caps, self.reserved,
-            [job.cues.get(i) for i in ids],
+            [job.cues.get(i) for i in ids], self.items[ids[-1]].path,
         )  # fmt: skip
         job.total_s = sum(self.items[i].length for i in ids if i in self.items)
         job.thread = th = JoinThread(conv)
@@ -1601,9 +1710,13 @@ class MainWindow(QMainWindow):
 
     def _refresh_footer(self, finished: bool = False) -> None:
         self._label_duplicates()
-        self.export_panel.set_video_count(
-            sum(1 for it in self.items.values() if it.kind == "video" and it.state != "unsupported")
-        )
+        self._update_check_button()
+        vids = [
+            self.items[i]
+            for i in self.order
+            if self.items[i].kind == "video" and self.items[i].state != "unsupported"
+        ]
+        self.export_panel.set_video_count(len(vids), vids[-1].path if vids else "")
         joining = self.export_panel.joining()
         if joining != getattr(self, "_was_joining", False):  # 2nd video added / removed: names change
             self._was_joining = joining
@@ -1625,7 +1738,7 @@ class MainWindow(QMainWindow):
         convertible = [it for it in items if it.state not in ("unsupported",)]
         if self._convert_after_captions and not self.running:
             self.f_title.setText("Waiting for captions")
-            self.f_sub.setText("You'll check them as soon as they're ready, then Listo converts.")
+            self.f_sub.setText("Listo converts as soon as they're ready.")
         job = self.join_job
         if self.running and job is not None and job.thread is not None:
             self.f_bar.show()
@@ -1804,6 +1917,7 @@ class MainWindow(QMainWindow):
         for th in list(self.active.values()) + list(self.downloads.values()):
             if not th.wait(15000):
                 _ORPHANS.append(th)  # never destroy a running QThread (that crashes on quit)
+        self.export_panel.player.release()
         self.pool.clear()
         self.pool.waitForDone(3000)
         self.qs.setValue("geometry", self.saveGeometry())

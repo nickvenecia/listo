@@ -20,9 +20,9 @@ from ..core.log import get_logger
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
+from .player import ClipPlayer
 from .tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from .widgets import (
-    ClickLabel,
     Disclosure,
     FitScroll,
     FlowLayout,
@@ -109,14 +109,13 @@ class ExportPanel(QFrame):
         # ---- live preview: the selected (or first) clip with every setting applied
         prev = Section("Preview")
         pic_w = EXPORT_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
-        self.picture = ClickLabel("Making a preview…")
-        self.picture.setObjectName("Preview")
-        self.picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.picture.setFixedSize(pic_w, round(pic_w * 9 / 16))
-        self.picture.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.picture.setToolTip("Click for a bigger preview you can scrub through")
-        self.picture.clicked.connect(self.preview_clicked)
-        prev.add(self.picture)
+        # Paused: the exact result (MainWindow renders it). Playing: the clip with its captions, with sound.
+        self.player = ClipPlayer(pic_w, round(pic_w * 9 / 16))
+        self.player.stage.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.player.stage.setToolTip("Click for a bigger preview")
+        self.player.clicked.connect(self.preview_clicked)
+        self.player.set_message("Making a preview…")
+        prev.add(self.player)
         self.picture_note = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
         self.picture_note.setObjectName("Hint")
         prev.add(self.picture_note)
@@ -124,6 +123,7 @@ class ExportPanel(QFrame):
 
         # ---- separate files, or every video in one (only when there are 2+ videos to join)
         self._videos = 0
+        self._last_video = ""
         self.videos_sec = Section("Videos")
         self.join_pick = combo(
             [
@@ -345,10 +345,11 @@ class ExportPanel(QFrame):
                 w.blockSignals(False)
         self._sync()
 
-    def set_video_count(self, n: int) -> None:
-        """How many videos are in the list: joining only appears when there are two or more."""
-        if n != self._videos:
-            self._videos = n
+    def set_video_count(self, n: int, last: str = "") -> None:
+        """How many videos are in the list (joining only appears with two or more) and the last one
+        (a joined video is named after the first and last clip)."""
+        if (n, last) != (self._videos, self._last_video):
+            self._videos, self._last_video = n, last
             self._sync()
 
     def refresh(self) -> None:
@@ -388,12 +389,17 @@ class ExportPanel(QFrame):
         joined = self.joining() and kind == "video"
         try:
             out_dir = naming.output_dir(path, self.s, kind)
-            name = (join.joined_name if joined else lambda a, b, c: naming.planned_name(a, b, c, kind, 1))(
-                path, info, self.s
-            )
+            if joined:
+                name = join.joined_name(path, info, self.s, self._last_video)
+            else:
+                name = naming.planned_name(path, info, self.s, kind, 1)
         except Exception:
             out_dir, name = p.parent, "?"
-        self.ex_from.setText(f"{p.parent.name}/{p.name}" + (f" + {self._videos - 1} more" if joined else ""))
+        self.ex_from.setText(
+            f"{p.name} … {Path(self._last_video).name} ({self._videos} clips)"
+            if joined
+            else f"{p.parent.name}/{p.name}"
+        )
         note = f"All {self._videos} videos in one file, in list order." if joined else ""
         try:
             target, _ = naming.resolve_output(path, out_dir / name, self.s.collision, set())
@@ -417,17 +423,12 @@ class ExportPanel(QFrame):
             self.styles.setItemData(i, tip, Qt.ItemDataRole.ToolTipRole)
 
     # ------------------------------------------------------------------ preview
-    def show_preview(self, png: bytes, note: str) -> None:
+    def show_preview(self, png: bytes, note: str, at: float | None = None) -> None:
+        """The exact result frame at `at` seconds (or why there isn't one)."""
         pm = QPixmap()
         if png and pm.loadFromData(png):
-            self.picture.setPixmap(
-                pm.scaled(
-                    self.picture.size(),
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+            self.player.set_still(pm, at)
         else:
-            self.picture.setPixmap(QPixmap())
-            self.picture.setText(note or "No preview")
+            self.player.set_still(None)
+            self.player.set_message(note or "No preview")
         self.picture_note.setText(note if png else "")
