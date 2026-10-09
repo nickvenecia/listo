@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Select files in the list like in Finder (click, ⌘-click, Shift-click, ⌘A) and press Delete / Backspace to remove them; the trash icon removes the selection, or clears the list when nothing is selected
 - Dropdown lists have a rounded highlight and proper row spacing on every computer (was square on Mac)
 - Add is now a + icon next to the trash
 - README: the Listo name and icon belong to Nick; forks should use their own

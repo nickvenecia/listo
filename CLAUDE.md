@@ -60,6 +60,7 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
+- Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click; cards emit `pressed`; the trash removes the selection or clears all.
 - Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.

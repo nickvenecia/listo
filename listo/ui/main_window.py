@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer
+from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
@@ -101,6 +101,16 @@ class Item:
         if self.state in ("converting", "paused") and self.length:
             return min(1.0, self.processed / self.length)
         return 0.0
+
+
+class _ListArea(QWidget):
+    """The space behind the file cards: clicking an empty spot clears the selection."""
+
+    blank_clicked = Signal()
+
+    def mousePressEvent(self, e):
+        self.blank_clicked.emit()
+        super().mousePressEvent(e)
 
 
 class DropZone(QFrame):
@@ -199,10 +209,17 @@ class MainWindow(QMainWindow):
         self.active: dict[int, ConvertThread] = {}
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
+        self.selected: set[int] = set()
+        self._anchor: int | None = None  # where a Shift-click range starts
 
         self._build()
         self._menus()
         QShortcut(QKeySequence.StandardKey.Paste, self, activated=self._paste)
+        # Text fields keep these keys for themselves while you type in them.
+        QShortcut(QKeySequence.StandardKey.SelectAll, self, activated=self.select_all)
+        for key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            QShortcut(QKeySequence(key), self, activated=self.remove_selected)
+        QShortcut(QKeySequence(Qt.Key.Key_Escape), self, activated=lambda: self._select(set()))
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
         self._update_export_button()
@@ -267,7 +284,7 @@ class MainWindow(QMainWindow):
         self.btn_clear_all.setIconSize(QSize(tokens.ICON, tokens.ICON))
         self.btn_clear_all.setToolTip("Clear the list (your files aren't touched)")
         self.btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clear_all.clicked.connect(self.clear_all)
+        self.btn_clear_all.clicked.connect(self._trash_clicked)
         bar.addWidget(self.btn_clear_all)
         left_col.addLayout(bar)
         self.queue_stack = QStackedWidget()
@@ -285,7 +302,8 @@ class MainWindow(QMainWindow):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        lst = QWidget()
+        lst = _ListArea()
+        lst.blank_clicked.connect(lambda: self._select(set()))
         self.list_lay = QVBoxLayout(lst)
         self.list_lay.setContentsMargins(tokens.SPACE_4, tokens.SPACE_1, tokens.SPACE_3, tokens.SPACE_4)
         self.list_lay.setSpacing(tokens.SPACE_2)
@@ -610,6 +628,7 @@ class MainWindow(QMainWindow):
         card.details.connect(self.show_details)
         card.format_clicked.connect(self._format_menu)
         card.trim_clicked.connect(self.trim_item)
+        card.pressed.connect(self._card_pressed)
         it.card = card
         self.items[iid] = it
         self.order.append(iid)
@@ -775,6 +794,8 @@ class MainWindow(QMainWindow):
         it.card.deleteLater()
         del self.items[iid]
         self.order.remove(iid)
+        if iid in self.selected:
+            self._select(self.selected - {iid})
         if iid in self.batch:
             self.batch.remove(iid)
         if not self.items:
@@ -879,6 +900,43 @@ class MainWindow(QMainWindow):
         for iid in list(self.order):
             if iid not in self.active:
                 self.remove_item(iid)
+
+    # ------------------------------------------------------------------ selection
+    def _select(self, ids: set[int]) -> None:
+        self.selected = {i for i in ids if i in self.items}
+        for iid, it in self.items.items():
+            it.card.set_selected(iid in self.selected)
+        n = len(self.selected)
+        self.btn_clear_all.setToolTip(
+            f"Remove {n} selected file{'s' if n != 1 else ''} from the list (your files aren't touched)"
+            if n
+            else "Clear the list (your files aren't touched)"
+        )
+
+    def _card_pressed(self, iid: int, mods) -> None:
+        self.centralWidget().setFocus()  # so Delete / Backspace reach the list, not a text field
+        if mods & Qt.KeyboardModifier.ShiftModifier and self._anchor in self.order:
+            a, b = sorted((self.order.index(self._anchor), self.order.index(iid)))
+            self._select(self.selected | set(self.order[a : b + 1]))
+            return
+        if mods & Qt.KeyboardModifier.ControlModifier:  # Cmd on a Mac, Ctrl elsewhere
+            self._select(self.selected ^ {iid})
+        else:
+            self._select({iid})
+        self._anchor = iid
+
+    def select_all(self) -> None:
+        self._select(set(self.order))
+
+    def remove_selected(self) -> None:
+        for iid in [i for i in self.order if i in self.selected]:
+            self.remove_item(iid)  # files that are converting right now are skipped
+
+    def _trash_clicked(self) -> None:
+        if self.selected:
+            self.remove_selected()
+        else:
+            self.clear_all()
 
     # ------------------------------------------------------------------ converting
     def start(self) -> None:

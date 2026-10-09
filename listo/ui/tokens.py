@@ -67,6 +67,7 @@ BG = "#111113"  # window background
 PANEL = "#17171A"  # sidebar, footer, dialogs
 CARD = "#1E1E22"  # cards, fields
 CARD_HOVER = "#24242A"
+CARD_SELECTED = "#29231A"  # a selected file card (warm, so it reads as marigold)
 RAISED = "#2A2A30"  # buttons, popups
 RAISED_HOVER = "#33333A"
 RAISED_PRESS = "#26262C"

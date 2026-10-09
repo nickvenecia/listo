@@ -27,6 +27,7 @@ from .tokens import (
     BORDER_STRONG,
     CARD,
     CARD_HOVER,
+    CARD_SELECTED,
     CONTROL_H,
     FAINT,
     GOOD,
@@ -205,6 +206,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Card:hover {{ background: {CARD_HOVER}; }}
 #Card[state="active"] {{ border-color: {ACCENT}; }}
 #Card[state="failed"] {{ border-color: {BAD_EDGE}; }}
+#Card[selected="true"], #Card[selected="true"]:hover {{ background: {CARD_SELECTED}; border-color: {ACCENT_EDGE}; }}
 #Thumb, #TrimPreview {{ background: {WELL}; border-radius: {RADIUS}px; }}
 #TrimPreview {{ border: 1px solid {BORDER}; }}
 

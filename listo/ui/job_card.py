@@ -78,12 +78,24 @@ class JobCard(QFrame):
     details = Signal(int)
     format_clicked = Signal(int, object)  # item id, the chip button (to anchor a menu)
     trim_clicked = Signal(int)
+    pressed = Signal(int, object)  # item id, keyboard modifiers (for selecting)
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.pressed.emit(self.item_id, e.modifiers())
+        e.accept()  # don't let the list behind the card see it (that would deselect)
+
+    def set_selected(self, on: bool) -> None:
+        if self.property("selected") != on:
+            self.setProperty("selected", on)
+            repolish(self)
 
     def __init__(self, item_id: int, name: str, kind: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.item_id = item_id
         self.kind = kind
         self.setObjectName("Card")
+        self.setProperty("selected", False)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(tokens.CARD_H)
 

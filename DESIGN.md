@@ -104,7 +104,7 @@ the popup window see-through and gives every dropdown `widgets.ComboItemDelegate
 |---|---|
 | `BG` | Window background |
 | `PANEL` | Sidebar, footer, dialogs |
-| `CARD` / `CARD_HOVER` | File cards, text fields |
+| `CARD` / `CARD_HOVER` / `CARD_SELECTED` | File cards (normal / hover / selected), text fields |
 | `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups |
 | `WELL` | Sunken areas: thumbnails, previews, logs |
 | `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, control borders, hover, empty checkbox |
@@ -180,6 +180,13 @@ Listo talks like a helpful person, not like software.
 ├ footer: summary ·········· Export options · Convert ──┴──────────────────────┤
 ```
 
+- **The file list works like Finder / Explorer:** click selects, Cmd/Ctrl-click adds or removes one,
+  Shift-click selects a range, Cmd/Ctrl+A selects all, Delete or Backspace removes the selection,
+  Esc or a click on empty space clears it. Selected cards: `CARD_SELECTED` background + `ACCENT_EDGE` border
+  (a converting card has a solid `ACCENT` border instead).
+- The trash icon follows the selection: it removes the selected files, or clears the list when nothing is selected.
+  Its tooltip always says which. Removing only takes files off the list; it never touches them on disk.
+- Every keyboard shortcut needs a visible way to do the same thing (a button, icon or menu item).
 - The sidebar holds **what** the files become; Export options holds **where** they go and **what they're called**.
 - The footer's right side is always: Show files / Pause / Stop (when relevant), Export options, then the Primary action.
 - New settings go into an existing section if they fit; a new section needs a short caps label.
