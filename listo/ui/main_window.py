@@ -77,7 +77,7 @@ class Item:
 
 
 class DropZone(QFrame):
-    def __init__(self, on_click):
+    def __init__(self, on_click, on_link=None):
         super().__init__()
         self.setObjectName("DropZone")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -104,6 +104,31 @@ class DropZone(QFrame):
         lay.addWidget(sub)
         lay.addSpacing(8)
         lay.addWidget(fmts)
+        if on_link is not None:
+            lay.addSpacing(18)
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            row.addStretch(1)
+            self.link = QLineEdit()
+            self.link.setObjectName("LinkBox")
+            self.link.setPlaceholderText("…or paste a video link (YouTube, Vimeo, Instagram…)")
+            self.link.setFixedWidth(380)
+            self.link.setCursor(Qt.CursorShape.IBeamCursor)
+            go = QPushButton("Add")
+            go.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            def submit() -> None:
+                text = self.link.text().strip()
+                if text:
+                    on_link(text)
+                    self.link.clear()
+
+            self.link.returnPressed.connect(submit)
+            go.clicked.connect(submit)
+            row.addWidget(self.link)
+            row.addWidget(go)
+            row.addStretch(1)
+            lay.addLayout(row)
 
     def set_hot(self, on: bool) -> None:
         self.setProperty("hot", "true" if on else "false")
@@ -220,7 +245,7 @@ class MainWindow(QMainWindow):
         empty_wrap = QWidget()
         ew = QVBoxLayout(empty_wrap)
         ew.setContentsMargins(18, 18, 18, 18)
-        self.drop = DropZone(self.pick_files)
+        self.drop = DropZone(self.pick_files, self._link_typed)
         ew.addWidget(self.drop)
         self.queue_stack.addWidget(empty_wrap)
 
@@ -358,7 +383,18 @@ class MainWindow(QMainWindow):
             elif edit_.text().strip():
                 self.toast.show_message("That doesn't look like a link.")
 
+    def _link_typed(self, text: str) -> None:
+        links = [w for w in text.split() if is_link(w)]
+        if links:
+            self.add_links(links)
+        else:
+            self.toast.show_message("That doesn't look like a link — it should start with https://")
+
     def _paste(self) -> None:
+        focus = QApplication.focusWidget()
+        if isinstance(focus, QLineEdit):
+            focus.paste()
+            return
         md = QApplication.clipboard().mimeData()
         local = [u.toLocalFile() for u in md.urls() if u.isLocalFile()] if md and md.hasUrls() else []
         if local:

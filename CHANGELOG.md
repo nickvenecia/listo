@@ -4,6 +4,8 @@
 - **Add a link**: paste a YouTube / Vimeo / Instagram link (or drag it from your browser, or ⌘V) and it downloads into the list, ready for any format — Audio only, GIF, H.264, ProRes…
   yt-dlp and Deno are fetched the first time and yt-dlp keeps itself up to date (daily check)
 - **Trim** any video or audio file: pick start and end with frame previews; timecode follows the cut
+- Paste a link right in the drop area
+- Menus and dropdowns have truly rounded corners; menu icons stay readable when highlighted
 - One **+ Add** button (files, a folder or a link) and a trash icon to clear the list
 - Adding new files after a batch clears the ones that converted fine (failed / flagged ones stay)
 

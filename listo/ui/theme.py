@@ -86,9 +86,11 @@ QLineEdit:focus, QComboBox:focus {{ border-color: {ACCENT}; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QComboBox::down-arrow {{ image: url(__CHEVRON__); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{
-    background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 8px; padding: 4px;
-    selection-background-color: {ACCENT}; selection-color: {ON_ACCENT};
+    background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 10px; padding: 5px;
+    selection-background-color: {ACCENT}; selection-color: {ON_ACCENT}; outline: none;
 }}
+QComboBox QAbstractItemView::item {{ padding: 6px 10px; border-radius: 6px; min-height: 20px; }}
+QComboBox QAbstractItemView::item:selected {{ background: {ACCENT}; color: {ON_ACCENT}; }}
 
 QCheckBox {{ spacing: 9px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border-radius: 4px; border: 1px solid #55555F; background: {CARD}; }}
@@ -149,6 +151,7 @@ QProgressBar#Warn::chunk {{ background: {WARN}; }}
 #DropZone[hot="true"] {{ border-color: {ACCENT}; background: rgba(245,165,36,0.06); }}
 #DropTitle {{ font-size: 18px; font-weight: 600; }}
 #DropSub {{ color: {MUTED}; font-size: 13px; }}
+QLineEdit#LinkBox {{ background: {CARD}; padding: 8px 12px; border-radius: 9px; }}
 #DropFormats {{ color: {FAINT}; font-size: 12px; }}
 
 #Footer {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
@@ -165,9 +168,14 @@ QPushButton#SaveBtn:hover {{ background: {CARD_HOVER}; color: {TEXT}; }}
 
 QDialog {{ background: {PANEL}; }}
 QPlainTextEdit {{ background: #0C0C0E; border: 1px solid {BORDER}; border-radius: 8px; font-family: "Menlo", "Consolas", "DejaVu Sans Mono", monospace; font-size: 11px; color: {MUTED}; }}
-QMenu {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 8px; padding: 4px; }}
-QMenu::item {{ padding: 6px 18px; border-radius: 5px; }}
+QMenu {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 10px; padding: 5px; }}
+QMenu::item {{ padding: 7px 18px 7px 10px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {ACCENT}; color: {ON_ACCENT}; }}
+QMenu::item:disabled {{ color: {FAINT}; }}
+QMenu::icon {{ padding-left: 10px; }}
+QMenu::separator {{ height: 1px; background: {BORDER_STRONG}; margin: 4px 8px; }}
+QMenu::section {{ color: {FAINT}; padding: 6px 10px 2px 10px; font-size: 11px; font-weight: 600; }}
+
 """
 
 # Minimal line icons (Lucide-style, ISC licensed shapes redrawn).
@@ -214,7 +222,11 @@ def pixmap(name: str, size: int = 16, color: str = TEXT, stroke: float = 2.0, dp
 
 
 def icon(name: str, color: str = TEXT, size: int = 16) -> QIcon:
-    return QIcon(pixmap(name, size, color))
+    ic = QIcon(pixmap(name, size, color))
+    # menus draw the highlighted row in marigold: switch the icon to dark there
+    ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Active)
+    ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Selected)
+    return ic
 
 
 def stylesheet(tmpdir: Path) -> str:

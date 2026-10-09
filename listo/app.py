@@ -6,9 +6,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QComboBox, QMenu, QWidget
 
 from . import APP_NAME, __version__
 from .ui import theme
@@ -76,6 +76,29 @@ def _listen(window) -> object:
     return server
 
 
+class _RoundPopups(QObject):
+    """Qt gives menus and dropdown lists square windows; make them see-through so the
+    stylesheet's rounded corners are what you actually see."""
+
+    @staticmethod
+    def _see_through(win: QWidget) -> None:
+        if not win.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground):
+            win.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+            win.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
+            win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def eventFilter(self, obj, ev):  # noqa: N802
+        if ev.type() == QEvent.Type.Polish and isinstance(obj, QWidget):
+            if isinstance(obj, QMenu) and obj.isWindow():
+                self._see_through(obj)
+            elif isinstance(obj, QComboBox):
+                container = obj.view().window()
+                if container is not obj.window():
+                    self._see_through(container)
+                    container.setStyleSheet("QComboBoxPrivateContainer { background: transparent; border: none; }")
+        return False
+
+
 class ListoApp(QApplication):
     """Also receives files dropped on the Dock icon / opened with 'Open With' on macOS."""
 
@@ -83,6 +106,8 @@ class ListoApp(QApplication):
         super().__init__(argv)
         self.window = None
         self._pending: list[str] = []
+        self._round = _RoundPopups(self)
+        self.installEventFilter(self._round)
 
     def event(self, e):  # noqa: D401
         if e.type() == QEvent.Type.FileOpen:
