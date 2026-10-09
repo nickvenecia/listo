@@ -216,6 +216,13 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
 - **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)
   run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
+  Heavy Python work (loading the speech model, listening) runs in its **own process**, not a thread: Python runs
+  one thread at a time, so a busy thread makes the window stutter. Nothing slow is imported on the UI thread.
+- **Checking is watching.** Where people review timing (captions), they can play the clip with sound; the item
+  on screen right now lights up (`CARD_SELECTED` + `ACCENT_EDGE`, time in `ACCENT`) and the list follows it.
+  Clicking a time jumps there. Space plays/pauses when you're not typing.
+- **Captions read like their era.** The VHS caption look is ALL CAPS (tape closed captions were);
+  the clean look keeps the words as spoken. The .srt file always keeps the real case.
 - **Menus hold commands, the panel holds settings.** File / Edit / View / Help list actions with their
   shortcuts (add, select, remove, preview, convert). They live in the Mac menu bar; on Windows and Linux
   the bar is hidden (no strip across the window) and the shortcuts still work. Never put a setting in a menu.

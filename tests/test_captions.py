@@ -140,15 +140,10 @@ def test_convert_makes_then_checks_captions_first(tmp_path: Path, monkeypatch):
         monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
-    class FakeModel:
-        def transcribe(self, audio, **kw):
-            w = [
-                types.SimpleNamespace(start=0.2, end=0.6, word=" Hello"),
-                types.SimpleNamespace(start=0.7, end=1.1, word=" there."),
-            ]
-            return iter([types.SimpleNamespace(end=1.1, words=w)]), types.SimpleNamespace(language="en")
+    import listo.ui.workers as wk
+    from tests import speech_standin
 
-    monkeypatch.setattr(captions, "_model", lambda name, on_status: FakeModel())
+    monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
     opened = []
 
     def fake_exec(self):
@@ -205,15 +200,10 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
         monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
-    class FakeModel:
-        def transcribe(self, audio, **kw):
-            w = [
-                types.SimpleNamespace(start=0.2, end=0.6, word=" Hello"),
-                types.SimpleNamespace(start=0.7, end=1.1, word=" there."),
-            ]
-            return iter([types.SimpleNamespace(end=1.1, words=w)]), types.SimpleNamespace(language="en")
+    import listo.ui.workers as wk
+    from tests import speech_standin
 
-    monkeypatch.setattr(captions, "_model", lambda name, on_status: FakeModel())
+    monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
     opened = []
 
     def fake_exec(self):
@@ -266,3 +256,86 @@ def test_preview_task_draws_captions(tmp_path: Path):
     PreviewTask(1, str(clip), probe(clip), s, 0.5, False, sig, captions=[Cue(0.0, 2.0, "Hello")]).run()
     app.processEvents()
     assert got and got[0][0] and not got[0][1]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_worker_process_round_trip_and_stop(tmp_path: Path):
+    """The real hand-off: clips go to a separate process and come back as transcripts; Stop ends it."""
+    import time
+
+    from PySide6.QtCore import QCoreApplication, Qt
+
+    import listo.ui.workers as wk
+    from tests import speech_standin
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+    clip = tmp_path / "talk.wav"
+    ff("-f", "lavfi", "-i", "sine=d=1", str(clip))
+    s = Settings()
+    got = []
+    th = wk.TranscribeThread([(1, str(clip), None, s)])
+    th.target = speech_standin.serve
+    th.done.connect(lambda i, t, e: got.append((i, t, e)), Qt.ConnectionType.DirectConnection)
+    th.start()
+    end = time.monotonic() + 60
+    while th.isRunning() and time.monotonic() < end:
+        app.processEvents()
+        time.sleep(0.02)
+    assert got and got[0][1] is not None, got
+    assert [w.text for w in got[0][1].words] == ["Hello", "there."]
+
+    slow = wk.TranscribeThread([(2, str(clip), None, s)])
+    slow.target = speech_standin.serve_slowly
+    slow.start()
+    time.sleep(3)  # let the process start and get stuck "loading the model"
+    t0 = time.monotonic()
+    slow.cancel()
+    assert slow.wait(10_000)
+    assert time.monotonic() - t0 < 5
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path, monkeypatch):
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.caption_editor as ed
+
+    if not ed.HAS_PLAYER:
+        pytest.skip("Qt's media player isn't installed")
+    monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
+    app = QApplication.instance() or QApplication([])
+    clip = tmp_path / "talk.mov"
+    ff("-f", "lavfi", "-i", "color=c=gray:s=320x240:d=3", "-f", "lavfi", "-i", "sine=d=3", "-shortest",
+       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip))  # fmt: skip
+    words = [
+        Word(0.1, 0.5, "First"),
+        Word(0.6, 0.9, "line."),
+        Word(1.5, 1.9, "Second"),
+        Word(2.0, 2.4, "one."),
+    ]
+    t = Transcript(str(clip), words=words, cues=[Cue(0.1, 1.0, "First line."), Cue(1.5, 2.6, "Second one.")])
+    t.edited = True
+    s = Settings(captions=True, caption_style="vhs")
+    d = ed.CaptionEditor([("talk.mov", str(clip), probe(clip), s, t)])
+
+    def wait(cond, timeout=20):
+        end = time.monotonic() + timeout
+        while not cond() and time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.02)
+        return cond()
+
+    assert wait(lambda: d.player.duration() > 0)
+    d.seek(1.8)
+    assert wait(lambda: d.current == 1)
+    assert d.edits[1].property("current") and not d.edits[0].property("current")
+    assert not d.overlay.pixmap().isNull()  # the caption is drawn over the picture
+    d.times[0].clicked.emit()  # click a time: jump there
+    assert wait(lambda: d.current == 0)
+    d.edits[0].setPlainText("")  # a cleared line shows nothing
+    assert wait(lambda: d.overlay.pixmap().isNull())
+    d.reject()

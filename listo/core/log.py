@@ -13,8 +13,9 @@ from .paths import log_dir
 _configured = False
 
 
-def setup_logging(level: int = logging.INFO) -> None:
-    """Write to <data dir>/logs/listo.log (1 MB x 3 files). Safe to call more than once."""
+def setup_logging(level: int = logging.INFO, filename: str = "listo.log") -> None:
+    """Write to <data dir>/logs/<filename> (1 MB x 3 files). Safe to call more than once.
+    Each process gets its own file (rotating a file another process has open fails on Windows)."""
     global _configured
     if _configured:
         return
@@ -24,7 +25,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     try:
         log_dir().mkdir(parents=True, exist_ok=True)
         handler: logging.Handler = logging.handlers.RotatingFileHandler(
-            log_dir() / "listo.log", maxBytes=1_000_000, backupCount=3, encoding="utf-8"
+            log_dir() / filename, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
         )
     except OSError:
         handler = logging.NullHandler()  # read-only home folder etc. — logging is optional

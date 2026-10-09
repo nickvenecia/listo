@@ -54,7 +54,7 @@ excludes = [
     "rawpy.enhance", "scipy", "cv2", "matplotlib", "pandas", "IPython", "imageio", "imageio_ffmpeg",
     "skimage", "PyQt5", "PyQt6", "gi", "numpy.f2py", "numpy.distutils",
     "tkinter", "unittest", "pydoc_data", "PySide6.QtQml", "PySide6.QtQuick",
-    "PySide6.QtWebEngineCore", "PySide6.QtMultimedia", "PySide6.Qt3DCore", "PySide6.QtCharts",
+    "PySide6.QtWebEngineCore", "PySide6.Qt3DCore", "PySide6.QtCharts",
     "PySide6.QtPdf", "PySide6.QtSql", "PySide6.QtTest", "PySide6.QtDBus", "PySide6.QtOpenGL",
     "PySide6.QtDesigner", "PySide6.QtHelp", "PySide6.QtXml", "PySide6.QtConcurrent",
 ]

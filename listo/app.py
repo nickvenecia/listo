@@ -203,20 +203,17 @@ def main() -> int:
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)
-        try:
-            import ctranslate2  # noqa: F401
+        from .core.captions_worker import ping
+        from .ui.caption_editor import HAS_PLAYER
 
-            from .core.captions import _without_pyav
-
-            _without_pyav()
-            import faster_whisper  # noqa: F401
-
-            print("captions: ready (speech model downloads on first use)", flush=True)
-        except Exception as e:
-            print(f"captions: NOT available ({e.__class__.__name__}: {e})", flush=True)
+        status = ping()  # captions run in their own process: make sure the packaged app can start it
+        print(f"captions process: {status or 'DID NOT START'}", flush=True)
+        print(f"player: {'ready' if HAS_PLAYER else 'NOT available'}", flush=True)
         QTimer.singleShot(1500, app.quit)
         code = app.exec()
-        return code if caps.ok else 3
+        if not caps.ok:
+            return 3
+        return code if status else 4
 
     pending = launch_files + app._pending
     if pending:

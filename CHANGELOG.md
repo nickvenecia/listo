@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **No more freezing when captions turn on**: speech-to-text now runs in its own low-priority process, so the window and the live preview stay smooth while the speech model loads and listens
+- **Play in Check the Captions**: play the clip with sound; the caption on screen is drawn over the picture in the real look, its line lights up and the list follows along. Click a time to jump there; Space plays and pauses
+- **Join Into One Video** (Export → Videos, with 2+ videos in the list): every clip, in list order, becomes one long video. Clips are matched to the first one (size, frame rate, sound; silent clips get silence) and put together without a second re-encode. Burn-ins, captions and trims still apply per clip, and the .srt covers the whole video
+- VHS captions are ALL CAPS, like closed captions on tape (the clean look keeps the words as spoken)
 - On/off settings are now switches in full-width rows (label left, switch right) instead of checkboxes
 - Panels no longer shift or squeeze when a group opens (the scroll bar's space is always kept)
 - Hover tips have rounded corners

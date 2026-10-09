@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import naming
+from ..core import join, naming
 from ..core.log import get_logger
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
@@ -121,6 +121,22 @@ class ExportPanel(QFrame):
         self.picture_note.setObjectName("Hint")
         prev.add(self.picture_note)
         lay.addWidget(prev)
+
+        # ---- separate files, or every video in one (only when there are 2+ videos to join)
+        self._videos = 0
+        self.videos_sec = Section("Videos")
+        self.join_pick = combo(
+            [
+                ("separate", "One File per Clip", "Each clip becomes its own file"),
+                ("join", "Join Into One Video", "Every clip, in list order, becomes one long video"),
+            ],
+            "join" if self.s.join else "separate",
+        )
+        self.join_pick.currentIndexChanged.connect(
+            lambda _i: self._set("join", self.join_pick.currentData() == "join")
+        )
+        self.videos_sec.add(self.join_pick)
+        lay.addWidget(self.videos_sec)
 
         # ---- live example of the file name
         saves = Section("Saves As")
@@ -290,6 +306,7 @@ class ExportPanel(QFrame):
         self.d_path.setText(self.s.dest_folder or "No Folder Chosen")
         self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
+        self.videos_sec.setVisible(self._videos >= 2 and join.can_join(self.s))
         self._update_advanced()
         # The dialog sizes itself before it knows its width; reserve room for every wrapped row.
         self.tok_wrap.ensurePolished()
@@ -301,6 +318,7 @@ class ExportPanel(QFrame):
     def reload(self) -> None:
         """Refresh controls from the settings (after a recipe is applied)."""
         widgets = (
+            self.join_pick,
             self.where,
             self.d_sub,
             self.styles,
@@ -312,6 +330,7 @@ class ExportPanel(QFrame):
         for w in widgets:
             w.blockSignals(True)
         try:
+            set_combo(self.join_pick, "join" if self.s.join else "separate")
             set_combo(self.where, self.s.destination)
             self.d_sub.setText(self.s.subfolder_name)
             style = style_for(self.s.naming)
@@ -325,6 +344,19 @@ class ExportPanel(QFrame):
             for w in widgets:
                 w.blockSignals(False)
         self._sync()
+
+    def set_video_count(self, n: int) -> None:
+        """How many videos are in the list: joining only appears when there are two or more."""
+        if n != self._videos:
+            self._videos = n
+            self._sync()
+
+    def refresh(self) -> None:
+        """The format may have changed (a GIF can't be joined)."""
+        self._sync()
+
+    def joining(self) -> bool:
+        return self.s.join and self._videos >= 2 and join.can_join(self.s)
 
     def set_sample(self, path: str | None, info: MediaInfo | None, kind: str) -> None:
         self._sample = (path, info, kind) if path else None
@@ -353,13 +385,16 @@ class ExportPanel(QFrame):
     def _update_example(self) -> None:
         path, info, kind = self._sample_tuple()
         p = Path(path)
+        joined = self.joining() and kind == "video"
         try:
             out_dir = naming.output_dir(path, self.s, kind)
-            name = naming.planned_name(path, info, self.s, kind, 1)
+            name = (join.joined_name if joined else lambda a, b, c: naming.planned_name(a, b, c, kind, 1))(
+                path, info, self.s
+            )
         except Exception:
             out_dir, name = p.parent, "?"
-        self.ex_from.setText(f"{p.parent.name}/{p.name}")
-        note = ""
+        self.ex_from.setText(f"{p.parent.name}/{p.name}" + (f" + {self._videos - 1} more" if joined else ""))
+        note = f"All {self._videos} videos in one file, in list order." if joined else ""
         try:
             target, _ = naming.resolve_output(path, out_dir / name, self.s.collision, set())
             if target is None:
@@ -370,7 +405,7 @@ class ExportPanel(QFrame):
                     "Same name as the original, so a number is added to keep the original safe."
                     if same
                     else "That name is taken, so a number is added."
-                )
+                ) + (f" {note}" if note else "")
                 name = target.name
         except Exception:
             log.debug("example name failed", exc_info=True)

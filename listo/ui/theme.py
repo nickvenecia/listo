@@ -240,6 +240,12 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 QPlainTextEdit#CaptionText {{ background: {CARD}; border: 1px solid {BORDER_STRONG}; border-radius: {RADIUS}px;
     font-family: inherit; font-size: {TEXT_MD}px; padding: {SPACE_1}px {SPACE_2}px; }}
 QPlainTextEdit#CaptionText:focus {{ border-color: {ACCENT}; }}
+QPlainTextEdit#CaptionText[current="true"] {{ background: {CARD_SELECTED}; border-color: {ACCENT_EDGE}; }}
+QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {ACCENT}; }}
+#CueTime {{ color: {MUTED}; padding-top: {SPACE_1}px; }}
+#CueTime:hover {{ color: {TEXT}; }}
+#CueTime[current="true"] {{ color: {ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
+#Player {{ background: {WELL}; border-radius: {RADIUS}px; }}
 QPlainTextEdit {{ background: {WELL}; border: 1px solid {BORDER}; border-radius: {RADIUS}px; font-family: {MONO};
     font-size: {TEXT_XS}px; color: {MUTED}; }}
 QMenu {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: {RADIUS_LG}px; padding: {SPACE_1}px; }}

@@ -43,8 +43,12 @@ class Conversion:
         counter: int = 1,
         trim: tuple[float, float] | None = None,
         captions: list | None = None,
+        target: Path | None = None,
+        conform: video.Conform | None = None,
     ):
-        self.captions = captions  # reviewed caption cues for this clip (captions.Cue), or None
+        self.captions = captions
+        self.target = target  # a fixed output path (one part of a joined video), else from the naming rules
+        self.conform = conform  # reviewed caption cues for this clip (captions.Cue), or None
         self.src = src
         self.info = info
         self.s = settings
@@ -88,6 +92,8 @@ class Conversion:
             self._ff.cancel()
 
     def plan_target(self) -> tuple[Path | None, str]:
+        if self.target is not None:
+            return self.target, ""
         kind = self.info.kind
         out_dir = naming.output_dir(self.src, self.s, kind)
         name = naming.planned_name(self.src, self.info, self.s, kind, self.counter)
@@ -152,7 +158,9 @@ class Conversion:
             else:
                 if not self.caps.ffmpeg:
                     return Result("failed", message="ffmpeg is missing.")
-                plan = video.build(self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions)
+                plan = video.build(
+                    self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions, self.conform
+                )
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]
                 self._ff = FFmpegRun(self.caps.ffmpeg, plan.args)

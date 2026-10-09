@@ -438,13 +438,9 @@ def caption_track(
     """One image per caption plus an ffconcat list that shows each for its time.
     Returns (list file, where the band goes). Captions sit bottom-centre of the whole frame,
     over bars and burn-ins."""
-    from .captions import wrap
-
     W, H = frame
-    size = max(12, round(min(W, H) / CAPTION_SIZE.get(s.caption_size, 19)))
-    look = _caption_look(s, size)
-    line_step = round(look.line_h * 1.08)
-    wrapped = [wrap(c.text, s.caption_words) for c in cues]
+    look, line_step = _caption_setup(s, frame)
+    wrapped = [caption_lines(c.text, s) for c in cues]
     widest = max((look.font.getlength(t) for ls in wrapped for t in ls), default=0)
     most = max((len(ls) for ls in wrapped), default=1)
     band = (min(W, round(widest) + 4 * look.pad), most * line_step + 2 * look.pad)
@@ -472,6 +468,32 @@ def caption_track(
     lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
     margin = round(H * 0.06)
     return lst, ((W - band[0]) // 2, H - margin - band[1])
+
+
+def _caption_setup(s: Settings, frame: tuple[int, int]) -> tuple[Look, int]:
+    size = max(12, round(min(frame) / CAPTION_SIZE.get(s.caption_size, 19)))
+    look = _caption_look(s, size)
+    return look, round(look.line_h * 1.08)
+
+
+def caption_lines(text: str, s: Settings) -> list[str]:
+    """How a caption reads on screen. Closed captions on tape were ALL CAPS (white on black);
+    the clean look keeps the words as spoken."""
+    from .captions import wrap
+
+    return wrap(text.upper() if s.caption_style == "vhs" else text, s.caption_words)
+
+
+def caption_still(text: str, s: Settings, frame: tuple[int, int]) -> tuple[Image.Image, tuple[int, int]]:
+    """One caption exactly as it's burned in, and where it goes on a frame of this size
+    (the caption check draws it over the playing clip)."""
+    W, H = frame
+    look, line_step = _caption_setup(s, frame)
+    lines = caption_lines(text, s)
+    widest = max((look.font.getlength(t) for t in lines), default=0)
+    band = (min(W, round(widest) + 4 * look.pad), max(1, len(lines)) * line_step + 2 * look.pad)
+    img = _caption_image(lines, look, s.caption_box, band, line_step)
+    return img, ((W - band[0]) // 2, H - round(H * 0.06) - band[1])
 
 
 def shot_start(src: str, info: MediaInfo, start_s: float) -> datetime:

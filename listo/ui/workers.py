@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
+import multiprocessing
 import os
 import subprocess
 import threading
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
+from ..core.captions_worker import serve as serve_captions
 from ..core.engine import Conversion, Result
 from ..core.log import get_logger
 from ..core.probe import MediaInfo, probe
@@ -212,6 +215,24 @@ class ConvertThread(QThread):
         self.finished_item.emit(self.item_id, r)
 
 
+class JoinThread(QThread):
+    """Glues the converted parts into one video (core.join.Join) off the main thread."""
+
+    progress = Signal(float, float)  # seconds written, speed
+    joined = Signal(object)  # Result
+
+    def __init__(self, job):
+        super().__init__()
+        self.job = job
+
+    def run(self) -> None:
+        try:
+            r = self.job.run(lambda p, s: self.progress.emit(p, s))
+        except Exception as e:
+            r = Result("failed", message=f"Couldn't join the clips ({e.__class__.__name__}).")
+        self.joined.emit(r)
+
+
 class PreviewSignals(QObject):
     done = Signal(int, bytes, str)  # request number, PNG bytes, error message
 
@@ -290,12 +311,16 @@ class PreviewTask(QRunnable):
 
 
 class TranscribeThread(QThread):
-    """Turns speech into captions in the background, one clip at a time (the model is big).
+    """Turns speech into captions in the background, one clip at a time.
+    The listening itself happens in a separate low-priority process (core.captions_worker), so the
+    window never waits on it; this thread only hands over clips and relays progress.
     Jobs can be added while it runs; it ends when the queue is empty."""
 
     progress = Signal(int, float)  # item id, 0..1
     status = Signal(int, str)  # item id, what's happening ("Downloading the speech model…")
     done = Signal(int, object, str)  # item id, Transcript or None, error message
+
+    target = staticmethod(serve_captions)  # what the worker process runs (tests swap in a stand-in)
 
     def __init__(self, jobs: list[tuple[int, str, MediaInfo, object]]):
         """jobs: (item id, path, info, settings)."""
@@ -304,6 +329,8 @@ class TranscribeThread(QThread):
         self._lock = threading.Lock()
         self._closing = False
         self._cancel = threading.Event()
+        self._proc = None
+        self._conn = None
         self.current: int | None = None
 
     def add(self, job: tuple[int, str, MediaInfo, object]) -> bool:
@@ -319,32 +346,89 @@ class TranscribeThread(QThread):
             return {j[0] for j in self._jobs} | ({self.current} if self.current is not None else set())
 
     def cancel(self) -> None:
+        """Stop now: the worker process is ended mid-clip (nothing half-made is kept)."""
         self._cancel.set()
+        with self._lock:
+            proc = self._proc
+        if proc is not None and proc.is_alive():
+            proc.kill()
+
+    # ------------------------------------------------------------------ worker process
+    def _start_worker(self) -> None:
+        ctx = multiprocessing.get_context("spawn")  # same on every OS, and works when packaged
+        mine, theirs = ctx.Pipe()
+        proc = ctx.Process(target=self.target, args=(theirs,), daemon=True, name="listo-captions")
+        proc.start()
+        theirs.close()
+        with self._lock:
+            self._proc, self._conn = proc, mine
+
+    def _stop_worker(self) -> None:
+        with self._lock:
+            proc, conn = self._proc, self._conn
+            self._proc = self._conn = None
+        if conn is not None:
+            with contextlib.suppress(OSError):
+                conn.send(None)
+            conn.close()
+        if proc is not None:
+            proc.join(2)
+            if proc.is_alive():
+                proc.kill()
+                proc.join(2)
+
+    def _one(self, iid: int, path: str, s) -> tuple[object | None, str]:
+        """Send one clip to the worker and relay what it says until it's done."""
+        from ..core import captions
+
+        if self._proc is None or not self._proc.is_alive():
+            self._start_worker()
+        conn = self._conn
+        conn.send({"path": path, "model": s.caption_model, "language": s.caption_language,
+                   "words": s.caption_words, "lines": s.caption_lines})  # fmt: skip
+        while True:
+            if self._cancel.is_set():
+                return None, "Canceled"
+            try:
+                if not conn.poll(0.2):
+                    if not self._proc.is_alive():
+                        raise EOFError
+                    continue
+                kind, value = conn.recv()
+            except (EOFError, OSError):
+                self._stop_worker()
+                if self._cancel.is_set():
+                    return None, "Canceled"
+                log.warning("captions worker stopped while working on %s", path)
+                return None, "Captions stopped unexpectedly. Click the CC icon to try again."
+            if kind == "progress":
+                self.progress.emit(iid, value)
+            elif kind == "status":
+                self.status.emit(iid, value)
+            elif kind == "done":
+                return captions.Transcript.from_json(value), ""
+            else:
+                return None, str(value)
 
     def run(self) -> None:
         from ..core import captions
 
-        while True:
-            with self._lock:
-                if not self._jobs or self._cancel.is_set():
-                    self._closing = True
-                    self.current = None
-                    return
-                iid, path, info, s = self._jobs.pop(0)
-                self.current = iid
-            try:
-                t = captions.transcribe(
-                    path, info, s.caption_model, s.caption_language, s.caption_words, s.caption_lines,
-                    on_progress=lambda f, i=iid: self.progress.emit(i, f),
-                    on_status=lambda m, i=iid: self.status.emit(i, m),
-                    cancel=self._cancel,
-                )  # fmt: skip
-                captions.save(t)
-                self.done.emit(iid, t, "")
-            except captions.Canceled:
-                self.done.emit(iid, None, "Canceled")
-            except captions.CaptionError as e:
-                self.done.emit(iid, None, str(e))
-            except Exception as e:
-                log.warning("transcription failed for %s", path, exc_info=True)
-                self.done.emit(iid, None, f"Couldn't make captions ({e.__class__.__name__}).")
+        try:
+            while True:
+                with self._lock:
+                    if not self._jobs or self._cancel.is_set():
+                        self._closing = True
+                        self.current = None
+                        return
+                    iid, path, _info, s = self._jobs.pop(0)
+                    self.current = iid
+                try:
+                    t, error = self._one(iid, path, s)
+                    if t is not None:
+                        captions.save(t)
+                    self.done.emit(iid, t, error)
+                except Exception as e:
+                    log.warning("transcription failed for %s", path, exc_info=True)
+                    self.done.emit(iid, None, f"Couldn't make captions ({e.__class__.__name__}).")
+        finally:
+            self._stop_worker()

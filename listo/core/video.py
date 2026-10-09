@@ -116,6 +116,18 @@ def burn_plan(
     return bp
 
 
+@dataclass
+class Conform:
+    """Every part of a joined video must match exactly (size, frame rate, sound) so the parts can be
+    glued without re-encoding. Taken from the first clip; see core.join."""
+
+    width: int = 0
+    height: int = 0
+    rate: str = ""  # "30000/1001"; empty for sound-only
+    sample_rate: int = 48000
+    channels: int = 2
+
+
 def preset_available(key: str, caps: Capabilities) -> bool:
     return all(caps.has_encoder(e) for e in VIDEO_BY_KEY[key].needs)
 
@@ -156,6 +168,7 @@ def _audio_only(
     s: Settings,
     caps: Capabilities,
     trim: tuple[float, float] | None = None,
+    conform: Conform | None = None,
 ) -> Plan:
     if not info.audio:
         raise PlanError("This file has no audio to pull out.")
@@ -163,7 +176,9 @@ def _audio_only(
     if fmt.needs and not caps.has_encoder(fmt.needs):
         raise PlanError(f"This copy of ffmpeg can't write {fmt.title}.")
     args = [*_input_args(src, trim), "-map", f"0:{info.audio[0].index}", "-vn", "-c:a", fmt.codec, *fmt.extra]
-    if fmt.key in ("mp3", "aac") and info.audio[0].channels not in (1, 2):
+    if conform is not None:
+        args += ["-ar", str(conform.sample_rate), "-ac", str(conform.channels)]
+    elif fmt.key in ("mp3", "aac") and info.audio[0].channels not in (1, 2):
         args += ["-ac", "2"]
     args += ["-map_metadata", "0", "-f", fmt.muxer, out]
     notes = []
@@ -180,10 +195,12 @@ def build(
     caps: Capabilities,
     trim: tuple[float, float] | None = None,
     captions: list | None = None,
+    conform: Conform | None = None,
 ) -> Plan:
-    """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim."""
+    """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim.
+    conform: this clip is one part of a joined video and must match the others (rewrap ignores it)."""
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
-        return _audio_only(src, out, info, s, caps, trim)
+        return _audio_only(src, out, info, s, caps, trim, conform)
     if info.kind != "video" or info.video_index is None:
         raise PlanError(info.error or "No video found in this file.")
 
@@ -310,6 +327,18 @@ def build(
         vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
     if burn_at < 0:
         burn_at = len(vf)
+    if conform is not None and conform.width and p.key != "gif":
+        W, H = conform.width, conform.height
+        if out_size != (W, H):
+            notes.append(f"Fitted into {W}×{H} to match the first clip.")
+        vf.append(
+            f"scale={W}:{H}:force_original_aspect_ratio=decrease:flags=lanczos,"
+            f"pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+        )
+        if conform.rate:
+            if _out_rate(info, s, doubled) != conform.rate:
+                notes.append("Frame rate changed to match the first clip.")
+            vf.append(f"fps={conform.rate}")
 
     ten_bit_hdr = info.hdr and p.key in ("hevc", "av1")
     hw_enc = ""
@@ -429,14 +458,27 @@ def build(
     # ---- audio codec
     if tracks and not burn.empty:
         args += ["-af", "asetpts=PTS-STARTPTS"]  # keep in step with the picture (see above)
+    if conform is not None and not tracks and p.key != "gif":
+        # A silent clip in a joined video still needs a sound track, or the parts won't line up.
+        last_i = max(i for i, a in enumerate(args) if a == "-i")
+        index = args.count("-i")
+        length = (trim[1] - trim[0]) if trim else info.duration
+        args[last_i + 2 : last_i + 2] = [
+            "-f", "lavfi", "-t", f"{max(0.05, length):.3f}",
+            "-i", f"anullsrc=r={conform.sample_rate}:cl={'mono' if conform.channels == 1 else 'stereo'}",
+        ]  # fmt: skip
+        args += ["-map", f"{index}:a"]
+        tracks = [None]  # (codec choice below)
     if tracks:
         if p.edit_format:
-            args += ["-c:a", _pcm_for(info)]
+            args += ["-c:a", "pcm_s24le" if conform is not None else _pcm_for(info)]
         elif p.key == "webm":
             args += ["-c:a", "libopus" if caps.has_encoder("libopus") else "libvorbis", "-b:a", "160k"]
         else:
             args += ["-c:a", "aac", "-b:a", "256k"]
-        if not p.edit_format and tracks[0].channels != 2:
+        if conform is not None:
+            args += ["-ar", str(conform.sample_rate), "-ac", str(conform.channels)]
+        elif not p.edit_format and tracks[0].channels != 2:
             # Share formats: stereo plays everywhere (and Opus/AAC reject odd camera layouts).
             args += ["-ac", "2" if tracks[0].channels != 1 else "1"]
         if len(info.audio) > len(tracks) and p.key != "gif":

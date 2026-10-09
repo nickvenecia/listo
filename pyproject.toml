@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 authors = [{ name = "Nick Venecia" }]
 dependencies = [
     "PySide6-Essentials>=6.7",
+    "PySide6-Addons>=6.7",
     "psutil>=5.9",
     "Pillow>=10.3",
     "pillow-heif>=0.18",

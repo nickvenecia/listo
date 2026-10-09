@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QSettings, QSize, Qt, QThread, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -32,7 +33,8 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME, __version__
-from ..core import naming
+from ..core import captions, join, naming
+from ..core.captions import sample_cues
 from ..core.engine import Conversion, Result
 from ..core.fileutil import reveal
 from ..core.links import is_link
@@ -53,20 +55,50 @@ from ..core.probe import (
     ext_of,
     fmt_duration,
     kind_from_ext,
+    probe,
 )
+from ..core.sample import sample_clip
 from ..core.tools import capabilities
 from . import theme, tokens
+from .caption_editor import CaptionEditor
 from .export_panel import ExportPanel
 from .job_card import JobCard
+from .preview_dialog import PreviewDialog
 from .sidebar import Sidebar
 from .trim_dialog import TrimDialog, fmt_time
 from .widgets import FitScroll, StepHeader, Toast, repolish
-from .workers import ConvertThread, DownloadThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
+from .workers import (
+    ConvertThread,
+    DownloadThread,
+    HardwareSignals,
+    HardwareTask,
+    JoinThread,
+    PreviewSignals,
+    PreviewTask,
+    ProbeSignals,
+    ProbeTask,
+    TranscribeThread,
+)
 
 log = get_logger(__name__)
 
 _ORPHANS: list = []
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
+
+
+@dataclass
+class JoinJob:
+    """One batch whose videos become one long video (core/join.py)."""
+
+    ids: list[int]  # the clips, in list order
+    settings: Settings  # the same for every part (per-file format changes don't apply)
+    conform: object  # video.Conform: what every part must match
+    folder: Path  # hidden parts folder
+    parts: dict[int, Path] = field(default_factory=dict)  # item id -> converted part
+    cues: dict[int, list] = field(default_factory=dict)  # item id -> its captions in the part
+    thread: object | None = None  # JoinThread once gluing starts
+    done_s: float = 0.0
+    total_s: float = 0.0
 
 
 @dataclass
@@ -230,13 +262,13 @@ class MainWindow(QMainWindow):
         self._tx_failed: dict[int, str] = {}
         self._tx_retry = False
         self._convert_after_captions = False  # Convert was pressed while captions were still being made
+        self.join_job: JoinJob | None = None
         self._live_seq = 0
         self._live_note = ""
         self._anchor: int | None = None  # where a Shift-click range starts
 
         self._build()
         self._menus()
-        from .workers import PreviewSignals
 
         self._live_signals = PreviewSignals(self)
         self._live_signals.done.connect(self._live_got)
@@ -732,8 +764,6 @@ class MainWindow(QMainWindow):
             card.set_state(it.state)
             self._update_output_name(it)
             if it.kind == "video" and info.audio:
-                from ..core import captions
-
                 it.transcript = captions.load(it.path)
             self._sync_captions()
         self._list_changed()
@@ -773,10 +803,6 @@ class MainWindow(QMainWindow):
             self.tx.cancel()  # captions switched off: stop listening
 
     def _queue_captions(self, items: list[Item]) -> None:
-        from PySide6.QtCore import QThread
-
-        from .workers import TranscribeThread
-
         jobs = [(it.id, it.path, it.info, self.eff(it)) for it in items]
         if self.tx is not None and all(self.tx.add(j) for j in jobs):
             return
@@ -865,8 +891,6 @@ class MainWindow(QMainWindow):
             )
 
     def _edit_captions(self, items: list[Item], action: str) -> bool:
-        from .caption_editor import CaptionEditor
-
         clips = [(Path(it.path).name, it.path, it.info, self.eff(it), it.transcript) for it in items]
         ok = CaptionEditor(clips, 0, action, self).exec() == QDialog.DialogCode.Accepted
         self._sync_captions()
@@ -894,13 +918,9 @@ class MainWindow(QMainWindow):
             return None
         if it is not None and it.transcript is not None:
             return it.transcript.cues_for(s.caption_words, s.caption_lines)
-        from ..core.captions import sample_cues
-
         return sample_cues(s.caption_words, s.caption_lines)  # shows the look before the words exist
 
     def _render_live(self) -> None:
-        from .workers import PreviewTask
-
         it = self._live_clip()
         self._live_seq += 1
         if it is None:
@@ -921,13 +941,8 @@ class MainWindow(QMainWindow):
             self.export_panel.show_preview(data, self._live_note if data else error)
 
     def open_preview(self) -> None:
-        from .preview_dialog import PreviewDialog
-
         clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
         if not clips:
-            from ..core.probe import probe
-            from ..core.sample import sample_clip
-
             sample = sample_clip()
             if sample:
                 s = self.settings
@@ -958,6 +973,13 @@ class MainWindow(QMainWindow):
             return
         s = self.eff(it)
         it.card.set_format(format_label(it.kind, s), bool(it.override), it.state in ("ready", "waiting"))
+        if self.export_panel.joining() and it.kind == "video" and it.state in ("ready", "waiting"):
+            first = next(
+                (self.items[i] for i in self.order if self.items[i].kind == "video" and self.items[i].info),
+                it,
+            )
+            it.card.set_output(f"→  {join.joined_name(first.path, first.info, self.settings)}  (joined)")
+            return
         try:
             out_dir = naming.output_dir(it.path, s, it.kind)
             name = naming.planned_name(it.path, it.info, s, it.kind, 1)
@@ -983,12 +1005,14 @@ class MainWindow(QMainWindow):
         import json
 
         self.sidebar.notify_external_change()
+        self.export_panel.refresh()
         self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
         self._schedule_live()
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
                 self._update_output_name(it)
         self._sync_captions()
+        self._refresh_footer()  # "Convert & Join" on the button
 
     def _format_menu(self, iid: int, anchor: QWidget) -> None:
         it = self.items.get(iid)
@@ -1222,6 +1246,24 @@ class MainWindow(QMainWindow):
                     "Everything here is finished. Use ↻ on a file to run it again, or add more."
                 )
             return
+        self.join_job = None
+        if self.export_panel.joining():
+            if any(it.state in ("probing", "downloading") for it in self.items.values()):
+                self.toast.show_message(
+                    "Still reading some files. Press Convert again once every clip is in."
+                )
+                return
+            vids = [
+                self.items[i]
+                for i in self.order
+                if self.items[i].state == "ready" and self.items[i].kind == "video"
+            ]
+            if len(vids) >= 2:
+                s = self.settings.copy()
+                self.join_job = JoinJob(
+                    ids=[it.id for it in vids], settings=s, conform=join.conform_for(vids[0].info, s),
+                    folder=join.parts_folder(vids[0].path, s),
+                )  # fmt: skip
         self.batch = []
         self.running, self.paused = True, False
         # Every file in the list counts as "taken": Replace can never overwrite another original.
@@ -1239,6 +1281,8 @@ class MainWindow(QMainWindow):
                 if it.state == "waiting" and it.base is None:
                     it.base = self.settings.copy()
                 continue
+            if self.join_job and it.kind == "video" and iid not in self.join_job.ids:
+                continue  # videos added during a join wait for the next Convert
             if it.state == "ready":
                 it.base = self.settings.copy()
                 it.state = "waiting"
@@ -1267,6 +1311,9 @@ class MainWindow(QMainWindow):
                 self.items.get(i) and self.items[i].state in ("probing", "downloading") for i in self.batch
             ):
                 return  # wait for files that are still being read
+            if self.join_job is not None:
+                self._start_join()
+                return
             self._finish()
             return
         self._refresh_footer()
@@ -1279,9 +1326,28 @@ class MainWindow(QMainWindow):
         cues = None
         if s.captions and it.transcript is not None:
             cues = it.transcript.cues_for(s.caption_words, s.caption_lines)
-        conv = Conversion(
-            it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues
-        )
+        job = self.join_job
+        if job is not None and it.id in job.ids:
+            # One part of the joined video: same settings for all, a fixed hidden path, matched shape.
+            s = job.settings.copy()
+            s.caption_srt = s.keep_dates = False  # the joined video gets these
+            cues = (
+                it.transcript.cues_for(s.caption_words, s.caption_lines)
+                if (s.captions and it.transcript)
+                else None
+            )
+            if cues and job.settings.caption_srt:
+                trim = it.trim or (0.0, it.info.duration)
+                job.cues[it.id] = captions.for_output(cues, trim[0], trim[1] - trim[0])
+            job.folder.mkdir(parents=True, exist_ok=True)
+            conv = Conversion(
+                it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues,
+                target=join.part_path(job.folder, job.ids.index(it.id) + 1, s), conform=job.conform,
+            )  # fmt: skip
+        else:
+            conv = Conversion(
+                it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues
+            )
         it.state, it.processed, it.speed = "converting", 0.0, 0.0
         it.started = time.monotonic()
         it.card.set_state("converting", "Starting…")
@@ -1327,7 +1393,14 @@ class MainWindow(QMainWindow):
             it.result = r
             it.message = r.message
             card = it.card
-            if r.status == "done":
+            if r.status == "done" and self.join_job is not None and iid in self.join_job.ids:
+                self.join_job.parts[iid] = r.output
+                it.state = "warning" if r.warning else "done"
+                card.set_state(it.state, "" if r.warning else "Converted")
+                card.set_output(
+                    "→  Joining after the last clip" + (f"   ·   {r.warning}" if r.warning else "")
+                )
+            elif r.status == "done":
                 where = r.output.parent.name + "/" if r.output.parent != Path(it.path).parent else ""
                 if r.warning:
                     it.state = "warning"
@@ -1349,7 +1422,84 @@ class MainWindow(QMainWindow):
                     card.set_progress(0)
         if self.running:
             self._kick()
+        elif not self.active and self.join_job is not None and self.join_job.thread is None:
+            self._drop_join()  # stopped before gluing: throw the parts away
         self._refresh_footer()
+
+    # ------------------------------------------------------------------ joining
+    def _start_join(self) -> None:
+        job = self.join_job
+        ids = [i for i in job.ids if i in job.parts]
+        first = self.items.get(job.ids[0])
+        if not ids or first is None:
+            self._drop_join()
+            self._finish()
+            return
+        conv = join.Join(
+            [job.parts[i] for i in ids], first.path, first.info, job.settings, self.caps, self.reserved,
+            [job.cues.get(i) for i in ids],
+        )  # fmt: skip
+        job.total_s = sum(self.items[i].length for i in ids if i in self.items)
+        job.thread = th = JoinThread(conv)
+        th.progress.connect(self._join_progress)
+        th.joined.connect(self._joined)
+        for i in ids:
+            if i in self.items:
+                self.items[i].card.set_output("→  Joining into one video…")
+        th.start()
+        self._refresh_footer()
+
+    def _join_progress(self, done_s: float, _speed: float) -> None:
+        if self.join_job is not None:
+            self.join_job.done_s = done_s
+            self._refresh_footer()
+
+    def _joined(self, r: Result) -> None:
+        job = self.join_job
+        if job is None:
+            return
+        if job.thread is not None:
+            job.thread.wait(2000)
+            job.thread.deleteLater()
+        ids = [i for i in job.ids if i in job.parts and i in self.items]
+        left_out = [i for i in job.ids if i not in job.parts and i in self.items]
+        if r.status == "done" and left_out:
+            r.notes.append(
+                f"{len(left_out)} clip{'s' if len(left_out) != 1 else ''} left out (they didn't convert)."
+            )
+        for i in ids:
+            it = self.items[i]
+            it.result = r
+            it.message = r.message
+            if r.status == "done":
+                where = r.output.parent.name + "/" if r.output.parent != Path(it.path).parent else ""
+                it.state = "warning" if r.warning else "done"
+                it.card.set_state(it.state, "" if r.warning else "Listo ✓")
+                it.card.set_output(
+                    f"→  {where}{r.output.name}  (joined)" + (f"   ·   {r.warning}" if r.warning else "")
+                )
+            else:
+                it.state = "failed" if r.status == "failed" else r.status
+                it.card.set_state(it.state if it.state in ("failed", "skipped") else "canceled")
+                it.card.set_output(r.message)
+        self.join_job = None
+        if r.status == "failed":
+            log.warning("join failed: %s", r.message)
+        self._finish()
+
+    def _drop_join(self) -> None:
+        """Stopped before the clips were put together: the parts go, and those clips are ready again."""
+        job, self.join_job = self.join_job, None
+        if job is None:
+            return
+        shutil.rmtree(job.folder, ignore_errors=True)
+        for i in job.parts:
+            it = self.items.get(i)
+            if it and it.state in ("done", "warning"):
+                it.state, it.result, it.base = "ready", None, None
+                it.card.set_state("ready")
+                it.card.set_progress(0)
+                self._update_output_name(it)
 
     def toggle_pause(self) -> None:
         if not self.running or (not self.active and not self.paused):
@@ -1397,6 +1547,11 @@ class MainWindow(QMainWindow):
                 self._update_output_name(it)
         for th in self.active.values():
             th.conversion.cancel()
+        if self.join_job is not None:
+            if self.join_job.thread is not None:
+                self.join_job.thread.job.cancel()
+            elif not self.active:
+                self._drop_join()
         self.batch = []
         self._refresh_footer()
 
@@ -1446,6 +1601,15 @@ class MainWindow(QMainWindow):
 
     def _refresh_footer(self, finished: bool = False) -> None:
         self._label_duplicates()
+        self.export_panel.set_video_count(
+            sum(1 for it in self.items.values() if it.kind == "video" and it.state != "unsupported")
+        )
+        joining = self.export_panel.joining()
+        if joining != getattr(self, "_was_joining", False):  # 2nd video added / removed: names change
+            self._was_joining = joining
+            for it in self.items.values():
+                if it.state in ("ready", "waiting"):
+                    self._update_output_name(it)
         self._list_changed()
         self.sidebar.set_queue_info(
             any(it.info is not None and it.info.interlaced for it in self.items.values())
@@ -1462,6 +1626,16 @@ class MainWindow(QMainWindow):
         if self._convert_after_captions and not self.running:
             self.f_title.setText("Waiting for captions")
             self.f_sub.setText("You'll check them as soon as they're ready, then Listo converts.")
+        job = self.join_job
+        if self.running and job is not None and job.thread is not None:
+            self.f_bar.show()
+            self.f_bar.setValue(int(min(1.0, job.done_s / job.total_s) * 1000) if job.total_s else 0)
+            self.f_title.setText(f"Joining {len(job.parts)} clips into one video")
+            self.f_sub.setText("Putting the converted clips together, without re-encoding…")
+            self.btn_start.setEnabled(False)
+            self.btn_pause.hide()
+            self.btn_cancel.show()
+            return
         if self.running:
             batch = [self.items[i] for i in self.batch if i in self.items]
             total_w = sum(it.weight for it in batch) or 1.0
@@ -1500,8 +1674,9 @@ class MainWindow(QMainWindow):
         self.f_bar.hide()
         ready = [it for it in items if it.state in ("ready", "probing", "downloading")]
         self.btn_start.setEnabled(bool(ready))
+        verb = "Convert && Join" if self.export_panel.joining() else "Convert"  # (&& shows one &)
         self.btn_start.setText(
-            f"Convert {len(ready)} File{'s' if len(ready) != 1 else ''}" if ready else "Convert"
+            f"{verb} {len(ready)} File{'s' if len(ready) != 1 else ''}" if ready else "Convert"
         )
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary
@@ -1618,6 +1793,14 @@ class MainWindow(QMainWindow):
             th.conversion.cancel()
         for th in list(self.downloads.values()):
             th.job.cancel()
+        if self.tx is not None:
+            self.tx.cancel()  # ends the captions process
+            if not self.tx.wait(5000):
+                _ORPHANS.append(self.tx)
+        if self.join_job is not None and self.join_job.thread is not None:
+            self.join_job.thread.job.cancel()
+            if not self.join_job.thread.wait(15000):
+                _ORPHANS.append(self.join_job.thread)
         for th in list(self.active.values()) + list(self.downloads.values()):
             if not th.wait(15000):
                 _ORPHANS.append(th)  # never destroy a running QThread (that crashes on quit)

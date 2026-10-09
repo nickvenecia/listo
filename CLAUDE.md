@@ -18,6 +18,10 @@ listo/
     engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates, verify)
     video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here;
                    preview_plan(): one PNG frame through the exact same steps (used by the Preview window)
+    captions_worker.py  the separate low-priority process that runs captions.transcribe (multiprocessing "spawn",
+                   a Pipe of small messages); ping() is used by --smoke-test
+    join.py        "Join Into One Video": Conform (shape every part must match), Join (concat the parts, no
+                   re-encode, combined .srt, cleanup), mismatch() for Rewrap
     captions.py    speech to text (faster-whisper, model downloaded into data_dir()/models on first use; audio decoded
                    by our ffmpeg, PyAV left out via a stub), Transcript store (data_dir()/captions, keyed by path+size+mtime),
                    split_cues / wrap / for_output (trim shift) / to_srt
@@ -72,13 +76,25 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
-- Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins.
+- Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins → conform (join parts only).
 - `frame.frame_plan` also returns the picture area (fractions, without bars); burnin.plan keeps everything inside it.
 - Captions flow: as soon as captions are on and a clip with sound is read, MainWindow._sync_captions() queues it on the
-  background TranscribeThread (lowest priority, half the cores; progress only on the card's CC icon). Convert ->
+  background TranscribeThread, which hands clips to a separate process (core/captions_worker.py: nice'd, half the cores;
+  progress only on the card's CC icon). Never run speech-to-text on a thread in the app process: it holds Python's
+  lock and froze the window for 10-15 s. Entry points (listo/__main__.py, launcher.py) call
+  multiprocessing.freeze_support() and keep their code under `if __name__ == "__main__"` (spawn re-imports them).
+  Tests swap the process's target (TranscribeThread.target -> tests/speech_standin.py). Convert ->
   _captions_ready(): waits if some are still being made (then restarts itself), opens CaptionEditor for unchecked ones,
   then converts with Conversion(captions=cues). Previews use captions.sample_cues() until the real words exist. Captions are the last overlay
   (BurnPlan.captions: an ffconcat list of per-cue PNGs), so they sit on top of bars and burn-ins.
+- Caption check (ui/caption_editor.py) plays the clip with Qt's player (PySide6-Addons QtMultimedia, QGraphicsVideoItem)
+  and draws the caption with burnin.caption_still (the exact burned-in look) on top; the row on screen gets
+  property current=true. No player or a file it can't open -> still frames via PreviewTask. No sound output in
+  headless runs (offscreen): asking Qt for an audio device there can crash.
+- Join: Settings.join + 2+ videos (not GIF). MainWindow.start() makes a JoinJob; each clip converts as a "part"
+  (Conversion(target=hidden parts folder, conform=first clip's size/rate/48 kHz stereo; silent clips get a silent
+  track; per-file format overrides don't apply), then _start_join() runs JoinThread (core/join.Join: concat demuxer,
+  -c copy). Stop before gluing -> parts deleted and those clips back to ready.
 - Window = three steps: ① files (left, footer under them) | ② Convert To settings (sidebar.py) | ③ Export (export_panel.py),
   each topped by widgets.StepHeader. Sidebar groups:
   Image / Burn-In / Encoding (sidebar.GROUPS lists what each "N changed" counts). Labels are Title Case (DESIGN.md §7).

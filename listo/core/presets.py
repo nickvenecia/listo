@@ -285,6 +285,7 @@ class Settings:
     subfolder_name: str = "Listo"
     naming: str = "{name}"
     collision: str = "number"
+    join: bool = False  # all the video clips in a batch become one long video (core/join.py)
     keep_dates: bool = True
     lut_path: str = ""
     burn_timecode: bool = False
