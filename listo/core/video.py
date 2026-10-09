@@ -458,12 +458,21 @@ def build(
             # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
             # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
             pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
-            graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(1, "bin", "bout" if post else "vout")
+            between = None
+            if windows:  # tape glitches go after what's on the tape, before what the VCR draws (PLAY / STOP)
+                pix = vargs[vargs.index("-pix_fmt") + 1] if "-pix_fmt" in vargs else ""
+
+                def between(i: str, o: str) -> str:
+                    return tape.video_graph(windows, out_size, i, o, pix)
+
+            graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(
+                1, "bin", "bout" if post else "vout", between
+            )
             if post:
                 graph += f";[bout]{post}[vout]"
         else:
             graph = f"[0:{info.video_index}]" + ",".join(["setpts=PTS-STARTPTS", *vf]) + "[vout]"
-        if windows:  # tape glitches go over everything (they happen to the whole picture on tape)
+        if windows and burn.empty:  # tape glitches over the whole picture
             cut_at = graph.rfind("[vout]")
             graph = graph[:cut_at] + "[gin]" + graph[cut_at + len("[vout]") :]
             size = (conform.width, conform.height) if conform and conform.width else out_size

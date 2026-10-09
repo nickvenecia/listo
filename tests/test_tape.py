@@ -236,3 +236,21 @@ def test_color_bars_and_tone_screen(tmp_path: Path):
         capture_output=True, text=True,
     ).stderr  # fmt: skip
     assert "mean_volume: -2" in level  # the 1 kHz tone at about -20 dBFS (sine RMS is 3 dB under its peak)
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_glitch_tears_the_tape_but_not_play(tmp_path: Path):
+    """PLAY / STOP are drawn by the VCR on top of the tape picture: a glitch never tears them.
+    The timecode is on the tape, so it glitches with the picture."""
+    from listo.core import burnin, video
+
+    src = _clip(tmp_path / "a.mp4")
+    s = _vhs(video_preset="h264", burn_badge="play", tape_cut_glitch=True)
+    plan = video.build(str(src), str(tmp_path / "o.mp4"), probe(src), s, capabilities(), glitch_cut=True)
+    graph = plan.args[plan.args.index("-filter_complex") + 1]
+    play = next(la for la in plan.burn.layers if la.vcr)  # the PLAY layer
+    assert graph.index("geq=") < graph.index(f"overlay={play.x}:{play.y}")  # drawn after the glitch
+    tc = next(la for la in plan.burn.layers if not la.vcr)
+    assert graph.index(f"overlay={tc.x}:{tc.y}") < graph.index("geq=")  # timecode glitches with the tape
+    plan.cleanup()
+    assert burnin.Layer(Path("x"), 0, 0).vcr is False

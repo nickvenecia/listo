@@ -138,6 +138,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   screen the first 2 s are on it (make_blue badge="play"). STOP ■ (Settings.burn_stop, its own switch) shows from
   STOP_FRAMES_S before the end and then on the end screen for STOP_SHOWS_S, or for the last STOP_ALONE_S without a
   screen. Joined videos: only the first part gets play_until, only the last stop_at.
+  PLAY / STOP layers are Layer.vcr: BurnPlan.graph(between=) runs the glitch after the tape's layers (timecode,
+  date, REC) and before the VCR's and the captions, so the glitch never tears PLAY / STOP.
 - geq gotchas: W/H/X/Y are the CURRENT plane's (chroma is smaller), vars are st/ld 0-9 only, and pow() of a
   negative number is NaN (which turns the whole shift into garbage). The glitch runs in the encoder's own
   pixel format (format=<-pix_fmt> first) so 10-bit uses 0-1023. Don't use vibrato (NaN on some camcorder sound).

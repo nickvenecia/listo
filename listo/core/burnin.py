@@ -39,6 +39,9 @@ class Layer:
     cell: tuple[int, int] | None = None
     expr: str = ""
     enable: str = ""  # ffmpeg expression: show only while true (blinking, first seconds)
+    vcr: bool = (
+        False  # drawn by the VCR (PLAY / STOP), not recorded on the tape: tape glitches don't touch it
+    )
 
 
 @dataclass
@@ -71,9 +74,12 @@ class BurnPlan:
                 seen.append(layer.image)
         return seen
 
-    def graph(self, first_input: int, src_label: str, out_label: str) -> str:
+    def graph(self, first_input: int, src_label: str, out_label: str, between=None) -> str:
         """Filtergraph text that lays every layer over [src_label] and names the result [out_label].
-        Images are ffmpeg inputs first_input, first_input+1, ... in images() order."""
+        Images are ffmpeg inputs first_input, first_input+1, ... in images() order.
+        between(in_label, out_label) -> graph text, run after the tape's own layers (timecode, date,
+        REC) and before the VCR's (PLAY / STOP) and the captions: tape glitches go there, so they
+        tear what's on the tape but not what the VCR draws on top."""
         images = self.images()
         index = {img: first_input + i for i, img in enumerate(images)}
         uses: dict[Path, int] = {img: sum(1 for la in self.layers if la.image == img) for img in images}
@@ -88,23 +94,37 @@ class BurnPlan:
             else:
                 parts.append(f"[{index[img]}:v]format=rgba,split={n}" + "".join(f"[{x}]" for x in names))
         cur = src_label
-        if not self.layers and self.captions:
-            return self._caption_graph(first_input + len(images), cur, out_label, parts)
-        for k, la in enumerate(self.layers):
+        n = 0
+
+        def lay(la: Layer) -> None:
+            nonlocal cur, n
             pad = pads[la.image].pop(0)
             if la.cell:
                 cw, ch = la.cell
-                cropped = f"c{k}"
-                parts.append(f"[{pad}]crop={cw}:{ch}:0:'{ch}*({la.expr})'[{cropped}]")
-                pad = cropped
-            last = k == len(self.layers) - 1
-            nxt = out_label if last and not self.captions else f"b{k}"
+                parts.append(f"[{pad}]crop={cw}:{ch}:0:'{ch}*({la.expr})'[c{n}]")
+                pad = f"c{n}"
             when = f":enable='{la.enable}'" if la.enable else ""
-            parts.append(f"[{cur}][{pad}]overlay={la.x}:{la.y}:format=auto:shortest=1{when}[{nxt}]")
-            cur = nxt
+            parts.append(f"[{cur}][{pad}]overlay={la.x}:{la.y}:format=auto:shortest=1{when}[b{n}]")
+            cur = f"b{n}"
+            n += 1
+
+        for la in self.layers:
+            if not la.vcr:
+                lay(la)
+        if between is not None:
+            parts.append(between(cur, "tape"))
+            cur = "tape"
+        for la in self.layers:
+            if la.vcr:
+                lay(la)
         if self.captions:
             return self._caption_graph(first_input + len(images), cur, out_label, parts)
-        return ";".join(parts)
+        if cur == src_label:
+            parts.append(f"[{cur}]null[{out_label}]")
+        else:  # the last step writes straight to out_label
+            last = parts.pop()
+            parts.append(last[: last.rindex("[")] + f"[{out_label}]")
+        return ";".join(p for p in parts if p)
 
     def _caption_graph(self, index: int, cur: str, out_label: str, parts: list[str]) -> str:
         x, y = self.caption_xy
@@ -299,6 +319,7 @@ class _Builder:
             self.line(["PLAY ►"], look, "tl", mx, my)
             for la in self.layers[start:]:
                 la.enable = enable or "lt(t,4)*lt(mod(t,1),0.7)"
+                la.vcr = True
         elif kind == "stop":
             self.line(["STOP"], look, "tl", mx, my)
             ascent = look.font.getmetrics()[0]
@@ -316,6 +337,7 @@ class _Builder:
             self.layers.append(Layer(self._save(sq), x, y))
             for la in self.layers[start:]:
                 la.enable = enable
+                la.vcr = True
         elif kind == "rec":
             ascent = look.font.getmetrics()[0]
             top = look.font.getbbox("R", anchor="ls")[1]  # cap height (negative, from the baseline)

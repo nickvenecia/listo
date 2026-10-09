@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Tape glitches tear what's on the tape (picture, date, timecode, REC) but never PLAY / STOP or captions, which the VCR draws on top, like a real VCR
 - **STOP ■ at the End** is its own switch under the PLAY badge (VHS look): STOP comes up for the last moment of the video like pressing stop on a VCR, carrying on to the end screen if there is one
 - **Tape glitches look like real lost tracking** now, modelled on ntsc-rs (the open-source VHS emulator used as an After Effects / Resolve plugin): the lines wave sideways, a band of torn lines and snow rolls up the picture, the bottom bends (head switching), the picture hops, color slips and drops out, and the sound flutters, goes dull and crunches. It hits at once and settles, about a third of a second at each cut
 - **Start and end screen**: VCR blue, black, SMPTE color bars with a 1 kHz tone, or any color you pick
