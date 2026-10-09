@@ -92,7 +92,7 @@ class CaptionEditor(QDialog):
 
         body = hbox(spacing=SPACE_3)
         left = vbox(spacing=SPACE_2)
-        self.player = ClipPlayer(EDITOR_PIC_W, EDITOR_PIC_H)
+        self.player = ClipPlayer(EDITOR_PIC_W, EDITOR_PIC_H, captions_over_stills=True)
         self.player.position_changed.connect(self._followed)
         self.player.settled.connect(self._settled)
         self.player.clicked.connect(self.player.toggle)
@@ -155,7 +155,7 @@ class CaptionEditor(QDialog):
         first = self.cues[i][0] if self.cues[i] else None
         at = first.start + min(0.3, (first.end - first.start) / 2) if first else 0.0
         self.player.set_still(None)
-        self.player.set_message("Loading…")
+        self.player.set_message("Making a preview…")
         self.player.load(path, info, s, at)
         self.player.set_cues(self.cues[i])
 
@@ -239,9 +239,7 @@ class CaptionEditor(QDialog):
     def _edited(self, n: int, text: str) -> None:
         self.cues[self._i()][n].text = text
         self.changed.add(self._i())
-        self.player.set_cues(self.cues[self._i()])
-        if self.player.fallback:
-            self._settled(self.player.position())
+        self.player.set_cues(self.cues[self._i()])  # the caption layer is on top: shows at once
 
     def add_caption(self) -> None:
         """A new, empty caption where the clip is now, up to the next one (2 s at most)."""
@@ -266,17 +264,15 @@ class CaptionEditor(QDialog):
         self._rows(focus=cues.index(cue))
         self.player.seek(t + min(0.3, (end - t) / 2))
 
-    # ------------------------------------------------------------------ still frames (no player)
+    # ------------------------------------------------------------------ still frames
     def _settled(self, t: float) -> None:
-        """Only without a working player: show the exact frame with the captions burned in."""
-        if not self.player.fallback:
-            return
+        """Paused / moved: the exact frame (LUT, frame, burn-ins). Captions aren't burned into it: the
+        live caption layer sits on top, so edits show instantly."""
         i = self._i()
         _, path, info, s, _ = self.clips[i]
         self.seq += 1
         self._still_at = t
-        shown = [c for c in self.cues[i] if c.text.strip()]
-        self.pool.start(PreviewTask(self.seq, path, info, s, t, False, self.signals, captions=shown))
+        self.pool.start(PreviewTask(self.seq, path, info, s, t, False, self.signals, captions=None))
 
     def _got(self, seq: int, data: bytes, error: str) -> None:
         if seq != self.seq:

@@ -334,7 +334,7 @@ def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path,
             time.sleep(0.02)
         return cond()
 
-    assert wait(lambda: d.player.player.duration() > 0)
+    assert not d.player.is_open()  # nothing opens in Qt's player until Play
     d.player.seek(1.8)
     assert wait(lambda: d.current == 1)
     assert d.edits[1].property("current") and not d.edits[0].property("current")
@@ -350,6 +350,11 @@ def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path,
     d.add_caption()
     assert len(d.cues[0]) == 3 and abs(d.cues[0][2].start - 2.65) < 0.05
     d.edits[2].setPlainText("Added.")
+    d.player.seek(1.6)
+    d.player.play()  # the first Play opens the clip, from where you are
+    assert wait(lambda: d.player.is_playing())
+    assert d.player.position() >= 1.5
+    d.player.pause()
     d._accept()
     assert [c.text for c in captions.load(clip).cues] == ["Second one.", "Added."]
 

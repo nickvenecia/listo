@@ -96,6 +96,9 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   the exact result frame (owners render on `settled`, set_still(pm, at)); playing = the clip as shot + captions.
   No player or a file it can't open -> still frames only (`fallback`). No sound output in headless runs
   (offscreen): asking Qt for an audio device there can crash. Call release() when a dialog closes.
+  Qt's player opens a clip only on the first Play (until then the still frames are the picture), and hardware
+  decoding is off for playback (QT_FFMPEG_DECODING_HW_DEVICE_TYPES="," in app.main / player.py): Qt's player
+  segfaulted on MPEG-2 .MOD on a Mac after VideoToolbox refused it. Hard crashes go to crash.log (faulthandler).
 - Changing caption_model / caption_language redoes captions made another way (MainWindow._needs_redo: Transcript.model
   / .language differ). Hand-edited ones only after a Yes (MainWindow._redo_edited); the old captions stay until the new arrive.
 - Joined videos are named with {name} = "FIRST-LAST" (join.joined_name), every naming style still applies.

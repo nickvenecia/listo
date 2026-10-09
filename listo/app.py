@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from . import APP_NAME, __version__
 from .core.log import get_logger, setup_logging
-from .core.paths import data_dir
+from .core.paths import data_dir, log_dir
 from .ui import theme
 from .ui.widgets import ComboItemDelegate
 
@@ -156,6 +156,23 @@ class ListoApp(QApplication):
         return super().event(e)
 
 
+_crash_file = None
+
+
+def _crash_log() -> None:
+    """If Listo ever crashes hard (a crash inside Qt or ffmpeg libraries, not a Python error), write
+    where it was to crash.log next to listo.log, so it can be found and fixed."""
+    global _crash_file
+    import faulthandler
+
+    try:
+        log_dir().mkdir(parents=True, exist_ok=True)
+        _crash_file = open(log_dir() / "crash.log", "a", encoding="utf-8")  # noqa: SIM115 — open for the app's life
+        faulthandler.enable(_crash_file, all_threads=True)
+    except OSError:
+        log.debug("no crash log", exc_info=True)
+
+
 def main() -> int:
     if sys.platform == "win32":
         try:  # own taskbar icon instead of python's
@@ -166,6 +183,10 @@ def main() -> int:
             log.debug("couldn't set the Windows app id", exc_info=True)
     setup_logging()
     log.info("Listo %s starting (%s)", __version__, sys.platform)
+    _crash_log()
+    # Playback inside Listo decodes on the processor: Qt's player crashed on MPEG-2 camcorder clips when
+    # the Mac's hardware decoder refused them ("," = no hardware decoders; see ui/player.py).
+    os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",")
     app = ListoApp(sys.argv)
     smoke = "--smoke-test" in sys.argv
     launch_files = [

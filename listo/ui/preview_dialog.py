@@ -99,7 +99,7 @@ class PreviewDialog(QDialog):
 
     def _render(self, at: float) -> None:
         """The exact frame where the player stopped (the untouched one for Original, if there's no player)."""
-        if self._original() and not self.player.fallback:
+        if self._original() and self.player.is_open():
             self.player.set_still(None)  # the paused clip is the original
             return
         _, path, info, s, cues = self._clip()

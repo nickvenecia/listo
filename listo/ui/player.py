@@ -11,6 +11,11 @@ While paused you see the real result (LUT, frame, burn-ins, captions); while pla
 with its captions over it. Owners listen to `settled(t)` (paused or moved somewhere new) and call
 set_still() with the frame for that moment.
 
+Qt's player only opens the clip when Play is pressed (until then, scrubbing shows still frames).
+That keeps decoders closed while you're just looking, and keeps Qt's player away from files you
+never play (it crashed on some MPEG-2 camcorder clips when the Mac's hardware decoder refused
+them, so hardware decoding is also switched off for playback: see app.py).
+
 Without Qt's player (or for a file it can't open) the widget becomes a still-frame viewer with a
 scrubber: `fallback` is True, the play button hides, and `settled` still drives the frames.
 """
@@ -18,6 +23,7 @@ scrubber: `fallback` is True, the play button hides, and `settled` still drives 
 from __future__ import annotations
 
 import io
+import os
 
 from PySide6.QtCore import QRectF, QSize, QSizeF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPixmap
@@ -39,6 +45,11 @@ from . import theme
 from .tokens import ICON, MUTED, SPACE_2, TEXT_SM, WELL
 from .trim_dialog import fmt_time
 from .widgets import hbox, vbox
+
+# No hardware decoding for playback: Qt's player crashed on MPEG-2 (.MOD) when the Mac's decoder
+# refused it. "," = an empty list (Qt docs: Advanced FFmpeg Configuration). Must be set before Qt
+# opens its first decoder; app.main() sets it at start-up too.
+os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",")
 
 try:  # Qt's player (PySide6-Addons)
     from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
@@ -88,7 +99,11 @@ class ClipPlayer(QWidget):
     settled = Signal(float)  # paused somewhere new: owners can show the exact result frame there
     clicked = Signal()
 
-    def __init__(self, width: int, height: int, parent: QWidget | None = None):
+    def __init__(
+        self, width: int, height: int, parent: QWidget | None = None, captions_over_stills: bool = False
+    ):
+        """captions_over_stills: the owner renders still frames without captions and the live caption
+        layer sits on top (the caption check: edits show instantly)."""
         super().__init__(parent)
         self.W, self.H = width, height
         self.path = ""
@@ -100,6 +115,7 @@ class ClipPlayer(QWidget):
         self.fallback = not HAS_PLAYER
         self._pos = 0.0  # position when there's no player
         self._pending: float | None = None
+        self._open = False  # Qt's player has this clip open (only after Play)
         self._autoplay = False
         self._shown: tuple | None = None
         self._still_at: float | None = None  # where the still frame was taken (None = any time)
@@ -120,7 +136,7 @@ class ClipPlayer(QWidget):
         self.stage.setScene(self.scene)
         self.overlay = QGraphicsPixmapItem()
         self.overlay.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        self.overlay.setZValue(1)
+        self.overlay.setZValue(2.5 if captions_over_stills else 1)
         self.scene.addItem(self.overlay)
         self.still = QGraphicsPixmapItem()
         self.still.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
@@ -201,21 +217,41 @@ class ClipPlayer(QWidget):
         self._layout()
         self._pos = at
         self.fallback = not HAS_PLAYER
-        if self.player is not None:
-            self.player.stop()
-            self._pending, self._autoplay = at, play
-            self.player.setSource(QUrl.fromLocalFile(path))
+        self._close()
+        self._duration(int(info.duration * 1000))
+        self._sync_slider(int(at * 1000))
+        if play:
+            self._open_at(at, autoplay=True)
         else:
-            self._duration(int(info.duration * 1000))
             self._moved()
         self._state()
+
+    def _open_at(self, at: float, autoplay: bool) -> None:
+        if self.player is None or self.fallback or not self.path:
+            return
+        self._open = True
+        self._pending, self._autoplay = at, autoplay
+        self.player.setSource(QUrl.fromLocalFile(self.path))
+
+    def _close(self) -> None:
+        if self.player is not None and self._open:
+            self.player.stop()
+            self.player.setSource(QUrl())
+        self._open = False
+        self._pending = None
+
+    def is_open(self) -> bool:
+        """Qt's player has the clip open (it was played)."""
+        return self._live()
+
+    def _live(self) -> bool:
+        """Qt's player has the clip open and is in charge of the position."""
+        return self.player is not None and not self.fallback and self._open
 
     def release(self) -> None:
         """Let go of the file (close the dialog / quit)."""
         self._ticker.stop()
-        if self.player is not None:
-            self.player.stop()
-            self.player.setSource(QUrl())
+        self._close()
 
     def set_settings(self, settings: Settings) -> None:
         self.s = settings
@@ -255,7 +291,7 @@ class ClipPlayer(QWidget):
         """Show the exact frame only while paused where it was taken (a moved player shows the clip
         until the new frame arrives); without a player it's the only picture, so always."""
         near = self._still_at is None or abs(self._still_at - self.position()) < 0.08
-        self.still.setVisible(self.fallback or (not self.is_playing() and near))
+        self.still.setVisible(self.fallback or not self._open or (not self.is_playing() and near))
 
     def set_message(self, text: str) -> None:
         self.message.setText(text)
@@ -264,15 +300,11 @@ class ClipPlayer(QWidget):
 
     # ------------------------------------------------------------------ control
     def is_playing(self) -> bool:
-        return (
-            self.player is not None
-            and not self.fallback
-            and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
-        )
+        return self._live() and self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
 
     def position(self) -> float:
-        if self.player is not None and not self.fallback:
-            return self.player.position() / 1000
+        if self._live():
+            return self._pending if self._pending is not None else self.player.position() / 1000
         return self._pos
 
     def play(self) -> None:
@@ -280,6 +312,9 @@ class ClipPlayer(QWidget):
             return
         if self.range and self.position() >= self.range[1] - 0.05:
             self.seek(self.range[0])  # at the end of the trimmed part: start it again
+        if not self._open:
+            self._open_at(self._pos, autoplay=True)  # the clip opens on the first Play
+            return
         self.player.play()
 
     def pause(self) -> None:
@@ -295,12 +330,12 @@ class ClipPlayer(QWidget):
     def seek(self, t: float) -> None:
         if self.info is not None and self.info.duration:
             t = min(max(0.0, t), self.info.duration)
-        if self.player is None or self.fallback:
-            self._pos = t
+        self._pos = t
+        if not self._live():
             self._sync_slider(int(t * 1000))
             self._moved()
             return
-        if self.player.mediaStatus() in (
+        if self._pending is not None or self.player.mediaStatus() in (
             QMediaPlayer.MediaStatus.LoadingMedia,
             QMediaPlayer.MediaStatus.NoMedia,
         ):
@@ -315,6 +350,7 @@ class ClipPlayer(QWidget):
             self.message.setText("")
         if status == QMediaPlayer.MediaStatus.LoadedMedia and self._pending is not None:
             t, self._pending = self._pending, None
+            self._pos = t
             self.player.setPosition(int(t * 1000))
             if self._autoplay:
                 self._autoplay = False
@@ -327,6 +363,9 @@ class ClipPlayer(QWidget):
 
     def _error(self, _err, message: str) -> None:
         """This file won't play here: still frames only."""
+        pos = self.position()
+        self._close()
+        self._pos = pos
         self.fallback = True
         self._duration(int((self.info.duration if self.info else 0) * 1000))
         self._state()
@@ -357,10 +396,11 @@ class ClipPlayer(QWidget):
         self._tick()
 
     def _slid(self, ms: int) -> None:
-        if self.player is not None and not self.fallback:
+        self._pos = ms / 1000
+        if self._live() and self._pending is None:
             self.player.setPosition(ms)
-        else:
-            self._pos = ms / 1000
+        elif self._live():
+            self._pending = ms / 1000
         self._moved()
 
     def _moved(self) -> None:
