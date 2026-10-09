@@ -118,8 +118,9 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
   starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
-- Joined videos: join.running_timecodes() gives clips without timecode a tape-style running counter (resets on a new
-  recording date); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for the burn-in and -timecode).
+- Joined videos: join.running_timecodes() gives clips without timecode a tape-style running counter through the whole
+  joined video (one Convert = one tape, from 0); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for
+  the burn-in and -timecode). Only the first part keeps the PLAY badge (REC stays on every part).
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
 - presets.SESSION_ONLY (captions, join) reset to off at every launch; everything else in Settings is remembered.
 - ClipPlayer.step(-1/+1) = the previous / next clip arrows; owners call set_steps(has_prev, has_next).

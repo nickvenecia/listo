@@ -1,7 +1,7 @@
 # Changelog
 
 ## Unreleased
-- Joined videos: clips without their own timecode (camcorder .MOD, phones) get a counter that keeps running from clip to clip like a tape, starting over at 00:00:00:00 on a new recording date; clips with real timecode keep theirs
+- Joined videos: clips without their own timecode (camcorder .MOD, phones) get a counter that keeps running from clip to clip like a tape, through the whole joined video (each Convert is a new tape, from 00:00:00:00); clips with real timecode keep theirs. The VHS PLAY badge blinks only at the start of the joined video
 - Space plays and pauses in every player (Export preview, Preview window, Check Captions), even when a button or dropdown has focus
 - Player clocks read like time (00:18 / 07:29, hours when needed)
 - Previous / next clip arrows beside Play in the Export preview, the Preview window and Check Captions; in the Export preview they also select that clip in the list, and a playing clip keeps playing

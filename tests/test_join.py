@@ -169,8 +169,8 @@ def test_joined_name_covers_first_to_last():
 
 
 def test_joined_clips_without_timecode_count_on_like_a_tape():
-    """No timecode in the files (camcorder .MOD, phones): the counter keeps running from clip to
-    clip, and starts over on a new recording date (a new day = a new tape). Real timecode is kept."""
+    """One Convert = one tape: clips without timecode (camcorder .MOD, phones) continue the counter
+    from clip to clip through the whole joined video, across days too. Real timecode is kept."""
     from datetime import datetime
 
     from listo.core.probe import MediaInfo
@@ -180,14 +180,19 @@ def test_joined_clips_without_timecode_count_on_like_a_tape():
                          created=datetime(2024, 5, day, 12, 0))  # fmt: skip
 
     tcs = join.running_timecodes(
-        [("/a.MOD", clip(26), 60.0), ("/b.MOD", clip(26), 30.0), ("/c.MOD", clip(27), 10.0),
-         ("/d.MOV", clip(27, "10:00:00;00"), 5.0), ("/e.MOD", clip(27), 5.0)]
-    )  # fmt: skip
+        [
+            (clip(26), 60.0),
+            (clip(26), 30.0),
+            (clip(27), 10.0),
+            (clip(27, "10:00:00;00"), 5.0),
+            (clip(27), 5.0),
+        ]
+    )
     assert tcs[0] == "00:00:00;00"
     assert tcs[1] == "00:00:59;29"  # one real minute later (29.97 drop-frame keeps to the clock)
-    assert tcs[2] == "00:00:00;00"  # the next day starts over
+    assert tcs[2] == "00:01:30;00"  # the next day carries on (same event, same tape)
     assert tcs[3] == ""  # a clip with real timecode keeps its own
-    assert tcs[4] == "00:00:15;00"  # and the counter ran on through it
+    assert tcs[4] == "00:01:44;29"  # and the counter ran on through it
 
 
 def test_running_timecode_is_burned_and_stored(tmp_path: Path):
@@ -196,3 +201,50 @@ def test_running_timecode_is_burned_and_stored(tmp_path: Path):
     r = Conversion(str(a), probe(a), s, capabilities(), set(), timecode="00:01:00;02").run()
     assert r.status == "done", r.message
     assert "00:01:00;02" in r.command  # the file's own timecode track starts there too
+
+
+def test_play_badge_only_starts_the_joined_video(tmp_path: Path, monkeypatch):
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.export_panel as ep
+    import listo.ui.main_window as mw
+    import listo.ui.sidebar as sb
+
+    ini = str(tmp_path / "t.ini")
+    for mod in (mw, sb, ep):
+        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
+    badges, tcs = [], []
+    real = mw.Conversion
+
+    def spy(*a, **k):
+        badges.append(a[2].burn_badge)
+        tcs.append(k.get("timecode", ""))
+        return real(*a, **k)
+
+    monkeypatch.setattr(mw, "Conversion", spy)
+    app = QApplication.instance() or QApplication([])
+    src = tmp_path / "src"
+    src.mkdir()
+    clips = [_clip(src / f"{n}.mp4", "320x240", "30000/1001", 1) for n in "abc"]
+    w = mw.MainWindow()
+    s = w.settings
+    s.video_preset, s.burn_timecode, s.burn_style, s.burn_badge, s.join = "h264", True, "vhs", "play", True
+    w.add_paths([str(c) for c in clips])
+    end = time.monotonic() + 60
+    while not all(it.state == "ready" for it in w.items.values()) and time.monotonic() < end:
+        app.processEvents()
+        time.sleep(0.02)
+    w.start()
+    end = time.monotonic() + 120
+    while w.running and time.monotonic() < end:
+        app.processEvents()
+        time.sleep(0.02)
+    assert badges == ["play", "none", "none"]  # PLAY blinks once, at the start
+    assert tcs[0] == "00:00:00;00" and tcs[1] and tcs[2] > tcs[1]  # one tape, the counter runs on
+    w.close()
+    app.processEvents()

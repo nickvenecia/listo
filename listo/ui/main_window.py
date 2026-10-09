@@ -1487,7 +1487,7 @@ class MainWindow(QMainWindow):
                     ids=[it.id for it in vids], settings=s, conform=join.conform_for(vids[0].info, s),
                     folder=join.parts_folder(vids[0].path, s),
                 )  # fmt: skip
-                tcs = join.running_timecodes([(it.path, it.info, it.length) for it in vids])
+                tcs = join.running_timecodes([(it.info, it.length) for it in vids])
                 self.join_job.timecodes = {it.id: tc for it, tc in zip(vids, tcs, strict=True) if tc}
         self.batch = []
         self.running, self.paused = True, False
@@ -1560,6 +1560,8 @@ class MainWindow(QMainWindow):
             # One part of the joined video: same settings for all, a fixed hidden path, matched shape.
             s = job.settings.copy()
             s.caption_srt = s.keep_dates = False  # the joined video gets these
+            if job.ids.index(it.id) > 0 and s.burn_badge == "play":
+                s.burn_badge = "none"  # PLAY blinks once, at the start of the joined video (REC stays on)
             cues = (
                 it.transcript.cues_for(s.caption_words, s.caption_lines)
                 if (s.captions and it.transcript)
