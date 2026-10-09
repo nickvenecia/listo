@@ -1052,7 +1052,7 @@ class MainWindow(QMainWindow):
         if it is None:
             s, path, info = self.settings, sample_clip_if_made(), None
             key: object = ("sample",)
-            at, rng = 1.5, None
+            at, rng = 0.0, None
             if path:
                 info = self._sample_info(path)
         else:
@@ -1060,12 +1060,7 @@ class MainWindow(QMainWindow):
             key = (it.id, it.trim)
             start, length = (it.trim[0], it.trim[1] - it.trim[0]) if it.trim else (0.0, info.duration)
             rng = (start, start + length) if it.trim else None
-            at = start + min(length / 3, 10.0)
-            cues = self._clip_cues(it, s)
-            if s.captions and it.transcript is not None:  # open on a moment with a caption on screen
-                inside = [c for c in cues or [] if c.end > start and c.start < start + length]
-                if inside:
-                    at = max(start, inside[0].start) + min(0.3, (inside[0].end - inside[0].start) / 2)
+            at = start  # players open on the first frame (of the trimmed part)
         cues = self._clip_cues(it, s)
         if key != self._live_loaded and path and info is not None:
             self._live_loaded = key

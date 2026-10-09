@@ -87,7 +87,7 @@ class PreviewDialog(QDialog):
         )
         self.player.set_still(None)
         self.player.set_message("Making a preview…")
-        at = 0.0 if play else min(info.duration / 3, 10)  # a moment in, not the black first frame
+        at = 0.0  # every player opens on the first frame
         self.player.load(path, info, s, at, play=play)
         self.player.set_cues(cues)
         self.player.show_captions(not self._original())

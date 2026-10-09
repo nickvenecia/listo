@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Every player (Export preview, Preview window, caption check, double-click) opens on the first frame instead of partway in
 - **Much faster with big lists**: reading 400 clips used to keep the window busy for over 3 minutes; now about 10 seconds, and it stays responsive the whole time
 - **Debug console**: the terminal icon in the bottom bar (or Help › Open Debug Console) opens a terminal window that shows everything Listo does as it happens: each file, the exact ffmpeg command, how long it took, and what went wrong if something fails. Run from a terminal, Listo prints the same there
 - New app icon: the "listo." wordmark

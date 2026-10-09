@@ -152,8 +152,7 @@ class CaptionEditor(QDialog):
         lang = LANGUAGE_NAMES.get(t.language, t.language.upper() if t.language else "")
         self.heard.setText(f"Heard: {lang}" if lang else "")
         self._rows()
-        first = self.cues[i][0] if self.cues[i] else None
-        at = first.start + min(0.3, (first.end - first.start) / 2) if first else 0.0
+        at = 0.0  # from the first frame, like every player in Listo
         self.player.set_still(None)
         self.player.set_message("Making a preview…")
         self.player.load(path, info, s, at)
