@@ -65,13 +65,13 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_dialog
+    import listo.ui.export_panel
     import listo.ui.main_window
     import listo.ui.sidebar
 
     # Never touch the real Listo preferences on this computer.
     ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.main_window, listo.ui.sidebar, listo.ui.export_dialog):
+    for mod in (listo.ui.main_window, listo.ui.sidebar, listo.ui.export_panel):
         if hasattr(mod, "QSettings"):
             monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
 
@@ -107,9 +107,9 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     assert sb.burn_badge.isVisibleTo(sb)  # VHS style + a burn-in on
     w._fill_trash_menu()
     assert [a.text() for a in w.trash_menu.actions() if a.text()] == [
-        "Remove selected",
-        "Clear finished",
-        "Clear all",
+        "Remove Selected",
+        "Clear Finished",
+        "Clear All",
     ]
     w.close()
     app.processEvents()

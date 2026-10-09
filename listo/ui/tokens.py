@@ -48,7 +48,8 @@ WEIGHT_SEMIBOLD = 600  # titles, labels, primary button
 WEIGHT_BOLD = 700  # wordmark, dialog titles
 
 # ---------------------------------------------------------------- layout
-SIDEBAR_W = 310
+SIDEBAR_W = 310  # settings panel (left)
+EXPORT_W = 330  # export panel (right): live preview, where, name, Convert
 SEG_INSET = 2  # gap between a segmented control's frame and its buttons
 THUMB_W, THUMB_H = 112, 63  # 16:9 file thumbnails
 CARD_H = THUMB_H + 2 * SPACE_2
@@ -62,8 +63,8 @@ CAPTION_ROW_H = 2 * CONTROL_H - SPACE_3  # one caption's text box: two lines of 
 TIME_FIELD_W = 92  # h:mm:ss.s entry boxes
 LINK_BOX_W = 380  # the link field in the drop zone
 DETAILS_SIZE = (640, 420)  # the file details dialog
-WINDOW_SIZE = (1120, 720)
-WINDOW_MIN = (880, 560)
+WINDOW_SIZE = (1360, 820)
+WINDOW_MIN = (1180, 620)
 DIALOG_W = 480
 
 # ---------------------------------------------------------------- colors (dark theme)

@@ -187,6 +187,67 @@ def test_convert_makes_then_checks_captions_first(tmp_path: Path, monkeypatch):
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monkeypatch):
+    """Captions start on their own as soon as the clip is in the list (no Convert needed)."""
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication, QDialog
+
+    import listo.ui.caption_editor as ed
+    import listo.ui.main_window as mw
+    import listo.ui.sidebar as sb
+
+    ini = str(tmp_path / "t.ini")
+    for mod in (mw, sb):
+        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
+    monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
+
+    class FakeModel:
+        def transcribe(self, audio, **kw):
+            w = [
+                types.SimpleNamespace(start=0.2, end=0.6, word=" Hello"),
+                types.SimpleNamespace(start=0.7, end=1.1, word=" there."),
+            ]
+            return iter([types.SimpleNamespace(end=1.1, words=w)]), types.SimpleNamespace(language="en")
+
+    monkeypatch.setattr(captions, "_model", lambda name, on_status: FakeModel())
+    opened = []
+
+    def fake_exec(self):
+        opened.append([c[0] for c in self.clips])
+        self.cues[0][0].text = "Hello there, fixed."
+        self.changed.add(0)
+        self._accept()
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ed.CaptionEditor, "exec", fake_exec)
+    app = QApplication.instance() or QApplication([])
+    clip = tmp_path / "talk.mov"
+    ff("-f", "lavfi", "-i", "color=c=gray:s=320x240:d=2", "-f", "lavfi", "-i", "sine=d=2", "-shortest",
+       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip))  # fmt: skip
+    w = mw.MainWindow()
+    w.settings.captions, w.settings.caption_srt, w.settings.verify = True, True, False
+    w.settings.naming = "{name}_cc"
+    w.add_paths([str(clip)])
+
+    def wait(cond, timeout=60):
+        end = time.monotonic() + timeout
+        while not cond() and time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.02)
+        return cond()
+
+    assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
+    assert wait(lambda: all(it.transcript is not None for it in w.items.values()))
+    assert not opened and not w.running  # nothing popped up, nothing converted
+    w.close()
+    app.processEvents()
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_preview_task_draws_captions(tmp_path: Path):
     import os
 

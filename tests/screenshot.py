@@ -61,11 +61,11 @@ def main() -> None:
         steps.append((300, shot("02-queue")))
 
         def save_shot():
-            d = w.export_dialog
+            d = w.export_panel
             d.styles.setCurrentIndex(d.styles.findData("custom"))
             d.show()
             QTimer.singleShot(
-                400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide())
+                400, lambda: (d.grab().save(str(out / "03-export-panel.png")), print("saved 03"))
             )
 
         steps.append((100, save_shot))
@@ -84,7 +84,7 @@ def main() -> None:
                 }
             )
             w.sidebar.reload()
-            w.export_dialog.reload()
+            w.export_panel.reload()
             w.sidebar._store_recipe("Client review")
             w._settings_changed()
 

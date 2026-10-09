@@ -27,7 +27,7 @@ class VideoPreset:
     group: str = "share"  # edit | share | extract  (how the Video tab groups them)
 
 
-QUALITY = (Choice("high", "High"), Choice("standard", "Standard"), Choice("small", "Small file"))
+QUALITY = (Choice("high", "High"), Choice("standard", "Standard"), Choice("small", "Small File"))
 
 VIDEO_PRESETS: tuple[VideoPreset, ...] = (
     VideoPreset(
@@ -114,7 +114,7 @@ VIDEO_PRESETS: tuple[VideoPreset, ...] = (
     ),
     VideoPreset(
         "proxy",
-        "Edit proxy",
+        "Edit Proxy",
         "Half-res ProRes Proxy, goes in a Proxy folder · .mov",
         "mov",
         "proxy",
@@ -135,14 +135,14 @@ VIDEO_PRESETS: tuple[VideoPreset, ...] = (
         "Silent looping clip · .gif",
         "gif",
         "gif",
-        variants=(Choice("480", "480 wide"), Choice("640", "640 wide"), Choice("960", "960 wide")),
+        variants=(Choice("480", "480 Wide"), Choice("640", "640 Wide"), Choice("960", "960 Wide")),
         variant_label="Size",
         default_variant="640",
         needs=("gif",),
     ),
     VideoPreset(
         "audio",
-        "Audio only",
+        "Audio Only",
         "Pull the sound out (uses the Audio tab's format)",
         "",
         "audio",
@@ -157,7 +157,7 @@ VIDEO_PRESETS = tuple(
         key=lambda p: _ORDER.index(p.key),
     )
 )
-VIDEO_GROUPS = (("edit", "For editing"), ("share", "For sharing"), ("extract", "Pull out"))
+VIDEO_GROUPS = (("edit", "For Editing"), ("share", "For Sharing"), ("extract", "Pull Out"))
 VIDEO_BY_KEY = {p.key: p for p in VIDEO_PRESETS}
 
 
@@ -201,17 +201,17 @@ PHOTO_FORMATS: tuple[PhotoFormat, ...] = (
 PHOTO_BY_KEY = {p.key: p for p in PHOTO_FORMATS}
 
 RESIZE_VIDEO = (
-    Choice("orig", "Original size"),
+    Choice("orig", "Original Size"),
     Choice("2160", "4K · 2160"),
     Choice("1440", "1440"),
     Choice("1080", "1080"),
     Choice("720", "720"),
     Choice("540", "540"),
-    Choice("half", "Half size"),
+    Choice("half", "Half Size"),
 )
 RESIZE_PHOTO = (
-    Choice("orig", "Original size"),
-    Choice("6000", "6000 px long edge"),
+    Choice("orig", "Original Size"),
+    Choice("6000", "6000 px Long Edge"),
     Choice("4000", "4000 px"),
     Choice("3000", "3000 px"),
     Choice("2048", "2048 px"),
@@ -219,17 +219,17 @@ RESIZE_PHOTO = (
     Choice("1080", "1080 px"),
 )
 DEINTERLACE = (
-    Choice("smooth", "Deinterlace — smooth (59.94p)"),
-    Choice("film", "Deinterlace — film look (29.97p)"),
-    Choice("off", "Leave interlaced"),
+    Choice("smooth", "Deinterlace — Smooth (59.94p)"),
+    Choice("film", "Deinterlace — Film Look (29.97p)"),
+    Choice("off", "Leave Interlaced"),
 )
 DESTINATIONS = (
-    Choice("source", "Next to the original"),
-    Choice("subfolder", "In a subfolder next to the original"),
-    Choice("folder", "In one folder…"),
+    Choice("source", "Next to the Original"),
+    Choice("subfolder", "In a Subfolder Next to the Original"),
+    Choice("folder", "In One Folder…"),
 )
 DESQUEEZE = (
-    Choice("1", "No desqueeze"),
+    Choice("1", "No Desqueeze"),
     Choice("1.33", "Desqueeze 1.33×"),
     Choice("1.5", "Desqueeze 1.5×"),
     Choice("1.55", "Desqueeze 1.55×"),
@@ -239,31 +239,31 @@ DESQUEEZE = (
     Choice("2", "Desqueeze 2×"),
 )
 ASPECT_CHOICES = (
-    Choice("orig", "Keep the original shape"),
-    Choice("16:9", "16:9 · widescreen"),
+    Choice("orig", "Keep the Original Shape"),
+    Choice("16:9", "16:9 · Widescreen"),
     Choice("8:5", "8:5 · 16:10"),
-    Choice("4:3", "4:3 · classic TV"),
-    Choice("1:1", "1:1 · square"),
-    Choice("4:5", "4:5 · Instagram portrait"),
-    Choice("9:16", "9:16 · vertical"),
-    Choice("1.85:1", "1.85:1 · flat"),
+    Choice("4:3", "4:3 · Classic TV"),
+    Choice("1:1", "1:1 · Square"),
+    Choice("4:5", "4:5 · Instagram Portrait"),
+    Choice("9:16", "9:16 · Vertical"),
+    Choice("1.85:1", "1.85:1 · Flat"),
     Choice("2:1", "2:1"),
-    Choice("2.35:1", "2.35:1 · scope"),
-    Choice("2.39:1", "2.39:1 · scope (modern)"),
+    Choice("2.35:1", "2.35:1 · Scope"),
+    Choice("2.39:1", "2.39:1 · Scope (Modern)"),
 )
 ASPECT_FIT = (
-    Choice("crop", "Crop to fill"),
-    Choice("bars", "Add black bars"),
-    Choice("matte", "Cinema bars on top"),
+    Choice("crop", "Crop to Fill"),
+    Choice("bars", "Add Black Bars"),
+    Choice("matte", "Cinema Bars on Top"),
 )
 BURN_STYLES = (
     Choice("clean", "Clean"),
-    Choice("vhs", "VHS camcorder"),
+    Choice("vhs", "VHS Camcorder"),
 )
 COLLISIONS = (
-    Choice("number", "Add a number"),
-    Choice("skip", "Skip that file"),
-    Choice("replace", "Replace it"),
+    Choice("number", "Add a Number"),
+    Choice("skip", "Skip That File"),
+    Choice("replace", "Replace It"),
 )
 
 

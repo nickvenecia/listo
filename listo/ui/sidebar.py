@@ -39,7 +39,7 @@ from ..core.presets import (
 )
 from ..core.tools import Capabilities
 from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import Disclosure, Section, Segmented, combo, disable_item, hbox, set_combo, vbox
+from .widgets import Disclosure, FitScroll, Section, Segmented, combo, disable_item, hbox, set_combo, vbox
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
@@ -62,18 +62,9 @@ AUDIO_TIPS = {
 }
 
 
-class _FitScroll(QScrollArea):
-    """Scroll area whose content always matches the visible width (no clipped edges)."""
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        if self.widget():
-            self.widget().setFixedWidth(self.viewport().width())
-
-
 def _page() -> tuple[QScrollArea, QVBoxLayout]:
     """A scrolling settings page. Sections go in it; the layout spaces them SPACE_3 apart."""
-    area = _FitScroll()
+    area = FitScroll()
     area.setWidgetResizable(True)
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     inner = QWidget()
@@ -206,9 +197,9 @@ class Sidebar(QFrame):
         self.v_aspect.currentIndexChanged.connect(self._aspect_picked)
         self.v_fit = combo(
             [
-                ("crop", "Crop to fill", "Fills the new shape, trimming the edges that don't fit (centered)"),
-                ("bars", "Add black bars", "Keeps the whole picture; the video becomes the new shape"),
-                ("matte", "Cinema bars on top", "Keeps the video's size and draws bars over the picture"),
+                ("crop", "Crop to Fill", "Fills the new shape, trimming the edges that don't fit (centered)"),
+                ("bars", "Add Black Bars", "Keeps the whole picture; the video becomes the new shape"),
+                ("matte", "Cinema Bars on Top", "Keeps the video's size and draws bars over the picture"),
             ],
             self.s.aspect_fit,
         )
@@ -217,7 +208,7 @@ class Sidebar(QFrame):
             self.sec_frame.add(c)
         self.matte_row = QWidget()
         mr = hbox(self.matte_row, spacing=SPACE_3)
-        lbl = QLabel("Bar opacity")
+        lbl = QLabel("Bar Opacity")
         lbl.setObjectName("Muted")
         self.matte_q = QSlider(Qt.Orientation.Horizontal)
         self.matte_q.setRange(0, 100)
@@ -233,7 +224,7 @@ class Sidebar(QFrame):
         mr.addWidget(self.matte_val)
         self.sec_frame.add(self.matte_row)
 
-        self.sec_deint = Section("Interlaced footage")
+        self.sec_deint = Section("Interlaced Footage")
         self.v_deint = combo([(c.key, c.label, "") for c in DEINTERLACE], self.s.deinterlace)
         self.v_deint.setToolTip(
             "Only affects footage that's actually interlaced (old camcorders, broadcast, 1080i)"
@@ -248,13 +239,13 @@ class Sidebar(QFrame):
         self.lut.activated.connect(self._lut_picked)
         self.sec_lut.add(self.lut)
 
-        self.sec_burn = Section("Burn in")
+        self.sec_burn = Section("Clip Info")
         self.burn_tc = _checkbox("Timecode", self.s.burn_timecode, lambda v: self._burn("burn_timecode", v))
         self.burn_name = _checkbox(
-            "File name", self.s.burn_filename, lambda v: self._burn("burn_filename", v)
+            "File Name", self.s.burn_filename, lambda v: self._burn("burn_filename", v)
         )
         self.burn_dt = _checkbox(
-            "Date && time",
+            "Date && Time",
             self.s.burn_datetime,
             lambda v: self._burn("burn_datetime", v),
             "When the clip was shot, read from the clip itself, with a clock that runs as it plays",
@@ -263,10 +254,10 @@ class Sidebar(QFrame):
         self.sec_burn.add(self.burn_dt)
         self.burn_style = combo(
             [
-                ("clean", "Clean look", "Small labels on dark boxes in the corners"),
+                ("clean", "Clean Look", "Small labels on dark boxes in the corners"),
                 (
                     "vhs",
-                    "VHS camcorder look",
+                    "VHS Camcorder Look",
                     "PLAY, date and a running clock in a VCR font, like an old camcorder",
                 ),
             ],
@@ -279,11 +270,11 @@ class Sidebar(QFrame):
             [
                 (
                     "play",
-                    "PLAY ► at the start",
+                    "PLAY ► at the Start",
                     "Blinks for the first few seconds, then goes away, like a VCR",
                 ),
                 ("rec", "● REC", "Red dot blinking, like a camcorder while recording"),
-                ("none", "No badge", ""),
+                ("none", "No Badge", ""),
             ],
             self.s.burn_badge,
         )
@@ -293,7 +284,7 @@ class Sidebar(QFrame):
 
         self.sec_cc = Section("Captions")
         self.cc_on = _checkbox(
-            "Add captions",
+            "Add Captions",
             self.s.captions,
             lambda v: self._set_and_sync("captions", v),
             "Listo listens to each clip on this computer, you check the words, then they're burned in",
@@ -309,7 +300,7 @@ class Sidebar(QFrame):
         self.cc_model = combo(
             [
                 (k, f"{t} · {CAPTION_MODELS[k][1]} download", "")
-                for k, t in (("fast", "Fast"), ("balanced", "Balanced accuracy"), ("best", "Most accurate"))
+                for k, t in (("fast", "Fast"), ("balanced", "Balanced Accuracy"), ("best", "Most Accurate"))
             ],
             self.s.caption_model,
         )
@@ -327,16 +318,16 @@ class Sidebar(QFrame):
         self.cc_style.currentIndexChanged.connect(
             lambda: self._set("caption_style", self.cc_style.currentData())
         )
-        self.cc_bg = _checkbox("Black background", self.s.caption_box, lambda v: self._set("caption_box", v))
+        self.cc_bg = _checkbox("Black Background", self.s.caption_box, lambda v: self._set("caption_box", v))
         self.cc_size = combo(
-            [("small", "Small text", ""), ("medium", "Medium text", ""), ("large", "Large text", "")],
+            [("small", "Small Text", ""), ("medium", "Medium Text", ""), ("large", "Large Text", "")],
             self.s.caption_size,
         )
         self.cc_size.currentIndexChanged.connect(
             lambda: self._set("caption_size", self.cc_size.currentData())
         )
         self.cc_lines = combo(
-            [("1", "1 line at a time", ""), ("2", "Up to 2 lines", ""), ("3", "Up to 3 lines", "")],
+            [("1", "1 Line at a Time", ""), ("2", "Up to 2 Lines", ""), ("3", "Up to 3 Lines", "")],
             str(self.s.caption_lines),
         )
         self.cc_lines.currentIndexChanged.connect(
@@ -344,7 +335,7 @@ class Sidebar(QFrame):
         )
         words_row = QWidget()
         wr = hbox(words_row, spacing=SPACE_3)
-        wl = QLabel("Words per line")
+        wl = QLabel("Words per Line")
         wl.setObjectName("Muted")
         self.cc_words = QSlider(Qt.Orientation.Horizontal)
         self.cc_words.setRange(2, 12)
@@ -357,7 +348,7 @@ class Sidebar(QFrame):
         wr.addWidget(self.cc_words, 1)
         wr.addWidget(self.cc_words_val)
         self.cc_srt = _checkbox(
-            "Also save a caption file (.srt)", self.s.caption_srt, lambda v: self._set("caption_srt", v),
+            "Also Save a Caption File (.srt)", self.s.caption_srt, lambda v: self._set("caption_srt", v),
             "For YouTube, players and editing apps",
         )  # fmt: skip
         for w in (self.cc_lang, self.cc_model, self.cc_style, self.cc_size, self.cc_lines, words_row):
@@ -370,10 +361,10 @@ class Sidebar(QFrame):
 
         speed = Section("Speed")
         self.v_hw = _checkbox(
-            "Hardware encoding (faster)", self.s.hardware, lambda v: self._set("hardware", v)
+            "Hardware Encoding (Faster)", self.s.hardware, lambda v: self._set("hardware", v)
         )
         self.v_par = _checkbox(
-            "Convert two files at once",
+            "Convert Two Files at Once",
             self.s.parallel,
             lambda v: self._set("parallel", v),
             "Fastest with the hardware encoder or lots of small files",
@@ -382,19 +373,19 @@ class Sidebar(QFrame):
 
         self.sec_audio = Section("Audio")
         self.v_tracks = _checkbox(
-            "Keep every audio track", self.s.keep_all_audio, lambda v: self._set("keep_all_audio", v)
+            "Keep Every Audio Track", self.s.keep_all_audio, lambda v: self._set("keep_all_audio", v)
         )
         self.sec_audio.add(self.v_tracks)
 
         for sec in (fmt, self.sec_variant, self.sec_size):
             lay.addWidget(sec)
-        self.g_picture = self._group("Picture", "picture")
+        self.g_picture = self._group("Image", "picture")
         for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
             self.g_picture.add(sec)
-        self.g_text = self._group("Text on screen", "text")
+        self.g_text = self._group("Burn-In", "text")
         for sec in (self.sec_burn, self.sec_cc):
             self.g_text.add(sec)
-        self.g_sound = self._group("Sound & speed", "sound")
+        self.g_sound = self._group("Encoding", "sound")
         for sec in (self.sec_audio, speed):
             self.g_sound.add(sec)
         for g in (self.g_picture, self.g_text, self.g_sound):
@@ -613,10 +604,10 @@ class Sidebar(QFrame):
                     c.addItem(Path(p).stem, p)
                     c.setItemData(c.count() - 1, p, Qt.ItemDataRole.ToolTipRole)
         c.insertSeparator(c.count())
-        c.addItem("Choose a LUT file…", LUT_FILE)
+        c.addItem("Choose a LUT File…", LUT_FILE)
         lut_folder = str(self.qs.value("lut_folder", "") or "")
         c.addItem(
-            f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT folder…", LUT_FOLDER
+            f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT Folder…", LUT_FOLDER
         )
         c.setCurrentIndex(max(0, c.findData(current)))
         c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
@@ -634,7 +625,7 @@ class Sidebar(QFrame):
                 self._set("lut_path", f)
         elif data == LUT_FOLDER:
             start = str(self.qs.value("lut_folder", "") or Path.home())
-            d = QFileDialog.getExistingDirectory(self, "Choose your LUT folder", start)
+            d = QFileDialog.getExistingDirectory(self, "Choose Your LUT Folder", start)
             if d:
                 self.qs.setValue("lut_folder", d)
         elif data is not None:
@@ -676,11 +667,11 @@ class Sidebar(QFrame):
         c = self.recipe
         c.blockSignals(True)
         c.clear()
-        c.addItem("No recipe" if not recipes else "Custom settings", None)
+        c.addItem("No Recipe" if not recipes else "Custom Settings", None)
         for name, _, _ in recipes:
             c.addItem(name, name)
         c.insertSeparator(c.count())
-        c.addItem("Save current settings as a recipe…", ACTION_SAVE)
+        c.addItem("Save Current Settings as a Recipe…", ACTION_SAVE)
         if found in user:
             c.addItem(f"Update “{found}” with current settings", ACTION_UPDATE)
             c.addItem(f"Delete “{found}”", ACTION_DELETE)
@@ -696,7 +687,7 @@ class Sidebar(QFrame):
             self._store_recipe(current)
         elif data == ACTION_DELETE and current:
             if (
-                QMessageBox.question(self, "Delete recipe", f"Delete the recipe “{current}”?")
+                QMessageBox.question(self, "Delete Recipe", f"Delete the recipe “{current}”?")
                 == QMessageBox.StandardButton.Yes
             ):
                 self._delete_recipe(current)
@@ -714,7 +705,7 @@ class Sidebar(QFrame):
         self._match_recipe()  # put the picker back on the right entry
 
     def _save_recipe(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save recipe", "Name this recipe:")
+        name, ok = QInputDialog.getText(self, "Save Recipe", "Name this recipe:")
         name = name.strip()
         if not ok or not name:
             return

@@ -58,7 +58,7 @@ Add new icons there; don't load image files for UI icons.
 
 - Build layouts with the helpers in `listo/ui/widgets.py`:
   `vbox(widget, margins, spacing)` / `hbox(...)` (spacing defaults to `SPACE_2`),
-  `combo(...)` for dropdowns, and `Section("Title")` for a labelled group (caps label + its controls, `SPACE_1` apart).
+  `combo(...)` for dropdowns, and `Section("Title")` for a labelled group (Title Case label + its controls, `SPACE_1` apart).
 - Margins are `SPACE_*` tokens or `0`. Nothing else.
 
 ---
@@ -69,8 +69,8 @@ Font: **Inter** (bundled in `listo/assets/fonts`). One family only.
 
 | Token | px | Used for |
 |---|---|---|
-| `TEXT_XS` | 11 | SECTION LABELS (caps, letter-spaced, `FAINT`), chips |
-| `TEXT_SM` | 12 | Secondary text: file details, hints, tooltips |
+| `TEXT_XS` | 11 | Chips |
+| `TEXT_SM` | 12 | Section labels (`MUTED`, semibold), secondary text: file details, hints, tooltips |
 | `TEXT_MD` | 13 | Body text and every control (the default) |
 | `TEXT_LG` | 14 | Emphasis: file names in the list, the footer title |
 | `TEXT_XL` | 18 | Dialog titles, the empty-state headline |
@@ -132,7 +132,7 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 |---|---|---|
 | Primary button | `Primary` | The single main action in a view (Convert, Done) |
 | Normal button | *(none)* | Everything else in dialogs (Change…, Cancel) |
-| Secondary button | `Secondary` | Footer buttons beside the primary one (Export options) |
+| Secondary button | `Secondary` | Buttons next to a primary one in dialogs |
 | Quiet button | `Ghost` | Show files, Pause, Stop |
 | Danger button | `Danger` | Destructive confirmations only |
 | Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, clear list), scissors, info, close. **Must** have a tooltip |
@@ -148,7 +148,7 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 Choosing a control:
 - Pick one setting → **dropdown**, always, even with only 2–3 choices. Format, quality, size, LUT, recipe,
   Where, Name and Name taken are all dropdowns. Build them with `widgets.combo` / `set_combo` / `disable_item`.
-- The result of a choice is shown once, in a live preview (e.g. the example box in Export options),
+- The result of a choice is shown once, in a live preview (the export panel's picture and "Saves As" box),
   not repeated under every option.
 - Tabs (`Segmented`) only switch which page of settings you see.
 - Actions that belong to a dropdown (Save recipe…, Choose a LUT file…) go **inside** that dropdown, below a separator.
@@ -163,8 +163,12 @@ Listo talks like a helpful person, not like software.
 
 - **Fewer words.** Labels and section titles are 1–4 words ("Name taken", not "If that name is already taken"). If something needs explaining, put it in a tooltip, not on screen.
 - Plain language: "Double-check each file", not "Verify output integrity". "Keep every audio track", not "Map all audio streams".
-- Sentence case everywhere ("Export options", not "Export Options"). Section labels are drawn in caps by the
-  stylesheet; write them in sentence case in code.
+- **Title Case for labels**: section and group names, buttons, checkboxes, tabs, menu items, dropdown
+  choices, dialog titles and card states ("Keep Every Audio Track", "Convert 3 Files", "Name Taken").
+  Small words stay lowercase inside a label (a, an, the, and, or, of, to, in, on, at, for, by, with, as, per);
+  acronyms and file things stay as they are (LUT, VHS, 4K, H.264, .srt, px). No ALL-CAPS labels.
+- **Sentences stay sentences**: tooltips, hints, placeholders, progress and error messages, toasts, and the
+  one-line descriptions under formats ("Plays everywhere", "Making captions in the background…").
 - Buttons are verbs ("Convert 8 files", "Show files"). Use "…" when the button opens a dialog or file picker.
 - Errors say what happened and what to do, without jargon: "Listo doesn't know .txt files."
 - Promise safety where it matters: "Your original files are never touched".
@@ -175,12 +179,16 @@ Listo talks like a helpful person, not like software.
 ## 8. Layout of the main window
 
 ```
-┌ toolbar: wordmark ················ N FILES · + · ☰× ┬ sidebar (SIDEBAR_W) ─┐
-│ file list (cards, SPACE_2 apart)  — or drop zone     │ RECIPE dropdown      │
-│                                                      │ Video | Photo | Audio│
-│                                                      │ sections…            │
-├ footer: summary ·········· Export options · Convert ──┴──────────────────────┤
+┌ settings (SIDEBAR_W) ┬ wordmark ·········· N Files · + · ☰× ┬ export (EXPORT_W) ┐
+│ Recipe               │ file list (cards, SPACE_2 apart)      │ Preview (live)    │
+│ Video | Photo | Audio│   — or the drop zone                  │ Saves As example  │
+│ Format, Quality, Size│                                       │ Where · Name      │
+│ ▸ Image              │                                       │ ▸ Advanced Options│
+│ ▸ Burn-In            ├ status · progress · Show Files/Pause/Stop                 │
+│ ▸ Encoding           │                                       │ [ Convert N Files]│
+└──────────────────────┴───────────────────────────────────────┴───────────────────┘
 ```
+Left to right is the order you think in: **what** the files become → **your files** → **where** they go.
 
 - **The file list works like Finder / Explorer:** click selects, Cmd/Ctrl-click adds or removes one,
   Shift-click selects a range, Cmd/Ctrl+A selects all, Delete or Backspace removes the selection,
@@ -198,20 +206,26 @@ Listo talks like a helpful person, not like software.
   The one exception: items in a format list stay, disabled with a tooltip saying why.
 - **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
+- **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)
+  run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
 - **Menus hold commands, the panel holds settings.** File / Edit / View / Help list actions with their
   shortcuts (add, select, remove, preview, convert). They live in the Mac menu bar; on Windows and Linux
   the bar is hidden (no strip across the window) and the shortcuts still work. Never put a setting in a menu.
 - **Basic first, the rest folded away.** Each panel shows only what most people change every time
-  (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; Export options: Where, Name).
-  Everything else lives in three fold-away groups (`widgets.Disclosure`): **Picture** (frame, interlacing, LUT),
-  **Text on screen** (burn-ins, captions) and **Sound & speed** — closed by default, each remembered.
+  (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; export panel: Preview, Where, Name).
+  Everything else lives in three fold-away groups (`widgets.Disclosure`): **Image** (frame, interlacing, LUT),
+  **Burn-In** (clip info, captions) and **Encoding** (audio tracks, speed) — closed by default, each remembered.
   The folded header always says how many advanced settings differ from a fresh start ("· 2 changed"),
   so nothing that changes the output is ever hidden silently. New settings go into Advanced unless
   nearly everyone needs them.
 - Burn-ins always sit inside the picture: inside cinema bars, inside black bars, and on the cropped frame.
-- The sidebar holds **what** the files become; Export options holds **where** they go and **what they're called**.
-- The footer's right side is always: Show files / Pause / Stop (when relevant), Preview (when there's a video), Export options, then the Primary action.
-- New settings go into an existing section if they fit; a new section needs a short caps label.
+- The settings panel holds **what** the files become; the export panel holds **where** they go, **what they're called**,
+  a live preview of the selected (or first) clip — the sample test pattern when the list is empty — and Convert.
+  The preview always shows the real result: it runs the exact conversion steps on one frame (captions use
+  sample text until the real words exist). Clicking it opens the big Preview window.
+- Under the file list: status and progress, with Show Files / Pause / Stop when relevant. Convert lives at the
+  bottom of the export panel and says "Converting…" while it works.
+- New settings go into an existing section if they fit; a new section needs a short Title Case label.
 
 ---
 
@@ -222,5 +236,5 @@ Listo talks like a helpful person, not like software.
    (1px hairline borders are the one allowed literal.)
 2. New controls are `CONTROL_H` tall (or `SMALL_H` for chips / icon buttons) and line up with their neighbours.
 3. Every icon-only button has a tooltip.
-4. Text is short, plain and in sentence case.
+4. Labels are short and in Title Case; sentences (tooltips, hints, messages) are plain sentences.
 5. Screenshots look right: `QT_QPA_PLATFORM=offscreen python tests/screenshot.py SHOTS OUTDIR`.

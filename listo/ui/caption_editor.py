@@ -66,7 +66,7 @@ class CaptionEditor(QDialog):
         self._watch = _FocusWatch(self._row_focused)
 
         lay = vbox(self, SPACE_5, SPACE_3)
-        title = QLabel("Check the captions")
+        title = QLabel("Check the Captions")
         title.setObjectName("DialogTitle")
         lay.addWidget(title)
         top = hbox(spacing=SPACE_2)

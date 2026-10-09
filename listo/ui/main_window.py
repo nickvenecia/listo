@@ -57,8 +57,7 @@ from ..core.probe import (
 )
 from ..core.tools import capabilities
 from . import theme, tokens
-from .export_dialog import ExportDialog
-from .export_dialog import summary as export_summary
+from .export_panel import ExportPanel
 from .job_card import JobCard
 from .sidebar import Sidebar
 from .trim_dialog import TrimDialog, fmt_time
@@ -135,7 +134,7 @@ class DropZone(QFrame):
         ic = QLabel()
         ic.setPixmap(theme.pixmap("drop", tokens.ICON_XL, theme.ACCENT, 1.6))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title = QLabel("Drop videos, photos or audio here")
+        title = QLabel("Drop Videos, Photos or Audio Here")
         title.setObjectName("DropTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sub = QLabel("or click to choose files — folders work too")
@@ -220,15 +219,28 @@ class MainWindow(QMainWindow):
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
         self.selected: set[int] = set()
-        self.tx = None  # TranscribeThread while captions are being made
-        self._tx_then = None  # what to do when it's finished
+        self.tx = None  # TranscribeThread while captions are being made in the background
+        self._tx_pct: dict[int, float] = {}
+        self._tx_failed: dict[int, str] = {}
+        self._tx_retry = False
+        self._convert_after_captions = False  # Convert was pressed while captions were still being made
+        self._live_seq = 0
+        self._live_note = ""
         self._anchor: int | None = None  # where a Shift-click range starts
 
         self._build()
         self._menus()
+        from .workers import PreviewSignals
+
+        self._live_signals = PreviewSignals(self)
+        self._live_signals.done.connect(self._live_got)
+        self._live_timer = QTimer(self)
+        self._live_timer.setSingleShot(True)
+        self._live_timer.setInterval(350)  # wait until a slider or a few clicks settle
+        self._live_timer.timeout.connect(self._render_live)
+        self._schedule_live()
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
-        self._update_export_button()
         self._refresh_footer()
         self.centralWidget().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         QTimer.singleShot(0, self.centralWidget().setFocus)
@@ -278,9 +290,9 @@ class MainWindow(QMainWindow):
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add files, a folder or a link — or just drop them in")
         add_menu = QMenu(self)
-        add_menu.addAction(theme.icon("file", theme.MUTED), "Files…", self.pick_files)
-        add_menu.addAction(theme.icon("folder", theme.MUTED), "A folder…", self.pick_folder)
-        add_menu.addAction(theme.icon("link", theme.MUTED), "A link…", self.ask_link)
+        add_menu.addAction(theme.menu_icon("file"), "Files…", self.pick_files)
+        add_menu.addAction(theme.menu_icon("folder"), "A Folder…", self.pick_folder)
+        add_menu.addAction(theme.menu_icon("link"), "A Link…", self.ask_link)
         self.btn_add.setMenu(add_menu)
         self.btn_add.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         bar.addWidget(self.btn_add)
@@ -321,16 +333,16 @@ class MainWindow(QMainWindow):
         qp.addWidget(self.scroll, 1)
         self.queue_stack.addWidget(queue_page)
         left_col.addWidget(self.queue_stack, 1)
-        body.addLayout(left_col, 1)
-
         self.sidebar = Sidebar(self.settings)
         self.sidebar.changed.connect(self._settings_changed)
-        self.export_dialog = ExportDialog(self.settings, self)
-        self.export_dialog.changed.connect(self._settings_changed)
-        self.sidebar.recipe_applied.connect(self.export_dialog.reload)
-        body.addWidget(self.sidebar)
+        self.export_panel = ExportPanel(self.settings, self)
+        self.export_panel.changed.connect(self._settings_changed)
+        self.export_panel.preview_clicked.connect(self.open_preview)
+        self.sidebar.recipe_applied.connect(self.export_panel.reload)
+        body.addWidget(self.sidebar)  # left: what the files become
+        body.addLayout(left_col, 1)  # middle: the files
+        body.addWidget(self.export_panel)  # right: preview, where, name, Convert
         v.addLayout(body, 1)
-
         footer = QFrame()
         footer.setObjectName("Footer")
         f = QHBoxLayout(footer)
@@ -350,22 +362,7 @@ class MainWindow(QMainWindow):
         left.addWidget(self.f_sub)
         left.addWidget(self.f_bar)
         f.addLayout(left, 1)
-        self.btn_preview = QPushButton("  Preview")
-        self.btn_preview.setObjectName("Secondary")
-        self.btn_preview.setIcon(theme.icon("eye", theme.MUTED))
-        self.btn_preview.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_preview.setToolTip(
-            "See one frame of the selected clip (or the first one) with your settings"
-        )
-        self.btn_preview.clicked.connect(self.open_preview)
-        f.addWidget(self.btn_preview)
-        self.btn_export = QPushButton("  Export options")
-        self.btn_export.setObjectName("Secondary")
-        self.btn_export.setIcon(theme.icon("export", theme.MUTED))
-        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_export.clicked.connect(self.open_export_options)
-        f.addWidget(self.btn_export)
-        self.btn_show = QPushButton("Show files")
+        self.btn_show = QPushButton("Show Files")
         self.btn_show.setObjectName("Ghost")
         self.btn_show.clicked.connect(self._show_outputs)
         self.btn_show.hide()
@@ -375,13 +372,15 @@ class MainWindow(QMainWindow):
         self.btn_cancel = QPushButton("Stop")
         self.btn_cancel.setObjectName("Danger")
         self.btn_cancel.clicked.connect(self.stop)
-        self.btn_start = QPushButton("Convert")
-        self.btn_start.setObjectName("Primary")
-        self.btn_start.clicked.connect(self.start)
-        for b in (self.btn_show, self.btn_pause, self.btn_cancel, self.btn_start):
+        for b in (self.btn_show, self.btn_pause, self.btn_cancel):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
-        v.addWidget(footer)
+        self.btn_start = QPushButton("Convert")
+        self.btn_start.setObjectName("Primary")
+        self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_start.clicked.connect(self.start)
+        self.export_panel.bottom.addWidget(self.btn_start)
+        left_col.addWidget(footer)
         self.toast = Toast(root)
 
     def _menus(self) -> None:
@@ -408,7 +407,6 @@ class MainWindow(QMainWindow):
         act(f, "Add a Link…", self.ask_link, "Ctrl+L")
         f.addSeparator()
         act(f, "Preview…", self.open_preview, "Ctrl+P")
-        act(f, "Export Options…", self.open_export_options, "Ctrl+E")
         f.addSeparator()
         act(f, "Convert", self.start, "Ctrl+Return")
         act(f, "Stop", self.stop, "Ctrl+.")
@@ -451,12 +449,12 @@ class MainWindow(QMainWindow):
     def ask_link(self) -> None:
         clip = QApplication.clipboard().text().strip()
         dlg = QDialog(self)
-        dlg.setWindowTitle("Add a link")
+        dlg.setWindowTitle("Add a Link")
         dlg.setFixedWidth(tokens.DIALOG_W)
         lay = QVBoxLayout(dlg)
         lay.setContentsMargins(*(tokens.SPACE_5,) * 4)
         lay.setSpacing(tokens.SPACE_3)
-        t = QLabel("Add a link")
+        t = QLabel("Add a Link")
         t.setObjectName("DialogTitle")
         lay.addWidget(t)
         edit_ = QLineEdit(clip if is_link(clip) else "")
@@ -567,7 +565,7 @@ class MainWindow(QMainWindow):
             log.warning("download failed: %s — %s", it.url, error)
             it.state = "failed"
             it.message = error
-            it.card.set_state("failed", "Download failed" if error != "Canceled" else "Canceled")
+            it.card.set_state("failed", "Download Failed" if error != "Canceled" else "Canceled")
             it.card.set_output(error)
         else:
             it.path = path
@@ -598,13 +596,13 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ adding files
     def pick_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(self, "Add files", self._last_dir())
+        files, _ = QFileDialog.getOpenFileNames(self, "Add Files", self._last_dir())
         if files:
             self._remember_dir(files[0])
             self.add_paths(files)
 
     def pick_folder(self) -> None:
-        d = QFileDialog.getExistingDirectory(self, "Add a folder", self._last_dir())
+        d = QFileDialog.getExistingDirectory(self, "Add a Folder", self._last_dir())
         if d:
             self._remember_dir(d)
             self.add_paths([d])
@@ -740,6 +738,7 @@ class MainWindow(QMainWindow):
 
                 it.transcript = captions.load(it.path)
             self._sync_captions()
+        self._list_changed()
         self._update_sample()
         self._refresh_footer()
         if self.running:
@@ -749,45 +748,123 @@ class MainWindow(QMainWindow):
     def _wants_captions(self, it: Item) -> bool:
         return (
             it.kind == "video" and it.info is not None and bool(it.info.audio) and self.eff(it).captions
-            and it.state in ("ready", "waiting", "done", "warning", "transcribing")
+            and it.state in ("ready", "waiting", "done", "warning")
         )  # fmt: skip
 
     def _sync_captions(self) -> None:
+        """CC icon on each clip, and quietly start making any captions that are missing."""
+        queued = self.tx.queued() if self.tx is not None else set()
+        missing = []
         for it in self.items.values():
             if not self._wants_captions(it):
                 it.card.set_captions("")
-            elif it.transcript is None:
-                it.card.set_captions("todo")
-            else:
+            elif it.transcript is not None:
                 it.card.set_captions("reviewed" if it.transcript.reviewed else "review")
+            elif it.id in self._tx_failed:
+                it.card.set_captions("failed", self._tx_failed[it.id])
+            else:
+                pct = self._tx_pct.get(it.id)
+                it.card.set_captions(
+                    "working", f"Making captions in the background… {int(pct * 100)}%" if pct else ""
+                )
+                if it.id not in queued:
+                    missing.append(it)
+        if missing:
+            self._queue_captions(missing)
+        if self.tx is not None and not any(self._wants_captions(it) for it in self.items.values()):
+            self.tx.cancel()  # captions switched off: stop listening
 
-    def _captions_ready(self, then) -> bool:
-        """Before converting: make missing captions, then let people check them. False = not yet."""
+    def _queue_captions(self, items: list[Item]) -> None:
+        from PySide6.QtCore import QThread
+
+        from .workers import TranscribeThread
+
+        jobs = [(it.id, it.path, it.info, self.eff(it)) for it in items]
+        if self.tx is not None and all(self.tx.add(j) for j in jobs):
+            return
+        if self.tx is not None:  # it was finishing: pick these up again when it's done
+            self._tx_retry = True
+            return
+        self.tx = TranscribeThread(jobs)
+        self.tx.progress.connect(self._tx_progress)
+        self.tx.status.connect(self._tx_status)
+        self.tx.done.connect(self._tx_done)
+        self.tx.finished.connect(self._tx_finished)
+        self.tx.start(QThread.Priority.LowestPriority)  # never in the way of the app or conversions
+
+    def _tx_progress(self, iid: int, frac: float) -> None:
+        self._tx_pct[iid] = frac
+        it = self.items.get(iid)
+        if it and it.transcript is None:
+            it.card.set_captions("working", f"Making captions in the background… {int(frac * 100)}%")
+
+    def _tx_status(self, iid: int, msg: str) -> None:
+        it = self.items.get(iid)
+        if it and it.transcript is None:
+            it.card.set_captions("working", msg)
+
+    def _tx_done(self, iid: int, transcript, error: str) -> None:
+        self._tx_pct.pop(iid, None)
+        it = self.items.get(iid)
+        if not it:
+            return
+        if transcript is not None:
+            it.transcript = transcript
+            if it is self._live_clip():
+                self._schedule_live()
+        elif error and error != "Canceled":
+            self._tx_failed[iid] = error
+        self._sync_captions()
+
+    def _tx_finished(self) -> None:
+        self.tx = None
+        retry, self._tx_retry = self._tx_retry, False
+        if retry:
+            self._sync_captions()
+        if self._convert_after_captions and self.tx is None:
+            self._convert_after_captions = False
+            self.start()
+        self._refresh_footer()
+
+    def _captions_ready(self) -> bool:
+        """Before converting: every clip that gets captions must have them, checked. False = not yet."""
         todo = [
             self.items[i]
             for i in self.order
             if self.items[i].state == "ready" and self._wants_captions(self.items[i])
         ]
-        missing = [it for it in todo if it.transcript is None]
-        if missing:
-            self._transcribe(missing, then)
-            return False
-        unchecked = [it for it in todo if not it.transcript.reviewed]
-        if unchecked:
-            n = len(todo)
-            return self._edit_captions(
-                unchecked, f"Convert {n} file{'s' if n != 1 else ''}" if then else "Done"
+        making = [it for it in todo if it.transcript is None and it.id not in self._tx_failed]
+        if making:
+            self._convert_after_captions = True
+            self._sync_captions()
+            n = len(making)
+            self.toast.show_message(
+                f"Still making captions for {n} clip{'s' if n != 1 else ''}. "
+                "You'll check them as soon as they're ready, then Listo converts."
             )
+            self._refresh_footer()
+            return False
+        unchecked = [it for it in todo if it.transcript is not None and not it.transcript.reviewed]
+        if unchecked:
+            n = len([i for i in self.order if self.items[i].state == "ready"])
+            return self._edit_captions(unchecked, f"Convert {n} File{'s' if n != 1 else ''}")
         return True
 
     def open_captions(self, iid: int) -> None:
         it = self.items.get(iid)
-        if not it or self.tx is not None:
+        if not it:
             return
-        if it.transcript is None:
-            self._transcribe([it], lambda: self._edit_captions([it], "Done"))
-        else:
+        if it.transcript is not None:
             self._edit_captions([it], "Done")
+        elif iid in self._tx_failed:
+            self._tx_failed.pop(iid)  # try again
+            self._sync_captions()
+            self.toast.show_message("Trying the captions for this clip again.")
+        else:
+            pct = self._tx_pct.get(iid)
+            self.toast.show_message(
+                "Still making captions for this clip" + (f" ({int(pct * 100)}%)." if pct else ".")
+            )
 
     def _edit_captions(self, items: list[Item], action: str) -> bool:
         from .caption_editor import CaptionEditor
@@ -796,50 +873,6 @@ class MainWindow(QMainWindow):
         ok = CaptionEditor(clips, 0, action, self).exec() == QDialog.DialogCode.Accepted
         self._sync_captions()
         return ok
-
-    def _transcribe(self, items: list[Item], then) -> None:
-        from .workers import TranscribeThread
-
-        for it in items:
-            it.state = "transcribing"
-            it.card.set_state("transcribing", "Making captions…")
-            it.card.set_progress(0)
-        self._tx_then = then
-        self.tx = TranscribeThread([(it.id, it.path, it.info, self.eff(it)) for it in items])
-        self.tx.progress.connect(self._tx_progress)
-        self.tx.status.connect(
-            lambda iid, msg: self.items.get(iid) and self.items[iid].card.set_state("transcribing", msg)
-        )
-        self.tx.done.connect(self._tx_done)
-        self.tx.finished.connect(self._tx_finished)
-        self.tx.start()
-        self._refresh_footer()
-
-    def _tx_progress(self, iid: int, frac: float) -> None:
-        it = self.items.get(iid)
-        if it and it.state == "transcribing":
-            it.card.set_state("transcribing", f"Captions {int(frac * 100)}%")
-            it.card.set_progress(frac)
-
-    def _tx_done(self, iid: int, transcript, error: str) -> None:
-        it = self.items.get(iid)
-        if not it:
-            return
-        it.state = "ready"
-        it.card.set_state("ready")
-        if transcript is not None:
-            it.transcript = transcript
-        elif error and error != "Canceled":
-            it.notes.append(error)
-            self.toast.show_message(f"{Path(it.path).name}: {error}")
-        self._sync_captions()
-
-    def _tx_finished(self) -> None:
-        self.tx = None
-        then, self._tx_then = self._tx_then, None
-        self._refresh_footer()
-        if then is not None:
-            then()
 
     @staticmethod
     def _previewable(it: Item) -> bool:
@@ -850,11 +883,59 @@ class MainWindow(QMainWindow):
             and not it.info.error
         )
 
+    # ------------------------------------------------------------------ live preview
+    def _schedule_live(self) -> None:
+        self._live_timer.start()
+
+    def _live_clip(self) -> Item | None:
+        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        return next((it for it in clips if it.id in self.selected), clips[0] if clips else None)
+
+    def _clip_cues(self, it: Item | None, s: Settings):
+        if not s.captions:
+            return None
+        if it is not None and it.transcript is not None:
+            return it.transcript.cues_for(s.caption_words, s.caption_lines)
+        from ..core.captions import sample_cues
+
+        return sample_cues(s.caption_words, s.caption_lines)  # shows the look before the words exist
+
+    def _render_live(self) -> None:
+        from .workers import PreviewTask
+
+        it = self._live_clip()
+        self._live_seq += 1
+        if it is None:
+            s, path, info, at = self.settings, "", None, 1.5
+            self._live_note = "Sample picture — add a clip to see yours"
+        else:
+            s, path, info = self.eff(it), it.path, it.info
+            start, length = (it.trim[0], it.trim[1] - it.trim[0]) if it.trim else (0.0, info.duration)
+            at = start + min(length / 3, 10.0)
+            self._live_note = f"{Path(it.path).name} · {fmt_duration(at)}"
+        task = PreviewTask(
+            self._live_seq, path, info, s, at, False, self._live_signals, captions=self._clip_cues(it, s)
+        )
+        self.pool.start(task)
+
+    def _live_got(self, seq: int, data: bytes, error: str) -> None:
+        if seq == self._live_seq:
+            self.export_panel.show_preview(data, self._live_note if data else error)
+
     def open_preview(self) -> None:
         from .preview_dialog import PreviewDialog
 
         clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
         if not clips:
+            from ..core.probe import probe
+            from ..core.sample import sample_clip
+
+            sample = sample_clip()
+            if sample:
+                s = self.settings
+                PreviewDialog(
+                    [("Sample picture", sample, probe(sample), s, self._clip_cues(None, s))], 0, self
+                ).exec()
             return
         start = next((n for n, it in enumerate(clips) if it.id in self.selected), 0)
         PreviewDialog(
@@ -891,24 +972,16 @@ class MainWindow(QMainWindow):
         for iid in self.order:
             it = self.items[iid]
             if it.info and it.state not in ("unsupported",):
-                self.export_dialog.set_sample(it.path, it.info, it.kind)
+                self.export_panel.set_sample(it.path, it.info, it.kind)
                 return
-        self.export_dialog.set_sample(None, None, "video")
-
-    def open_export_options(self) -> None:
-        self.export_dialog.exec()
-        self._settings_changed()
-
-    def _update_export_button(self) -> None:
-        where, name = export_summary(self.settings)
-        self.btn_export.setToolTip(f"Where files go and how they're named\n{where} · {name}")
+        self.export_panel.set_sample(None, None, "video")
 
     def _settings_changed(self) -> None:
         import json
 
-        self._update_export_button()
         self.sidebar.notify_external_change()
         self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
+        self._schedule_live()
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
                 self._update_output_name(it)
@@ -929,7 +1002,7 @@ class MainWindow(QMainWindow):
             group.addAction(a)
             a.triggered.connect(lambda _=False, o=override: self._set_override(iid, o))
 
-        add(m, "Same as the panel", {}, not it.override)
+        add(m, "Same as the Panel", {}, not it.override)
         if it.kind == "video":
             m.addSeparator()
             for p in VIDEO_PRESETS:
@@ -1028,7 +1101,7 @@ class MainWindow(QMainWindow):
             "failed": "This one didn't convert",
             "skipped": "Skipped",
             "warning": "Converted — but double-check it",
-            "unsupported": "Can't convert this file",
+            "unsupported": "Can't Convert This File",
         }.get(it.state, it.state.title())
         t = QLabel(title)
         t.setObjectName("FileName")
@@ -1062,7 +1135,7 @@ class MainWindow(QMainWindow):
         bb.rejected.connect(dlg.reject)
         bb.accepted.connect(dlg.accept)
         if r and (r.log or r.command):
-            copy = bb.addButton("Copy details", QDialogButtonBox.ButtonRole.ActionRole)
+            copy = bb.addButton("Copy Details", QDialogButtonBox.ButtonRole.ActionRole)
             copy.clicked.connect(
                 lambda: QApplication.clipboard().setText(
                     "\n".join(lines) + "\n\n" + (log.toPlainText() if r.log or r.command else "")
@@ -1083,6 +1156,8 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ selection
     def _select(self, ids: set[int]) -> None:
+        if {i for i in ids if i in self.items} != self.selected:
+            self._schedule_live()
         self.selected = {i for i in ids if i in self.items}
         for iid, it in self.items.items():
             it.card.set_selected(iid in self.selected)
@@ -1112,22 +1187,22 @@ class MainWindow(QMainWindow):
         m.clear()
         n = sum(1 for i in self.selected if i not in self.active)
         a = m.addAction(
-            theme.icon("x", theme.MUTED),
-            f"Remove {n} selected" if n else "Remove selected",
+            theme.menu_icon("x"),
+            f"Remove {n} Selected" if n else "Remove Selected",
             self.remove_selected,
         )
         a.setEnabled(n > 0)
         finished = sum(1 for it in self.items.values() if it.state in FINAL)
-        a = m.addAction(theme.icon("check", theme.MUTED), "Clear finished", self.clear_finished)
+        a = m.addAction(theme.menu_icon("check"), "Clear Finished", self.clear_finished)
         a.setEnabled(finished > 0)
         m.addSeparator()
-        m.addAction(theme.icon("list-x", theme.MUTED), "Clear all", self.clear_all)
+        m.addAction(theme.menu_icon("list-x"), "Clear All", self.clear_all)
 
     # ------------------------------------------------------------------ converting
     def start(self) -> None:
-        if self.running or self.tx is not None:
+        if self.running:
             return
-        if not self._captions_ready(then=self.start):
+        if not self._captions_ready():
             return
         if not self.caps.ok and any(it.kind != "photo" for it in self.items.values()):
             self._missing_ffmpeg()
@@ -1305,10 +1380,7 @@ class MainWindow(QMainWindow):
         self._refresh_footer()
 
     def stop(self) -> None:
-        if self.tx is not None:
-            self._tx_then = None
-            self.tx.cancel()
-            return
+        self._convert_after_captions = False
         if not self.running:
             return
         self.running = False
@@ -1347,9 +1419,17 @@ class MainWindow(QMainWindow):
     def _refresh_queue_bar(self) -> None:
         items = [self.items[i] for i in self.order]
         n = len(items)
-        self.q_count.setText(f"{n} FILE{'S' if n != 1 else ''}")
+        self.q_count.setText(f"{n} File{'s' if n != 1 else ''}")
         self.q_count.setVisible(n > 0)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
+
+    def _list_changed(self) -> None:
+        """Files were added, read or removed: the live preview may now show another clip."""
+        it = self._live_clip()
+        key = (it.id, it.trim) if it else None
+        if key != getattr(self, "_live_key", "unset"):
+            self._live_key = key
+            self._schedule_live()
 
     def _label_duplicates(self) -> None:
         """Same file name twice (e.g. MOV01A.MOD in PRG001 and PRG002)? Show each one's folder."""
@@ -1363,6 +1443,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_footer(self, finished: bool = False) -> None:
         self._label_duplicates()
+        self._list_changed()
         self.sidebar.set_queue_info(
             any(it.info is not None and it.info.interlaced for it in self.items.values())
         )
@@ -1375,17 +1456,9 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         convertible = [it for it in items if it.state not in ("unsupported",)]
-        if self.tx is not None:
-            n_tx = sum(1 for it in items if it.state == "transcribing")
-            self.f_title.setText("Making captions")
-            self.f_sub.setText(
-                f"Listening to {n_tx} clip{'s' if n_tx != 1 else ''}… you'll check the words next"
-            )
-            for b in (self.btn_start, self.btn_export, self.btn_preview, self.btn_pause):
-                b.hide()
-            self.btn_cancel.show()
-            self.f_bar.hide()
-            return
+        if self._convert_after_captions and not self.running:
+            self.f_title.setText("Waiting for captions")
+            self.f_sub.setText("You'll check them as soon as they're ready, then Listo converts.")
         if self.running:
             batch = [self.items[i] for i in self.batch if i in self.items]
             total_w = sum(it.weight for it in batch) or 1.0
@@ -1411,23 +1484,21 @@ class MainWindow(QMainWindow):
                 )
             else:
                 self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
-            self.btn_start.hide()
-            self.btn_export.hide()
-            self.btn_preview.hide()
+            self.btn_start.setEnabled(False)
+            self.btn_start.setText("Converting…")
+
             self.btn_pause.show()
             self.btn_cancel.show()
             self.btn_add.setEnabled(True)
             return
-        self.btn_start.show()
-        self.btn_export.show()
-        self.btn_preview.setVisible(any(self._previewable(it) for it in items))
+
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()
         ready = [it for it in items if it.state in ("ready", "probing", "downloading")]
         self.btn_start.setEnabled(bool(ready))
         self.btn_start.setText(
-            f"Convert {len(ready)} file{'s' if len(ready) != 1 else ''}" if ready else "Convert"
+            f"Convert {len(ready)} File{'s' if len(ready) != 1 else ''}" if ready else "Convert"
         )
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary

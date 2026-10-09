@@ -158,7 +158,7 @@ class JobCard(QFrame):
         self.btn_cc.hide()
         self._cc = ""
         self.btn_details = self._icon_btn("info", "Details", lambda: self.details.emit(self.item_id))
-        self.btn_retry = self._icon_btn("retry", "Try again", lambda: self.retry.emit(self.item_id))
+        self.btn_retry = self._icon_btn("retry", "Try Again", lambda: self.retry.emit(self.item_id))
         self.btn_reveal = self._icon_btn(
             "reveal", "Show the new file", lambda: self.reveal.emit(self.item_id)
         )
@@ -231,16 +231,17 @@ class JobCard(QFrame):
         self.trim_tag.setText(text)
         self.trim_tag.setVisible(bool(text))
 
-    def set_captions(self, status: str) -> None:
-        """'' = captions off for this clip; 'todo' / 'review' / 'reviewed'."""
+    def set_captions(self, status: str, detail: str = "") -> None:
+        """'' = captions off for this clip; 'working' / 'failed' / 'review' / 'reviewed'."""
         self._cc = status
         tips = {
-            "todo": "Make captions for this clip",
-            "review": "Check this clip's captions before converting",
+            "working": detail or "Making captions in the background…",
+            "failed": (detail or "Couldn't make captions") + " — click to try again",
+            "review": "Captions ready — click to check them",
             "reviewed": "Captions checked — click to edit",
         }
         self.btn_cc.setToolTip(tips.get(status, ""))
-        color = theme.ACCENT if status == "review" else theme.GOOD if status == "reviewed" else theme.MUTED
+        color = {"review": theme.ACCENT, "reviewed": theme.GOOD, "failed": theme.BAD}.get(status, theme.FAINT)
         self.btn_cc.setIcon(theme.icon("captions", color))
         self._show_cc()
 
@@ -266,9 +267,9 @@ class JobCard(QFrame):
             "failed": "Failed",
             "skipped": "Skipped",
             "canceled": "Canceled",
-            "unsupported": "Can't convert",
-            "warning": "Check this one",
-            "transcribing": "Making captions",
+            "unsupported": "Can't Convert",
+            "warning": "Check This One",
+            "transcribing": "Making Captions",
             "downloading": "Downloading",
         }
         self.status.setText(text or default.get(state, state))

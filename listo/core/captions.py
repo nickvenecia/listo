@@ -33,7 +33,7 @@ MODELS = {
     "best": ("large-v3-turbo", "1.6 GB"),
 }
 LANGUAGES = (
-    ("auto", "Detect the language"),
+    ("auto", "Detect the Language"),
     ("en", "English"),
     ("es", "Spanish"),
     ("pt", "Portuguese"),
@@ -220,6 +220,39 @@ _model_lock = threading.Lock()
 _loaded: dict[str, object] = {}
 
 
+def _threads() -> int:
+    """Half the processor cores: captions run in the background and leave room for converting."""
+    import os
+
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
+SAMPLE_TEXT = [
+    "Lorem",
+    "ipsum",
+    "dolor",
+    "sit",
+    "amet",
+    "consectetur",
+    "adipiscing",
+    "elit",
+    "sed",
+    "do",
+    "eiusmod",
+    "tempor",
+    "incididunt",
+    "ut",
+    "labore",
+]
+
+
+def sample_cues(words_per_line: int, lines: int) -> list[Cue]:
+    """Stand-in captions for previews, as long as the chosen layout allows."""
+    n = max(1, words_per_line) * max(1, lines)
+    words = (SAMPLE_TEXT * (n // len(SAMPLE_TEXT) + 1))[:n]
+    return [Cue(0.0, 360000.0, " ".join(words))]
+
+
 def _without_pyav() -> None:
     """faster-whisper imports PyAV (a 120 MB audio decoder) at start-up, but Listo hands it audio
     already decoded by its own ffmpeg, so the packaged app leaves PyAV out and uses this stand-in."""
@@ -245,7 +278,7 @@ def _model(name: str, on_status: Callable[[str], None]):
         size = next((sz for _, (m, sz) in MODELS.items() if m == name), "")
         try:  # already downloaded?
             model = WhisperModel(name, device="auto", compute_type="int8", download_root=str(models_dir()),
-                                 local_files_only=True)  # fmt: skip
+                                 cpu_threads=_threads(), local_files_only=True)  # fmt: skip
         except Exception:
             on_status(f"Downloading the speech model (one time{', ' + size if size else ''})…")
             try:

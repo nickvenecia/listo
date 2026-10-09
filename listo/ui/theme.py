@@ -101,7 +101,7 @@ QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRON
 /* ---------- text styles */
 #Wordmark {{ font-size: {TEXT_BRAND}px; font-weight: {WEIGHT_BOLD}; letter-spacing: -0.5px; }}
 #DialogTitle {{ font-size: {TEXT_XL}px; font-weight: {WEIGHT_BOLD}; }}
-#SectionLabel {{ color: {FAINT}; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD}; letter-spacing: 1px; }}
+#SectionLabel {{ color: {MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #Hint {{ color: {FAINT}; font-size: {TEXT_SM}px; }}
 #Muted {{ color: {MUTED}; }}
 #FileName, #FooterTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
@@ -115,7 +115,9 @@ QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRON
 #Status[tone="failed"], #Status[tone="unsupported"] {{ color: {BAD}; }}
 
 /* ---------- areas */
-#Sidebar {{ background: {PANEL}; border-left: 1px solid {BORDER}; }}
+#Sidebar {{ background: {PANEL}; border-right: 1px solid {BORDER}; }}
+#ExportPanel {{ background: {PANEL}; border-left: 1px solid {BORDER}; }}
+#PanelBottom {{ border-top: 1px solid {BORDER}; }}
 #Footer {{ background: {PANEL}; border-top: 1px solid {BORDER}; }}
 
 /* ---------- buttons: all CONTROL_H tall */
@@ -292,8 +294,16 @@ def pixmap(name: str, size: int = ICON, color: str = TEXT, stroke: float = 2.0, 
 
 
 def icon(name: str, color: str = TEXT, size: int = ICON) -> QIcon:
+    """An icon that looks the same however the button is hovered, focused or pressed."""
+    ic = QIcon()
+    for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
+        ic.addPixmap(pixmap(name, size, color), mode)
+    return ic
+
+
+def menu_icon(name: str, color: str = MUTED, size: int = ICON) -> QIcon:
+    """For menu rows: the highlighted row is marigold, so its icon switches to dark there."""
     ic = QIcon(pixmap(name, size, color))
-    # menus draw the highlighted row in marigold: switch the icon to dark there
     ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Active)
     ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Selected)
     return ic

@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- **New layout**: settings on the left, your files in the middle, and an export panel on the right with a **live preview** of the selected (or first) clip — or a test pattern when the list is empty — plus where files go, their names and the Convert button. Click the preview for a bigger one you can scrub
+- **Captions are made in the background** as soon as they're on (low priority, half the processor), with progress on each clip's CC icon; Convert opens the check once they're ready. Previews show sample text until the real words exist
+- Groups renamed: Image, Burn-In, Encoding. Labels are in Title Case; no more all-caps section labels
+- Fold arrows and icon buttons no longer go dark after you click them
 - **Captions**: Listo listens to each clip on your computer (faster-whisper; nothing is uploaded), you check and fix the words, then they're burned in on top of everything (bars and burn-ins included). Clean or VHS look, black background on/off, words per line, 1–3 lines, text size, any language or auto-detect (follows people switching between Spanish and English). Optional .srt file. Click CC on a clip to check its captions any time
 - **VHS look redone**: solid letters with a black outline, a little tape softness and colour fringing (no more milky glow). Badge choice: PLAY ► (blinks for the first seconds, then goes away), ● REC (red dot blinking) or none
 - **Advanced options** are three groups: Picture, Text on screen, Sound & speed (each folds on its own and says how many settings are changed)

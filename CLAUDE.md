@@ -36,6 +36,7 @@ listo/
     fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
     paths.py       per-user folders: data_dir(), tools_dir(), log_dir(), downloads_dir() (~/Downloads/Listo)
     log.py         rotating log file (listo.log in log_dir()); get_logger(__name__)
+    sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
   ui/
     tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
     theme.py       stylesheet built from tokens, SVG icons (icon(name, color))
@@ -44,7 +45,8 @@ listo/
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
     caption_editor.py  "Check the captions": edit each cue's text with a live preview; accepting marks clips reviewed
     preview_dialog.py  "Preview": one rendered frame (PreviewTask in workers), converted vs original
-    export_dialog.py  "Export options": where files go + naming + collisions (opened from the footer)
+    export_panel.py  the right panel: live preview (MainWindow._render_live), Saves As example, Where, Name,
+                   Advanced (Name taken / After converting), and the Convert button (MainWindow adds it to .bottom)
     trim_dialog.py start/end sliders with ffmpeg frame-grab previews
     job_card.py    one file in the list
     workers.py     threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads)
@@ -72,11 +74,13 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
 - Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins.
 - `frame.frame_plan` also returns the picture area (fractions, without bars); burnin.plan keeps everything inside it.
-- Sidebar.VIDEO_ADVANCED / PHOTO_ADVANCED list the settings counted in the "Advanced options · N changed" header; add new advanced settings there.
-- Captions flow: Convert -> MainWindow._captions_ready(): transcribe missing (TranscribeThread, card state "transcribing")
-  -> CaptionEditor for unreviewed clips -> convert with Conversion(captions=cues). Captions are the last overlay
+- Captions flow: as soon as captions are on and a clip with sound is read, MainWindow._sync_captions() queues it on the
+  background TranscribeThread (lowest priority, half the cores; progress only on the card's CC icon). Convert ->
+  _captions_ready(): waits if some are still being made (then restarts itself), opens CaptionEditor for unchecked ones,
+  then converts with Conversion(captions=cues). Previews use captions.sample_cues() until the real words exist. Captions are the last overlay
   (BurnPlan.captions: an ffconcat list of per-cue PNGs), so they sit on top of bars and burn-ins.
-- Sidebar groups: Picture / Text on screen / Sound & speed (sidebar.GROUPS lists what each "N changed" counts).
+- Window: settings panel (left) | files (middle, footer under them) | export panel (right). Sidebar groups:
+  Image / Burn-In / Encoding (sidebar.GROUPS lists what each "N changed" counts). Labels are Title Case (DESIGN.md §7).
 - Camera sidecars (probe.SIDECAR_EXTS) are never listed. JVC .MOI next to .MOD/.TOD is read in probe (read_moi):
   recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,

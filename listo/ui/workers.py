@@ -244,6 +244,14 @@ class PreviewTask(QRunnable):
 
         caps = capabilities()
         data, error, plan = b"", "", None
+        if not self.path:  # nothing in the list: show the settings on the sample clip
+            from ..core.sample import sample_clip
+
+            sample = sample_clip()
+            if not sample:
+                self._emit(b"", "No preview (ffmpeg is missing)")
+                return
+            self.path, self.info = sample, probe(sample)
         fd, name = tempfile.mkstemp(prefix="listo-preview-", suffix=".png")
         os.close(fd)
         try:
@@ -272,14 +280,18 @@ class PreviewTask(QRunnable):
             if plan is not None:
                 plan.cleanup()
             Path(name).unlink(missing_ok=True)
+        self._emit(data, error)
+
+    def _emit(self, data: bytes, error: str) -> None:
         try:
             self.signals.done.emit(self.seq, data, error)
-        except RuntimeError:  # the dialog closed meanwhile
+        except RuntimeError:  # the window closed meanwhile
             pass
 
 
 class TranscribeThread(QThread):
-    """Turns speech into captions for a queue of clips, one at a time (the model is big)."""
+    """Turns speech into captions in the background, one clip at a time (the model is big).
+    Jobs can be added while it runs; it ends when the queue is empty."""
 
     progress = Signal(int, float)  # item id, 0..1
     status = Signal(int, str)  # item id, what's happening ("Downloading the speech model…")
@@ -288,8 +300,23 @@ class TranscribeThread(QThread):
     def __init__(self, jobs: list[tuple[int, str, MediaInfo, object]]):
         """jobs: (item id, path, info, settings)."""
         super().__init__()
-        self.jobs = list(jobs)
+        self._jobs = list(jobs)
+        self._lock = threading.Lock()
+        self._closing = False
         self._cancel = threading.Event()
+        self.current: int | None = None
+
+    def add(self, job: tuple[int, str, MediaInfo, object]) -> bool:
+        """Queue one more clip. False if the thread is already finishing (start a new one)."""
+        with self._lock:
+            if self._closing:
+                return False
+            self._jobs.append(job)
+            return True
+
+    def queued(self) -> set[int]:
+        with self._lock:
+            return {j[0] for j in self._jobs} | ({self.current} if self.current is not None else set())
 
     def cancel(self) -> None:
         self._cancel.set()
@@ -297,10 +324,14 @@ class TranscribeThread(QThread):
     def run(self) -> None:
         from ..core import captions
 
-        for iid, path, info, s in self.jobs:
-            if self._cancel.is_set():
-                self.done.emit(iid, None, "Canceled")
-                continue
+        while True:
+            with self._lock:
+                if not self._jobs or self._cancel.is_set():
+                    self._closing = True
+                    self.current = None
+                    return
+                iid, path, info, s = self._jobs.pop(0)
+                self.current = iid
             try:
                 t = captions.transcribe(
                     path, info, s.caption_model, s.caption_language, s.caption_words, s.caption_lines,

@@ -1,13 +1,13 @@
-"""Export options: where converted files go and what they're called (opened from the bottom bar)."""
+"""The export panel (right side): live preview, where files go, what they're called, and Convert."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
-    QDialog,
     QFileDialog,
     QFrame,
     QLabel,
@@ -21,17 +21,28 @@ from ..core.log import get_logger
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
-from .tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_5
-from .widgets import Disclosure, FlowLayout, Section, combo, hbox, hint, set_combo, vbox
+from .tokens import EXPORT_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4
+from .widgets import (
+    ClickLabel,
+    Disclosure,
+    FitScroll,
+    FlowLayout,
+    Section,
+    combo,
+    hbox,
+    hint,
+    set_combo,
+    vbox,
+)
 
 log = get_logger(__name__)
 
 NAME_STYLES: tuple[tuple[str, str, str], ...] = (
-    ("same", "Same as the original", "{name}"),
-    ("format", "Add the format", "{name}_{preset}"),
-    ("date", "Shoot date first", "{date}_{name}"),
-    ("numbered", "Folder name + number", "{folder}_{n}"),
-    ("custom", "Your own pattern", ""),
+    ("same", "Same as the Original", "{name}"),
+    ("format", "Add the Format", "{name}_{preset}"),
+    ("date", "Shoot Date First", "{date}_{name}"),
+    ("numbered", "Folder Name + Number", "{folder}_{n}"),
+    ("custom", "Your Own Pattern", ""),
 )
 FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
     ("name", "Name"),
@@ -40,15 +51,15 @@ FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
     ("time", "Time"),
     ("res", "Size"),
     ("height", "Height"),
-    ("fps", "Frame rate"),
+    ("fps", "Frame Rate"),
     ("n", "Counter"),
     ("folder", "Folder"),
-    ("ext", "Old extension"),
+    ("ext", "Old Extension"),
 )
 WHERE = (
-    ("source", "Next to the original"),
-    ("subfolder", "In a subfolder"),
-    ("folder", "In a folder I pick…"),
+    ("source", "Next to the Original"),
+    ("subfolder", "In a Subfolder"),
+    ("folder", "In a Folder I Pick…"),
 )
 
 
@@ -66,31 +77,51 @@ def summary(s: Settings) -> tuple[str, str]:
     elif s.destination == "subfolder":
         where = f"“{s.subfolder_name or 'Listo'}” subfolders"
     else:
-        where = "Next to originals"
+        where = "Next to Originals"
     style = style_for(s.naming)
     name = s.naming if style == "custom" else dict((k, t) for k, t, _ in NAME_STYLES)[style]
     return where, name
 
 
-class ExportDialog(QDialog):
+class ExportPanel(QFrame):
     changed = Signal()
+    preview_clicked = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Export options")
-        self.setFixedWidth(DIALOG_W)
+        self.setObjectName("ExportPanel")
+        self.setFixedWidth(EXPORT_W)
         self.s = settings
         self._sample: tuple[str, MediaInfo | None, str] | None = None
         self._custom_text = (
             settings.naming if style_for(settings.naming) == "custom" else "{name}_{preset}_{date}"
         )
 
-        lay = vbox(self, SPACE_5, SPACE_3)
-        title = QLabel("Export options")
-        title.setObjectName("DialogTitle")
-        lay.addWidget(title)
+        outer = vbox(self, 0, 0)
+        scroll = FitScroll()
+        outer.addWidget(scroll, 1)
+        inner = QWidget()
+        scroll.setWidget(inner)
+        lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4, SPACE_4), SPACE_3)
 
-        # ---- live example
+        # ---- live preview: the selected (or first) clip with every setting applied
+        prev = Section("Preview")
+        pic_w = EXPORT_W - 2 * SPACE_4
+        self.picture = ClickLabel("Making a preview…")
+        self.picture.setObjectName("Preview")
+        self.picture.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.picture.setFixedSize(pic_w, round(pic_w * 9 / 16))
+        self.picture.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.picture.setToolTip("Click for a bigger preview you can scrub through")
+        self.picture.clicked.connect(self.preview_clicked)
+        prev.add(self.picture)
+        self.picture_note = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
+        self.picture_note.setObjectName("Hint")
+        prev.add(self.picture_note)
+        lay.addWidget(prev)
+
+        # ---- live example of the file name
+        saves = Section("Saves As")
         ex = QFrame()
         ex.setObjectName("Example")
         el = vbox(ex, (SPACE_4, SPACE_3, SPACE_4, SPACE_3), SPACE_1)
@@ -104,7 +135,8 @@ class ExportDialog(QDialog):
         el.addWidget(self.ex_from)
         el.addWidget(self.ex_to)
         el.addWidget(self.ex_note)
-        lay.addWidget(ex)
+        saves.add(ex)
+        lay.addWidget(saves)
 
         # ---- where
         where = Section("Where")
@@ -113,7 +145,7 @@ class ExportDialog(QDialog):
         where.add(self.where)
         self.d_sub_row = QWidget()
         sr = hbox(self.d_sub_row, (0, SPACE_1, 0, 0))
-        lbl = QLabel("Folder name")
+        lbl = QLabel("Folder Name")
         lbl.setObjectName("Muted")
         self.d_sub = QLineEdit(self.s.subfolder_name)
         self.d_sub.setPlaceholderText("Listo")
@@ -160,12 +192,12 @@ class ExportDialog(QDialog):
         lay.addWidget(name)
 
         # ---- collisions + dates
-        taken = Section("Name taken")
+        taken = Section("Name Taken")
         self.collision = combo(
             [
-                ("number", "Add a number", "photo.jpg becomes photo_2.jpg"),
-                ("skip", "Skip the file", "Leave the existing file alone and don't convert this one"),
-                ("replace", "Replace the old copy", "Overwrite the earlier converted file"),
+                ("number", "Add a Number", "photo.jpg becomes photo_2.jpg"),
+                ("skip", "Skip the File", "Leave the existing file alone and don't convert this one"),
+                ("replace", "Replace the Old Copy", "Overwrite the earlier converted file"),
             ],
             self.s.collision,
         )
@@ -175,18 +207,18 @@ class ExportDialog(QDialog):
         )
         taken.add(self.collision)
         self.adv = Disclosure(
-            "Advanced options",
+            "Advanced Options",
             is_open=QSettings("Listo", "Listo").value("export_advanced_open", False, type=bool),
         )
         self.adv.toggled.connect(lambda on: QSettings("Listo", "Listo").setValue("export_advanced_open", on))
         self.adv.add(taken)
 
-        after = Section("After converting")
-        self.k_dates = QCheckBox("Keep the original file dates")
+        after = Section("After Converting")
+        self.k_dates = QCheckBox("Keep the Original File Dates")
         self.k_dates.setChecked(self.s.keep_dates)
         self.k_dates.toggled.connect(lambda v: self._set("keep_dates", v))
         after.add(self.k_dates)
-        self.k_verify = QCheckBox("Double-check each file")
+        self.k_verify = QCheckBox("Double-Check Each File")
         self.k_verify.setToolTip(
             "Re-reads every new video and audio file and flags it if the length doesn't match the original"
         )
@@ -194,18 +226,14 @@ class ExportDialog(QDialog):
         self.k_verify.toggled.connect(lambda v: self._set("verify", v))
         after.add(self.k_verify)
         self.adv.add(after)
-        self.adv.toggled.connect(lambda _on: self.adjustSize())
         lay.addWidget(self.adv)
+        lay.addStretch(1)
 
-        done_row = hbox(margins=(0, SPACE_2, 0, 0))
-        done_row.addStretch(1)
-        done = QPushButton("Done")
-        done.setObjectName("Primary")
-        done.setDefault(True)
-        done.setCursor(Qt.CursorShape.PointingHandCursor)
-        done.clicked.connect(self.accept)
-        done_row.addWidget(done)
-        lay.addLayout(done_row)
+        # ---- the action, always visible at the bottom
+        bottom = QFrame()
+        bottom.setObjectName("PanelBottom")
+        self.bottom = vbox(bottom, SPACE_4, SPACE_2)
+        outer.addWidget(bottom)
         self._sync()
 
     # ------------------------------------------------------------------ behavior
@@ -229,7 +257,7 @@ class ExportDialog(QDialog):
 
     def _choose_folder(self) -> bool:
         start = self.s.dest_folder or str(Path.home())
-        d = QFileDialog.getExistingDirectory(self, "Save converted files to…", start)
+        d = QFileDialog.getExistingDirectory(self, "Save Converted Files To…", start)
         if d:
             self.s.dest_folder = d
             set_combo(self.where, "folder")
@@ -257,7 +285,7 @@ class ExportDialog(QDialog):
         dest = self.s.destination
         self.d_sub_row.setVisible(dest == "subfolder")
         self.d_folder_row.setVisible(dest == "folder")
-        self.d_path.setText(self.s.dest_folder or "No folder chosen")
+        self.d_path.setText(self.s.dest_folder or "No Folder Chosen")
         self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
         self._update_advanced()
@@ -265,9 +293,8 @@ class ExportDialog(QDialog):
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):
             self.tok_flow.itemAt(i).widget().ensurePolished()
-        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(DIALOG_W - 2 * SPACE_5))
+        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(EXPORT_W - 2 * SPACE_4 - SPACE_2))
         self._update_example()
-        self.adjustSize()
 
     def reload(self) -> None:
         """Refresh controls from the settings (after a recipe is applied)."""
@@ -352,6 +379,18 @@ class ExportDialog(QDialog):
             tip = self._example_for(tpl) if tpl else "Build it from name, format, date…"
             self.styles.setItemData(i, tip, Qt.ItemDataRole.ToolTipRole)
 
-    def showEvent(self, e):
-        self._sync()
-        super().showEvent(e)
+    # ------------------------------------------------------------------ preview
+    def show_preview(self, png: bytes, note: str) -> None:
+        pm = QPixmap()
+        if png and pm.loadFromData(png):
+            self.picture.setPixmap(
+                pm.scaled(
+                    self.picture.size(),
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        else:
+            self.picture.setPixmap(QPixmap())
+            self.picture.setText(note or "No preview")
+        self.picture_note.setText(note if png else "")

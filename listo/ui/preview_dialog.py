@@ -42,7 +42,7 @@ class PreviewDialog(QDialog):
         self.pick.setVisible(len(clips) > 1)
         self.pick.currentIndexChanged.connect(self._clip_changed)
         top.addWidget(self.pick, 1)
-        self.view = Segmented([("converted", "With your settings"), ("original", "Original")])
+        self.view = Segmented([("converted", "With Your Settings"), ("original", "Original")])
         self.view.set_value("converted")
         self.view.changed.connect(lambda _k: self._render())
         top.addWidget(self.view)

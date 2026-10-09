@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLayout,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QStyledItemDelegate,
     QVBoxLayout,
@@ -22,8 +23,8 @@ from . import theme, tokens
 
 
 def section_label(text: str) -> QLabel:
-    """The small CAPS label above a group of controls."""
-    lbl = QLabel(text.upper())
+    """The small Title Case label above a group of controls."""
+    lbl = QLabel(text)
     lbl.setObjectName("SectionLabel")
     return lbl
 
@@ -58,7 +59,7 @@ def hbox(
 
 
 class Section(QWidget):
-    """A labelled group: CAPS label, then its controls SPACE_1 below it.
+    """A labelled group: a small Title Case label, then its controls SPACE_1 below it.
 
     Put Sections in a layout with spacing SPACE_3 and every panel lines up the same way.
     Hiding a Section hides its label and controls together (and the gap collapses).
@@ -78,7 +79,7 @@ class Section(QWidget):
             self.lay.addLayout(item)
 
     def set_title(self, title: str) -> None:
-        self.label.setText(title.upper())
+        self.label.setText(title)
         self.label.setVisible(bool(title))
 
 
@@ -298,3 +299,29 @@ class ComboItemDelegate(QStyledItemDelegate):
             painter.restore()
             return
         super().paint(painter, option, index)
+
+
+class FitScroll(QScrollArea):
+    """Scroll area whose content always matches the visible width (no clipped edges)."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if self.widget():
+            self.widget().setFixedWidth(self.viewport().width())
+
+
+class ClickLabel(QLabel):
+    """A label you can click (the live preview)."""
+
+    clicked = Signal()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(e)
