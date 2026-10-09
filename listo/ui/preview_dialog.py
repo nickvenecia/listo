@@ -8,12 +8,12 @@ the clip untouched. Double-clicking a clip in the list opens this and starts pla
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QThreadPool
-from PySide6.QtGui import QKeyEvent, QPixmap
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 from ..core import naming
 from ..core.presets import VIDEO_BY_KEY
-from .player import ClipPlayer
+from .player import ClipPlayer, space_plays
 from .tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
 from .widgets import Segmented, combo, hbox, vbox
 from .workers import PreviewSignals, PreviewTask
@@ -51,6 +51,7 @@ class PreviewDialog(QDialog):
         self._play_next = False  # the arrows keep playing if the clip was playing
         self.player = ClipPlayer(VIEWER_W, VIEWER_H)
         self.player.step.connect(self._step)
+        space_plays(self, self.player)
         self.player.settled.connect(self._render)
         self.player.clicked.connect(self.player.toggle)
         lay.addWidget(self.player)
@@ -130,12 +131,6 @@ class PreviewDialog(QDialog):
         else:
             self.player.set_still(None)
             self.player.set_message(error or "Couldn't make a preview of this file.")
-
-    def keyPressEvent(self, e: QKeyEvent) -> None:
-        if e.key() == Qt.Key.Key_Space:
-            self.player.toggle()
-            return
-        super().keyPressEvent(e)
 
     def done(self, r: int) -> None:
         self.player.release()

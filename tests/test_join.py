@@ -166,3 +166,33 @@ def test_joined_name_covers_first_to_last():
     assert join.joined_name("/a/PRG001/MOV01A.MOD", None, Settings(), "/a/PRG002/MOV01A.MOD").startswith(
         "MOV01A_joined"
     )
+
+
+def test_joined_clips_without_timecode_count_on_like_a_tape():
+    """No timecode in the files (camcorder .MOD, phones): the counter keeps running from clip to
+    clip, and starts over on a new recording date (a new day = a new tape). Real timecode is kept."""
+    from datetime import datetime
+
+    from listo.core.probe import MediaInfo
+
+    def clip(day: int, tc: str = "") -> MediaInfo:
+        return MediaInfo(kind="video", rate="30000/1001", fps=29.97, timecode=tc,
+                         created=datetime(2024, 5, day, 12, 0))  # fmt: skip
+
+    tcs = join.running_timecodes(
+        [("/a.MOD", clip(26), 60.0), ("/b.MOD", clip(26), 30.0), ("/c.MOD", clip(27), 10.0),
+         ("/d.MOV", clip(27, "10:00:00;00"), 5.0), ("/e.MOD", clip(27), 5.0)]
+    )  # fmt: skip
+    assert tcs[0] == "00:00:00;00"
+    assert tcs[1] == "00:00:59;29"  # one real minute later (29.97 drop-frame keeps to the clock)
+    assert tcs[2] == "00:00:00;00"  # the next day starts over
+    assert tcs[3] == ""  # a clip with real timecode keeps its own
+    assert tcs[4] == "00:00:15;00"  # and the counter ran on through it
+
+
+def test_running_timecode_is_burned_and_stored(tmp_path: Path):
+    a = _clip(tmp_path / "a.mp4", "320x240", "30000/1001", 1)
+    s = Settings(video_preset="h264", burn_timecode=True)
+    r = Conversion(str(a), probe(a), s, capabilities(), set(), timecode="00:01:00;02").run()
+    assert r.status == "done", r.message
+    assert "00:01:00;02" in r.command  # the file's own timecode track starts there too

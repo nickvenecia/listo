@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+- Joined videos: clips without their own timecode (camcorder .MOD, phones) get a counter that keeps running from clip to clip like a tape, starting over at 00:00:00:00 on a new recording date; clips with real timecode keep theirs
+- Space plays and pauses in every player (Export preview, Preview window, Check Captions), even when a button or dropdown has focus
 - Player clocks read like time (00:18 / 07:29, hours when needed)
 - Previous / next clip arrows beside Play in the Export preview, the Preview window and Check Captions; in the Export preview they also select that clip in the list, and a playing clip keeps playing
 - Captions and Join Into One Video start off each time Listo opens (everything else is remembered; recipes still carry them)

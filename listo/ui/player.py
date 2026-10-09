@@ -26,7 +26,7 @@ import io
 import os
 
 from PySide6.QtCore import QRectF, QSize, QSizeF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPixmap
+from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsScene,
@@ -61,6 +61,15 @@ except ImportError:  # pragma: no cover - depends on the install
 
 TICK_MS = 40  # how often captions and owners follow the playing clip
 SETTLE_MS = 250  # wait this long after the last move before asking for an exact frame
+
+
+def space_plays(window: QWidget, player: ClipPlayer) -> QShortcut:
+    """Space plays / pauses this player anywhere in the window (a shortcut wins over buttons and
+    dropdowns that have focus; text fields still get their spaces)."""
+    sc = QShortcut(QKeySequence(Qt.Key.Key_Space), window)
+    sc.setContext(Qt.ShortcutContext.WindowShortcut)
+    sc.activated.connect(player.toggle)
+    return sc
 
 
 def has_screen() -> bool:

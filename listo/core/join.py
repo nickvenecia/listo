@@ -55,6 +55,33 @@ def conform_for(info: MediaInfo, s: Settings) -> video.Conform:
     return video.Conform(w, h, rate, 48000, 2)
 
 
+def running_timecodes(clips: list[tuple[str, MediaInfo, float]]) -> list[str]:
+    """Where each clip's timecode starts in a joined video: (path, info, length) in list order.
+
+    Clips with their own timecode (pro cameras) keep it (""). Clips without one (camcorder .MOD,
+    phones) get a counter that keeps running like a tape: each starts where the last ended, and it
+    goes back to zero when the recording date changes (a new day = a new tape)."""
+    from .probe import file_date, tc_add
+
+    out: list[str] = []
+    running, day = 0.0, None
+    for path, info, length in clips:
+        try:
+            shot = file_date(path, info).date()
+        except OSError:
+            shot = None
+        if day is not None and shot is not None and shot != day:
+            running = 0.0
+        day = shot or day
+        if info.timecode or not info.rate:
+            out.append("")
+        else:
+            ntsc = info.rate in ("30000/1001", "60000/1001")
+            out.append(tc_add("00:00:00;00" if ntsc else "00:00:00:00", running, info.rate))
+        running += max(0.0, length)
+    return out
+
+
 def parts_folder(first_src: str, s: Settings) -> Path:
     """Hidden, next to where the joined video goes (same disk, so the final rename is instant)."""
     return naming.output_dir(first_src, s, "video") / f".listo-join-{uuid.uuid4().hex[:8]}"

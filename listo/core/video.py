@@ -196,9 +196,11 @@ def build(
     trim: tuple[float, float] | None = None,
     captions: list | None = None,
     conform: Conform | None = None,
+    timecode: str = "",
 ) -> Plan:
     """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim.
-    conform: this clip is one part of a joined video and must match the others (rewrap ignores it)."""
+    conform: this clip is one part of a joined video and must match the others (rewrap ignores it).
+    timecode: where this clip's timecode starts instead of its own (a joined video's running counter)."""
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
         return _audio_only(src, out, info, s, caps, trim, conform)
     if info.kind != "video" or info.video_index is None:
@@ -216,6 +218,8 @@ def build(
     start_tc = info.timecode
     if trim and info.timecode and info.rate:
         start_tc = tc_add(info.timecode, trim[0], info.rate)
+    if timecode:
+        start_tc = timecode  # already counts from where the (trimmed) clip starts
 
     # ---- audio track selection
     tracks = info.audio if (p.edit_format and s.keep_all_audio) else info.audio[:1]

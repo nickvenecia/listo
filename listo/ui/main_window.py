@@ -64,6 +64,7 @@ from . import theme, titlebar, tokens
 from .caption_editor import CaptionEditor
 from .export_panel import ExportPanel
 from .job_card import JobCard
+from .player import space_plays
 from .preview_dialog import PreviewDialog
 from .sidebar import Sidebar
 from .trim_dialog import TrimDialog, fmt_time
@@ -96,6 +97,7 @@ class JoinJob:
     settings: Settings  # the same for every part (per-file format changes don't apply)
     conform: object  # video.Conform: what every part must match
     folder: Path  # hidden parts folder
+    timecodes: dict[int, str] = field(default_factory=dict)  # item id -> where its timecode starts
     parts: dict[int, Path] = field(default_factory=dict)  # item id -> converted part
     cues: dict[int, list] = field(default_factory=dict)  # item id -> its captions in the part
     thread: object | None = None  # JoinThread once gluing starts
@@ -286,6 +288,7 @@ class MainWindow(QMainWindow):
         self._live_signals.done.connect(self._live_got)
         self.export_panel.player.settled.connect(self._live_settled)
         self.export_panel.player.step.connect(self._live_step)
+        space_plays(self, self.export_panel.player)  # Space plays / pauses the Export preview
         # List-wide refreshes (footer, captions status, live preview) wait a moment and run once:
         # reading 500 files must not redo them 500 times (that took minutes).
         self._soon_captions = False
@@ -1484,6 +1487,8 @@ class MainWindow(QMainWindow):
                     ids=[it.id for it in vids], settings=s, conform=join.conform_for(vids[0].info, s),
                     folder=join.parts_folder(vids[0].path, s),
                 )  # fmt: skip
+                tcs = join.running_timecodes([(it.path, it.info, it.length) for it in vids])
+                self.join_job.timecodes = {it.id: tc for it, tc in zip(vids, tcs, strict=True) if tc}
         self.batch = []
         self.running, self.paused = True, False
         # Every file in the list counts as "taken": Replace can never overwrite another original.
@@ -1567,6 +1572,7 @@ class MainWindow(QMainWindow):
             conv = Conversion(
                 it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues,
                 target=join.part_path(job.folder, job.ids.index(it.id) + 1, s), conform=job.conform,
+                timecode=job.timecodes.get(it.id, ""),
             )  # fmt: skip
         else:
             conv = Conversion(

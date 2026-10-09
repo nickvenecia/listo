@@ -11,7 +11,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PySide6.QtCore import QEvent, QObject, Qt, QThreadPool
-from PySide6.QtGui import QKeyEvent, QPixmap
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QWidget
 
 from ..core import captions
@@ -19,7 +19,7 @@ from ..core.captions import Cue, Transcript
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from . import theme
-from .player import HAS_PLAYER, ClipPlayer
+from .player import HAS_PLAYER, ClipPlayer, space_plays
 from .tokens import (
     CAPTION_LIST_W,
     CAPTION_ROW_H,
@@ -95,6 +95,7 @@ class CaptionEditor(QDialog):
         self._play_next = False  # the arrows keep playing if the clip was playing
         self.player = ClipPlayer(EDITOR_PIC_W, EDITOR_PIC_H, captions_over_stills=True)
         self.player.step.connect(self._step)
+        space_plays(self, self.player)  # (typing in a caption still types spaces)
         self.player.position_changed.connect(self._followed)
         self.player.settled.connect(self._settled)
         self.player.clicked.connect(self.player.toggle)
@@ -238,12 +239,6 @@ class CaptionEditor(QDialog):
         n = edit.property("cue")
         if n is not None and n != self.player.cue_at(self.player.position()):
             self._jump(n)
-
-    def keyPressEvent(self, e: QKeyEvent) -> None:
-        if e.key() == Qt.Key.Key_Space and not isinstance(self.focusWidget(), QPlainTextEdit):
-            self.player.toggle()
-            return
-        super().keyPressEvent(e)
 
     # ------------------------------------------------------------------ editing
     def _edited(self, n: int, text: str) -> None:

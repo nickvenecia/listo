@@ -50,10 +50,12 @@ class Conversion:
         captions: list | None = None,
         target: Path | None = None,
         conform: video.Conform | None = None,
+        timecode: str = "",
     ):
         self.captions = captions
         self.target = target  # a fixed output path (one part of a joined video), else from the naming rules
-        self.conform = conform  # reviewed caption cues for this clip (captions.Cue), or None
+        self.conform = conform
+        self.timecode = timecode  # start the burned-in / stored timecode here (joined videos)  # reviewed caption cues for this clip (captions.Cue), or None
         self.src = src
         self.info = info
         self.s = settings
@@ -166,7 +168,15 @@ class Conversion:
                 if not self.caps.ffmpeg:
                     return Result("failed", message="ffmpeg is missing.")
                 plan = video.build(
-                    self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions, self.conform
+                    self.src,
+                    str(tmp),
+                    self.info,
+                    self.s,
+                    self.caps,
+                    self.trim,
+                    self.captions,
+                    self.conform,
+                    self.timecode,
                 )
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]

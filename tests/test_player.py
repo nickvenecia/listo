@@ -92,3 +92,30 @@ def test_heavy_settings_start_off_each_launch(tmp_path: Path, monkeypatch):
     assert s.video_preset == "h264" and s.caption_model == "best" and s.burn_timecode  # the rest remembered
     w.close()
     app.processEvents()
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_space_plays_and_pauses_even_with_a_dropdown_focused(tmp_path: Path):
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QShortcut
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.preview_dialog as pd
+    from listo.core.presets import Settings
+    from listo.core.probe import probe
+
+    app = QApplication.instance() or QApplication([])
+    a = tmp_path / "a.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=160x120:d=2", "-c:v", "libx264", str(a))
+    d = pd.PreviewDialog([("a.mov", str(a), probe(a), Settings(), None)], 0)
+    shortcuts = [sc for sc in d.findChildren(QShortcut) if sc.key().toString() == "Space"]
+    assert len(shortcuts) == 1 and shortcuts[0].context() == Qt.ShortcutContext.WindowShortcut
+    toggled = []
+    d.player.toggle = lambda: toggled.append(True)  # (the real one needs Qt's player)
+    shortcuts[0].activated.disconnect()
+    shortcuts[0].activated.connect(d.player.toggle)
+    shortcuts[0].activated.emit()
+    assert toggled
+    d.reject()
+    app.processEvents()
