@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- **Tape Effects** (Burn-In group): VCR blue screen at the start and end, a tracking glitch at each cut of a joined video, and random glitches now and then or often. The picture jitters, a noise band rolls through, colors split and the sound crunches; random moments are the same in the preview and the file
+- **Storage & Cache** (the ⋯ menu in the bottom bar, or Help): see what Listo keeps on your computer (speech models, saved captions, link tools, logs, small extras), how big it is, and delete any of it. Settings, recipes and your files are never touched
+- The bottom bar's ⋯ menu holds Storage & Cache, the Debug Console, the log file and About, on every system
 - Joined videos: clips without their own timecode (camcorder .MOD, phones) get a counter that keeps running from clip to clip like a tape, through the whole joined video (each Convert is a new tape, from 00:00:00:00); clips with real timecode keep theirs. The VHS PLAY badge blinks only at the start of the joined video
 - Space plays and pauses in every player (Export preview, Preview window, Check Captions), even when a button or dropdown has focus
 - Player clocks read like time (00:18 / 07:29, hours when needed)

@@ -11,7 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import naming, photo, video
+from . import naming, photo, tape, video
 from .fileutil import copy_dates
 from .log import get_logger
 from .presets import Settings
@@ -51,11 +51,18 @@ class Conversion:
         target: Path | None = None,
         conform: video.Conform | None = None,
         timecode: str = "",
+        cut: bool = False,
     ):
         self.captions = captions
         self.target = target  # a fixed output path (one part of a joined video), else from the naming rules
         self.conform = conform
-        self.timecode = timecode  # start the burned-in / stored timecode here (joined videos)  # reviewed caption cues for this clip (captions.Cue), or None
+        self.timecode = timecode  # start the burned-in / stored timecode here (joined videos)
+        self.cut = cut  # this clip follows another in a joined video (tape glitch at the cut)
+        # tape blue screen around a single video (a joined video gets one around the whole thing)
+        self.blue_added = 0.0  # seconds of blue screen at each end, once added
+        self.blue = (
+            target is None and info.kind == "video" and tape.wants_blue(settings)
+        )  # reviewed caption cues for this clip (captions.Cue), or None
         self.src = src
         self.info = info
         self.s = settings
@@ -76,11 +83,44 @@ class Conversion:
             return
         start, length = (self.trim[0], self.trim[1] - self.trim[0]) if self.trim else (0.0, None)
         tmp = srt.with_name(f".{srt.name}.part")
-        tmp.write_text(
-            to_srt(for_output(self.captions, start, length), self.s.caption_words), encoding="utf-8"
-        )
+        cues = for_output(self.captions, start, length)
+        if self.blue_added:  # the blue screen comes first
+            from .captions import Cue
+
+            cues = [Cue(c.start + self.blue_added, c.end + self.blue_added, c.text) for c in cues]
+        tmp.write_text(to_srt(cues, self.s.caption_words), encoding="utf-8")
         os.replace(tmp, srt)
         notes.append(f"Caption file saved: {srt.name}.")
+
+    def _wrap_blue(self, tmp: Path, conform, muxer: str, notes: list[str]) -> None:
+        """Tape effect: VCR blue screen before and after the video, joined on without re-encoding."""
+        import shutil
+
+        from .join import concat_args
+
+        folder = tmp.with_name(f".listo-blue-{uuid.uuid4().hex[:6]}")
+        folder.mkdir()
+        try:
+            pieces = []
+            for name in ("start", "end"):
+                out = folder / f"{name}{tmp.suffix}"
+                r = tape.make_blue(out, conform, self.s, self.caps)
+                if r.status != "done":
+                    notes.append("Blue screen skipped (couldn't make it).")
+                    log.warning("blue screen failed: %s", r.message)
+                    return
+                pieces.append(out)
+            wrapped = folder / f"wrapped{tmp.suffix}"
+            self._ff = FFmpegRun(
+                self.caps.ffmpeg,
+                concat_args([pieces[0], tmp, pieces[1]], folder / "list.ffconcat", wrapped, muxer),
+            )
+            self._ff.run(None)
+            os.replace(wrapped, tmp)
+            self.blue_added = tape.BLUE_SECONDS
+            notes.append("Blue screen added at the start and end.")
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
 
     def pause(self) -> bool:
         return self._ff.pause() if self._ff else False
@@ -118,7 +158,7 @@ class Conversion:
             return "The new file has no picture."
         if self.info.audio and not got.audio and (audio_only or self.s.video_preset != "gif"):
             return "The new file has no sound, but the original does."
-        want = (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
+        want = ((self.trim[1] - self.trim[0]) if self.trim else self.info.duration) + 2 * self.blue_added
         if audio_only and self.info.audio and not self.trim:
             if self.info.audio[0].codec == "mp3":
                 notes.append("Length not checked (MP3 files only estimate their length).")
@@ -167,17 +207,15 @@ class Conversion:
             else:
                 if not self.caps.ffmpeg:
                     return Result("failed", message="ffmpeg is missing.")
+                conform = self.conform
+                if self.blue and conform is None:  # the blue screen must match the video exactly
+                    from .join import conform_for
+
+                    conform = conform_for(self.info, self.s)
                 plan = video.build(
-                    self.src,
-                    str(tmp),
-                    self.info,
-                    self.s,
-                    self.caps,
-                    self.trim,
-                    self.captions,
-                    self.conform,
-                    self.timecode,
-                )
+                    self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions,
+                    conform, self.timecode, self.cut,
+                )  # fmt: skip
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]
                 log.info("ffmpeg command: %s", shlex.join(cmd))
@@ -187,6 +225,8 @@ class Conversion:
                 self._ff.run(on_progress)
             if not tmp.exists() or tmp.stat().st_size == 0:
                 raise FFmpegFailed("The output came out empty.", "")
+            if self.blue and kind == "video":
+                self._wrap_blue(tmp, conform, plan.muxer, notes)
             os.replace(tmp, target)
             if self.s.keep_dates:
                 copy_dates(self.src, target)

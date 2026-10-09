@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
 
-from . import burnin
+from . import burnin, tape
 from .burnin import BurnPlan
 from .frame import Area, frame_plan, resized
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
@@ -197,6 +197,7 @@ def build(
     captions: list | None = None,
     conform: Conform | None = None,
     timecode: str = "",
+    glitch_cut: bool = False,
 ) -> Plan:
     """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim.
     conform: this clip is one part of a joined video and must match the others (rewrap ignores it).
@@ -443,17 +444,28 @@ def build(
     elif tonemap and caps.has_filter("zscale"):
         vargs += ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
 
-    if not burn.empty:
-        # Burn-in / caption images are extra inputs, so the picture goes through a filter graph.
-        first = args.index("-i") + 2
-        length = (trim[1] - trim[0]) if trim else info.duration
-        args[first:first] = burn.input_args(_out_rate(info, s, doubled) or "25", length)
-        # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
-        # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
-        pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
-        graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(1, "bin", "bout" if post else "vout")
-        if post:
-            graph += f";[bout]{post}[vout]"
+    windows = tape.glitch_windows(s, src, info, trim, glitch_cut) if p.key != "gif" else []
+    if windows:
+        notes.append(f"Tape glitches: {len(windows)}.")
+    if not burn.empty or windows:
+        if not burn.empty:
+            # Burn-in / caption images are extra inputs, so the picture goes through a filter graph.
+            first = args.index("-i") + 2
+            length = (trim[1] - trim[0]) if trim else info.duration
+            args[first:first] = burn.input_args(_out_rate(info, s, doubled) or "25", length)
+            # Start the picture's clock at exactly 0 so the burned-in timecode / clock begin on the first
+            # frame (MPEG program streams like .MOD / .VOB otherwise keep a start offset after a seek).
+            pre, post = ",".join(["setpts=PTS-STARTPTS", *vf[:burn_at]]), ",".join(vf[burn_at:])
+            graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(1, "bin", "bout" if post else "vout")
+            if post:
+                graph += f";[bout]{post}[vout]"
+        else:
+            graph = f"[0:{info.video_index}]" + ",".join(["setpts=PTS-STARTPTS", *vf]) + "[vout]"
+        if windows:  # tape glitches go over everything (they happen to the whole picture on tape)
+            cut_at = graph.rfind("[vout]")
+            graph = graph[:cut_at] + "[gin]" + graph[cut_at + len("[vout]") :]
+            size = (conform.width, conform.height) if conform and conform.width else out_size
+            graph += ";" + tape.video_graph(windows, size, "gin", "vout")
         args += ["-filter_complex", graph]
         args[args.index(f"0:{info.video_index}")] = "[vout]"
     elif vf:
@@ -461,8 +473,13 @@ def build(
     args += vargs
 
     # ---- audio codec
-    if tracks and not burn.empty:
-        args += ["-af", "asetpts=PTS-STARTPTS"]  # keep in step with the picture (see above)
+    af = []
+    if tracks and (not burn.empty or windows):
+        af.append("asetpts=PTS-STARTPTS")  # keep in step with the picture (see above)
+    if tracks and windows:
+        af += tape.audio_filters(windows)
+    if af:
+        args += ["-af", ",".join(af)]
     if conform is not None and not tracks and p.key != "gif":
         # A silent clip in a joined video still needs a sound track, or the parts won't line up.
         last_i = max(i for i, a in enumerate(args) if a == "-i")

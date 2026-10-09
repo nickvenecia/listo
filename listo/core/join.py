@@ -18,7 +18,7 @@ from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 
-from . import naming, video
+from . import naming, tape, video
 from .engine import Result, _plan_lock
 from .fileutil import copy_dates
 from .log import get_logger
@@ -73,6 +73,25 @@ def running_timecodes(clips: list[tuple[MediaInfo, float]]) -> list[str]:
             out.append(tc_add("00:00:00;00" if ntsc else "00:00:00:00", running, info.rate))
         running += max(0.0, length)
     return out
+
+
+def concat_args(parts: list[Path], lst: Path, out: Path, muxer: str, timecode: str = "") -> list[str]:
+    """ffmpeg args that glue parts (same size, frame rate, sound, encoder) into out without
+    re-encoding. Writes the list file `lst`. Used for joined videos and the tape blue screen."""
+    lines = ["ffconcat version 1.0"]
+    for p in parts:
+        lines.append("file '" + str(p).replace("'", "'\\''") + "'")
+    lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    args = [
+        "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:1",
+        "-f", "concat", "-safe", "0", "-i", str(lst),
+        "-map", "0:v?", "-map", "0:a?", "-c", "copy",
+    ]  # fmt: skip
+    if muxer in ("mov", "mp4") and timecode:
+        args += ["-timecode", timecode]
+    if muxer == "mp4":
+        args += ["-movflags", "+faststart"]
+    return [*args, "-f", muxer, str(out)]
 
 
 def parts_folder(first_src: str, s: Settings) -> Path:
@@ -134,6 +153,7 @@ class Join:
         reserved: set[str],
         captions: list[list | None] | None = None,
         last_src: str = "",
+        conform: video.Conform | None = None,
     ):
         """captions: for each part, its cues on the part's own timeline (already trimmed), or None."""
         self.parts = parts
@@ -144,6 +164,7 @@ class Join:
         self.reserved = reserved
         self.captions = captions or [None] * len(parts)
         self.last_src = last_src
+        self.conform = conform  # what every part matches (needed to make the tape blue screen)
         self._ff: FFmpegRun | None = None
         self._canceled = False
         self.length = 0.0  # total, known once the parts are read
@@ -152,6 +173,21 @@ class Join:
         self._canceled = True
         if self._ff:
             self._ff.cancel()
+
+    def _add_blue(self) -> None:
+        """Tape effect: VCR blue screen before the first clip and after the last."""
+        folder = self.parts[0].parent
+        ext = self.parts[0].suffix
+        made = []
+        for name in ("blue-start", "blue-end"):
+            out = folder / f"{name}{ext}"
+            r = tape.make_blue(out, self.conform, self.s, self.caps)
+            if r.status != "done":
+                log.warning("blue screen failed: %s", r.message)
+                return
+            made.append(out)
+        self.parts = [made[0], *self.parts, made[1]]
+        self.captions = [None, *self.captions, None]
 
     def cleanup(self) -> None:
         """Delete the parts (they were only a step on the way)."""
@@ -188,6 +224,8 @@ class Join:
                 return Result("failed", message="Nothing to join: none of the clips converted.")
             if not self.caps.ffmpeg:
                 return Result("failed", message="ffmpeg is missing.")
+            if tape.wants_blue(self.s) and self.conform is not None:
+                self._add_blue()
             infos = [probe(p, as_media=True) for p in self.parts]
             bad = next((i for i in infos if i.error), None)
             if bad is not None:
@@ -217,23 +255,11 @@ class Join:
             target.parent.mkdir(parents=True, exist_ok=True)
             tmp = target.with_name(f".{target.stem}.listo-{uuid.uuid4().hex[:6]}{target.suffix}")
 
-            lst = self.parts[0].parent / "join.ffconcat"
-            lines = ["ffconcat version 1.0"]
-            for p in self.parts:
-                lines.append("file '" + str(p).replace("'", "'\\''") + "'")
-            lst.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
             muxer = MUXERS.get(target.suffix.lstrip(".").lower(), "mov")
-            args = [
-                "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:1",
-                "-f", "concat", "-safe", "0", "-i", str(lst),
-                "-map", "0:v?", "-map", "0:a?", "-c", "copy",
-            ]  # fmt: skip
-            if muxer in ("mov", "mp4") and infos[0].timecode:
-                args += ["-timecode", infos[0].timecode]  # the edit starts at the first clip's timecode
-            if muxer == "mp4":
-                args += ["-movflags", "+faststart"]
-            args += ["-f", muxer, str(tmp)]
+            # (the edit starts at the first clip's timecode)
+            args = concat_args(
+                self.parts, self.parts[0].parent / "join.ffconcat", tmp, muxer, infos[0].timecode
+            )
             if self._canceled:
                 raise Canceled()
             log.info("joining %d clips into %s", len(self.parts), target)

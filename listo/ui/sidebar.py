@@ -35,6 +35,7 @@ from ..core.presets import (
     VIDEO_PRESETS,
     Settings,
 )
+from ..core.tape import NO_EFFECTS
 from ..core.tools import Capabilities
 from .tokens import SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
 from .widgets import (
@@ -103,7 +104,15 @@ def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> ToggleRow:
 # Settings counted in each folded group's "· N changed" (so nothing changed hides when folded).
 GROUPS: dict[str, tuple[str, ...]] = {
     "picture": ("desqueeze", "aspect", "deinterlace", "lut_path"),
-    "text": ("burn_timecode", "burn_filename", "burn_datetime", "captions"),
+    "text": (
+        "burn_timecode",
+        "burn_filename",
+        "burn_datetime",
+        "captions",
+        "tape_blue",
+        "tape_cut_glitch",
+        "tape_glitches",
+    ),
     "sound": ("hardware", "parallel", "keep_all_audio"),
     "photo": ("photo_keep_metadata",),
 }
@@ -290,6 +299,30 @@ class Sidebar(QFrame):
             lambda: self._set_and_sync("burn_badge", self.burn_badge.currentData())
         )
 
+        # ---- tape effects (core/tape.py)
+        self.sec_tape = Section("Tape Effects")
+        self.tape_blue = _checkbox(
+            "Blue Screen at Start and End", self.s.tape_blue, lambda v: self._set("tape_blue", v),
+            "Two seconds of VCR blue before the video starts and after it ends",
+        )  # fmt: skip
+        self.tape_cut = _checkbox(
+            "Glitch Between Joined Clips", self.s.tape_cut_glitch, lambda v: self._set("tape_cut_glitch", v),
+            "Half a second of tape tracking trouble at each cut, like a camcorder starting to record again",
+        )  # fmt: skip
+        self.sec_tape.add(_checks(self.tape_blue, self.tape_cut))
+        self.tape_glitches = combo(
+            [
+                ("off", "No Random Glitches", ""),
+                ("rare", "Glitches Now and Then", "A short tracking glitch about every minute and a half"),
+                ("often", "Glitches Often", "A short tracking glitch about every half minute"),
+            ],
+            self.s.tape_glitches,
+        )
+        self.tape_glitches.currentIndexChanged.connect(
+            lambda: self._set("tape_glitches", self.tape_glitches.currentData())
+        )
+        self.sec_tape.add(self.tape_glitches)
+
         self.sec_cc = Section("Captions")
         self.cc_on = _checkbox(
             "Add Captions",
@@ -390,7 +423,7 @@ class Sidebar(QFrame):
         for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
             self.g_picture.add(sec)
         self.g_text = self._group("Burn-In", "text")
-        for sec in (self.sec_burn, self.sec_cc):
+        for sec in (self.sec_burn, self.sec_cc, self.sec_tape):
             self.g_text.add(sec)
         self.g_sound = self._group("Encoding", "sound")
         for sec in (self.sec_audio, speed):
@@ -492,6 +525,7 @@ class Sidebar(QFrame):
 
     def notify_external_change(self) -> None:
         """Settings changed elsewhere (e.g. Export options) — keep the recipe picker honest."""
+        self._sync_text()  # (joining shows "Glitch Between Joined Clips")
         self._match_recipe()
 
     def _video_preset(self, key: str) -> None:
@@ -508,6 +542,7 @@ class Sidebar(QFrame):
 
     def _sync_text(self) -> None:
         """Burn-in and caption options only show when they're switched on."""
+        self.tape_cut.setVisible(self.s.join)  # only joined videos have cuts
         self.burn_style.setVisible(self.s.burns)
         self.burn_badge.setVisible(self.s.burns and self.s.burn_style == "vhs")
         self.cc_box.setVisible(self.s.captions)
@@ -557,6 +592,7 @@ class Sidebar(QFrame):
         looks = p.key not in ("rewrap", "audio")
         self.sec_lut.setVisible(looks)
         self.sec_burn.setVisible(looks)
+        self.sec_tape.setVisible(p.key not in NO_EFFECTS)
         self.sec_frame.setVisible(looks)
         self._sync_frame()
         self._sync_text()
@@ -748,6 +784,7 @@ class Sidebar(QFrame):
                 (self.v_fit, self.s.aspect_fit),
                 (self.burn_style, self.s.burn_style),
                 (self.burn_badge, self.s.burn_badge),
+                (self.tape_glitches, self.s.tape_glitches),
                 (self.cc_lang, self.s.caption_language),
                 (self.cc_model, self.s.caption_model),
                 (self.cc_style, self.s.caption_style),
@@ -766,6 +803,8 @@ class Sidebar(QFrame):
                 (self.burn_name, self.s.burn_filename),
                 (self.burn_dt, self.s.burn_datetime),
                 (self.cc_on, self.s.captions),
+                (self.tape_blue, self.s.tape_blue),
+                (self.tape_cut, self.s.tape_cut_glitch),
                 (self.cc_bg, self.s.caption_box),
                 (self.cc_srt, self.s.caption_srt),
                 (self.p_meta, self.s.photo_keep_metadata),

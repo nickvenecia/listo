@@ -39,6 +39,7 @@ from ..core.engine import Conversion, Result
 from ..core.fileutil import reveal
 from ..core.links import is_link
 from ..core.log import get_logger
+from ..core.paths import data_dir
 from ..core.presets import (
     AUDIO_FORMATS,
     OVERRIDE_KEYS,
@@ -67,6 +68,7 @@ from .job_card import JobCard
 from .player import space_plays
 from .preview_dialog import PreviewDialog
 from .sidebar import Sidebar
+from .storage_dialog import StorageDialog
 from .trim_dialog import TrimDialog, fmt_time
 from .widgets import FitScroll, StepHeader, Toast, repolish
 from .workers import (
@@ -430,14 +432,22 @@ class MainWindow(QMainWindow):
         for b in (self.btn_show, self.btn_pause, self.btn_cancel):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
-        self.btn_console = QToolButton()
-        self.btn_console.setObjectName("IconBtn")
-        self.btn_console.setIcon(theme.icon("terminal", theme.FAINT))
-        self.btn_console.setIconSize(QSize(tokens.ICON, tokens.ICON))
-        self.btn_console.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_console.setToolTip("Debug console: watch what Listo is doing, live, in a terminal window")
-        self.btn_console.clicked.connect(self.open_console)
-        f.addWidget(self.btn_console)
+        # Tools that every system can reach (the menu bar only shows on a Mac)
+        self.btn_more = QToolButton()
+        self.btn_more.setObjectName("IconBtn")
+        self.btn_more.setIcon(theme.icon("more", theme.FAINT))
+        self.btn_more.setIconSize(QSize(tokens.ICON, tokens.ICON))
+        self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_more.setToolTip("Storage & Cache, Debug Console, Log File, About")
+        more = QMenu(self)
+        more.addAction(theme.menu_icon("trash"), "Storage && Cache…", self.open_storage)
+        more.addAction(theme.menu_icon("terminal"), "Open Debug Console", self.open_console)
+        more.addAction(theme.menu_icon("file"), "Show the Log File", self._show_log)
+        more.addSeparator()
+        more.addAction(theme.menu_icon("info"), f"About {APP_NAME}", self._about)
+        self.btn_more.setMenu(more)
+        self.btn_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        f.addWidget(self.btn_more)
         self.btn_check = QPushButton("Check Captions")
         self.btn_check.setIcon(theme.icon("captions", theme.TEXT))
         self.btn_check.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -496,11 +506,37 @@ class MainWindow(QMainWindow):
         act(v, "Show All Options", lambda: self.sidebar.open_groups(True))
         act(v, "Fold All Options", lambda: self.sidebar.open_groups(False))
         h = bar.addMenu("Help")
+        act(h, "Storage && Cache…", self.open_storage)
         act(h, "Open Debug Console", self.open_console, "Ctrl+Alt+D")
         act(h, "Show the Log File", self._show_log)
         act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
         if sys.platform != "darwin":
             bar.hide()
+
+    def open_storage(self) -> None:
+        """What Listo keeps on this computer, and deleting it (ui/storage_dialog.py)."""
+        StorageDialog(self._storage_busy, self._storage_cleared, self).exec()
+
+    def _storage_busy(self, key: str) -> str:
+        if key in ("models", "captions") and self.tx is not None:
+            return "Captions are being made right now. Try again when they're done."
+        if key == "tools" and self.downloads:
+            return "A link is downloading right now. Try again when it's done."
+        return ""
+
+    def _storage_cleared(self, key: str) -> None:
+        """Forget what was deleted, so nothing points at missing files."""
+        if key == "captions":
+            for it in self.items.values():
+                it.transcript = None
+            self._tx_failed.clear()
+            self._refresh_soon(captions=True)  # (with captions on, they're made again)
+        elif key == "extras":
+            app = QApplication.instance()
+            if app is not None:
+                app.setStyleSheet(theme.stylesheet(data_dir() / "ui"))  # its images live there
+            self._live_loaded = None
+            self._schedule_live()
 
     def open_console(self) -> None:
         """A terminal window that follows Listo's log live (core/console.py)."""
@@ -1574,7 +1610,7 @@ class MainWindow(QMainWindow):
             conv = Conversion(
                 it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues,
                 target=join.part_path(job.folder, job.ids.index(it.id) + 1, s), conform=job.conform,
-                timecode=job.timecodes.get(it.id, ""),
+                timecode=job.timecodes.get(it.id, ""), cut=job.ids.index(it.id) > 0,
             )  # fmt: skip
         else:
             conv = Conversion(
@@ -1669,7 +1705,7 @@ class MainWindow(QMainWindow):
             return
         conv = join.Join(
             [job.parts[i] for i in ids], first.path, first.info, job.settings, self.caps, self.reserved,
-            [job.cues.get(i) for i in ids], self.items[ids[-1]].path,
+            [job.cues.get(i) for i in ids], self.items[ids[-1]].path, job.conform,
         )  # fmt: skip
         job.total_s = sum(self.items[i].length for i in ids if i in self.items)
         job.thread = th = JoinThread(conv)

@@ -306,6 +306,9 @@ class Settings:
     caption_lines: int = 2
     caption_size: str = "medium"  # small / medium / large
     caption_srt: bool = False  # also save an .srt file next to the video
+    tape_blue: bool = False  # VCR blue screen at the start and end (core/tape.py)
+    tape_cut_glitch: bool = False  # a tracking glitch at each cut of a joined video
+    tape_glitches: str = "off"  # random glitches through the video: "off", "rare", "often"
     verify: bool = True
     parallel: bool = False
 

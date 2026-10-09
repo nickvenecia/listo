@@ -40,6 +40,10 @@ listo/
     fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
     paths.py       per-user folders: data_dir(), tools_dir(), log_dir(), downloads_dir() (~/Downloads/Listo)
     log.py         rotating log file (listo.log in log_dir(), 5 MB x 3); also printed to the terminal when run from one
+    tape.py        Tape effects: glitch_windows (cut + seeded random moments), video_graph / audio_filters (applied last in
+                   video.build, timeline-enabled filters), make_blue (a matching blue-screen piece joined on via
+                   join.concat_args; Conversion._wrap_blue for single videos, Join._add_blue for joined ones)
+    storage.py     Storage & Cache: kinds of data in data_dir() with sizes, clear(key) (logs are emptied, not deleted)
     console.py     Debug console: opens the system terminal following the log files live (Mac .command file,
                    Windows PowerShell, Linux terminal); turns on DEBUG logging for the session
     sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
@@ -53,6 +57,7 @@ listo/
                    title text hidden via one AppKit call). Windows/Linux keep the system bar, dark via styleHints
     player.py      ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
                    result frame while paused (owners render it on `settled`); still-frame fallback without Qt's player
+    storage_dialog.py  Storage & Cache window (sizes, Delete per kind, Delete All); MainWindow._storage_busy/_cleared
     caption_editor.py  "Check the Captions" (its own button over Convert): plays the clip, lights up the current line,
                    click a line to jump, Add Caption at the playhead; accepting marks clips reviewed
     preview_dialog.py  "Preview": ClipPlayer at full size, converted vs original; double-clicking a clip opens it playing
@@ -122,6 +127,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   joined video (one Convert = one tape, from 0); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for
   the burn-in and -timecode). Only the first part keeps the PLAY badge (REC stays on every part).
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
+- Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS). With the blue screen on, a single video is
+  conformed to itself (48 kHz stereo) so the blue pieces match; its .srt and length check shift by tape.BLUE_SECONDS.
 - presets.SESSION_ONLY (captions, join) reset to off at every launch; everything else in Settings is remembered.
 - ClipPlayer.step(-1/+1) = the previous / next clip arrows; owners call set_steps(has_prev, has_next).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.
