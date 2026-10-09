@@ -41,6 +41,10 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 
+**Links:** paste a video link (YouTube, Vimeo, Instagram and [many more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)) and it downloads into the list — then pull the audio, make a GIF of a trimmed snippet, or convert it to anything else. Downloads go to *Downloads › Listo*. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), fetched on first use and kept up to date automatically. Only download videos you have the rights to use.
+
+**Trim:** click ✂ on any video or audio file to keep just part of it (with frame previews). Burned-in and embedded timecode follow the cut.
+
 **Workflow:**
 - **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.

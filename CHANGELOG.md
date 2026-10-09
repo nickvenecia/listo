@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.0
+- **Add a link**: paste a YouTube / Vimeo / Instagram link (or drag it from your browser, or ⌘V) and it downloads into the list, ready for any format — Audio only, GIF, H.264, ProRes…
+  yt-dlp and Deno are fetched the first time and yt-dlp keeps itself up to date (daily check)
+- **Trim** any video or audio file: pick start and end with frame previews; timecode follows the cut
+- One **+ Add** button (files, a folder or a link) and a trash icon to clear the list
+- Adding new files after a batch clears the ones that converted fine (failed / flagged ones stay)
+
 ## 2.1.0
 - Top bar merged into the list toolbar (logo, Add files, Add folder, Clear list in one row)
 - Less explanation text: one-line format rows with the file extension; details moved into hover tips

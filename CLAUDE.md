@@ -16,9 +16,12 @@ listo/
   probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension
   runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
   tools.py       find bundled/system ffmpeg; encoder/filter detection; hardware encoder test
+  links.py       "Add a link": yt-dlp (+ Deno for YouTube) downloaded on first use into the user data dir
+                 (links.tools_dir()), yt-dlp -U at most daily; downloads land in ~/Downloads/Listo
   fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
   cli.py         `python -m listo cli ...`: same engine, no UI (great for testing)
   app.py         QApplication, fonts, stylesheet, Dock-icon file opens, --smoke-test
+  ui/trim_dialog.py  start/end sliders with ffmpeg frame-grab previews
   ui/            main_window (queue + batch controller), sidebar (Video/Photo/Audio format settings),
                  save_dialog (where + naming, opened from the bottom bar), job_card, theme (colors/QSS/icons),
                  widgets, workers (threads)
@@ -40,6 +43,9 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Up to 2 conversions run at once (`Settings.parallel`); `MainWindow.active` maps item id -> ConvertThread.
   Output names are reserved under `engine._plan_lock`, and every queued source path is pre-reserved so "Replace" can't hit another original.
 - Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
+- Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
+  timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
+- Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
 

@@ -267,3 +267,36 @@ def test_nominal_rate():
     assert nominal_rate("25/1", "50/1") == "25/1"          # AVCHD field rate reported
     assert nominal_rate("2997/100", "30000/1001") == "30000/1001"
     assert nominal_rate("621/30", "30/1") == "30/1"         # variable-rate phone clip
+
+
+# ---------- trim + links
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_trim_cuts_length_and_shifts_timecode(tmp_path: Path):
+    src = tmp_path / "A001.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:r=24:d=6", "-f", "lavfi", "-i", "sine=d=6",
+       "-c:v", "libx264", "-c:a", "aac", "-timecode", "01:00:00:00", str(src))
+    for preset in ("prores", "h264", "audio", "gif"):
+        r = Conversion(str(src), probe(src), Settings(video_preset=preset), capabilities(), set(),
+                       trim=(2.0, 4.5)).run()
+        assert r.status == "done" and not r.warning, (preset, r.message, r.warning)
+        got = probe(r.output, as_media=True)
+        assert abs(got.duration - 2.5) < 0.2, (preset, got.duration)
+        if preset == "prores":
+            assert got.timecode == "01:00:02:00"
+
+
+def test_tc_add():
+    from listo.probe import tc_add
+
+    assert tc_add("01:00:00:00", 2.0, "24000/1001") == "01:00:02:00"
+    assert tc_add("00:00:59;29", 1 / 29.97, "30000/1001") == "00:01:00;02"
+    assert tc_add("00:09:59;29", 1 / 29.97, "30000/1001") == "00:10:00;00"
+
+
+def test_is_link():
+    from listo.links import is_link
+
+    assert is_link("https://youtu.be/abc123xyz")
+    assert not is_link("hello world") and not is_link("/Users/nick/a.mov")

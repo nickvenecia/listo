@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -162,6 +163,42 @@ def nominal_rate(*candidates: str) -> str:
         f = vals[0][1]
         return min(STANDARD_RATES, key=lambda std: abs(_fps(std) - f))
     return ""
+
+
+def tc_add(tc: str, seconds: float, rate: str) -> str:
+    """Timecode + seconds (handles drop-frame ';' at 29.97/59.94)."""
+    try:
+        sep_df = ";" in tc
+        parts = [int(x) for x in tc.replace(";", ":").replace(".", ":").split(":")]
+        h, m, s, f = parts if len(parts) == 4 else (*parts, 0)
+        fps = _fps(rate)
+        nom = int(round(fps))
+        if nom <= 0:
+            return tc
+        drop = (nom // 30) * 2 if sep_df and nom in (30, 60) else 0
+        total_min = h * 60 + m
+        frames = ((total_min * 60 + s) * nom + f) - drop * (total_min - total_min // 10)
+        frames += math.ceil(seconds * fps - 1e-3)  # ffmpeg keeps the first frame at/after the cut
+        if drop:
+            per10 = nom * 600 - drop * 9
+            per1 = nom * 60 - drop
+            d, r = divmod(frames, per10)
+            frames += drop * 9 * d + (drop * ((r - drop) // per1) if r > drop else 0)
+        ff = frames % nom
+        total_s = frames // nom
+        sep = ";" if drop else ":"
+        return f"{(total_s // 3600) % 24:02d}:{(total_s // 60) % 60:02d}:{total_s % 60:02d}{sep}{ff:02d}"
+    except (ValueError, TypeError):
+        return tc
+
+
+def tc_double_frames(tc: str) -> str:
+    """29.97 timecode -> the same moment at 59.94 (frames field doubled)."""
+    try:
+        head, ff = tc[:-2], int(tc[-2:])
+        return f"{head}{ff * 2:02d}"
+    except ValueError:
+        return tc
 
 
 def _fps(rate: str) -> float:

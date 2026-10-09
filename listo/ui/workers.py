@@ -85,6 +85,65 @@ class HardwareTask(QRunnable):
             pass
 
 
+class FrameSignals(QObject):
+    done = Signal(int, bytes)  # request number, PNG bytes
+
+
+class FrameTask(QRunnable):
+    """Grab one frame at a time position (for the trim previews)."""
+
+    def __init__(self, seq: int, path: str, t: float, info: MediaInfo, signals: FrameSignals, width: int = 320):
+        super().__init__()
+        self.seq, self.path, self.t, self.info, self.signals, self.width = seq, path, t, info, signals, width
+        self.setAutoDelete(True)
+
+    def run(self) -> None:
+        caps = capabilities()
+        data = b""
+        if caps.ffmpeg:
+            vf = ("yadif," if self.info.interlaced else "") + f"scale={self.width}:-2"
+            try:
+                cp = subprocess.run(
+                    [caps.ffmpeg, "-hide_banner", "-v", "error", "-ss", f"{max(0.0, self.t):.3f}", "-i", self.path,
+                     "-frames:v", "1", "-vf", vf, "-f", "image2pipe", "-c:v", "png", "-"],
+                    stdin=subprocess.DEVNULL, capture_output=True, timeout=20, **popen_kwargs(),
+                )
+                data = cp.stdout if cp.returncode == 0 else b""
+            except (OSError, subprocess.SubprocessError):
+                data = b""
+        try:
+            self.signals.done.emit(self.seq, data)
+        except RuntimeError:
+            pass
+
+
+class DownloadThread(QThread):
+    progress = Signal(int, float, str)  # item id, 0..1 (or -1 for a status message), text
+    titled = Signal(int, str)
+    done = Signal(int, str, str)  # item id, saved path, error ("" if ok)
+
+    def __init__(self, item_id: int, url: str):
+        super().__init__()
+        from ..links import LinkDownload
+
+        self.item_id = item_id
+        self.job = LinkDownload(url)
+
+    def run(self) -> None:
+        from ..links import Canceled, LinkError
+
+        try:
+            path = self.job.run(lambda p, t: self.progress.emit(self.item_id, p, t),
+                                lambda title: self.titled.emit(self.item_id, title))
+            self.done.emit(self.item_id, path, "")
+        except Canceled:
+            self.done.emit(self.item_id, "", "Canceled")
+        except LinkError as e:
+            self.done.emit(self.item_id, "", str(e))
+        except Exception as e:  # noqa: BLE001
+            self.done.emit(self.item_id, "", f"{e.__class__.__name__}: {e}")
+
+
 class ConvertThread(QThread):
     progress = Signal(int, float, float)  # item id, seconds processed, speed
     finished_item = Signal(int, object)  # item id, Result

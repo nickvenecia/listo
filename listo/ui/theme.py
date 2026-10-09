@@ -129,6 +129,8 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 QPushButton#Chip {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 6px; padding: 1px 7px; font-size: 11px; font-weight: 600; color: {MUTED}; }}
 QPushButton#Chip:hover {{ color: {TEXT}; border-color: #55555F; }}
 QPushButton#Chip[custom="true"] {{ color: {ACCENT}; border-color: rgba(245,165,36,0.55); background: rgba(245,165,36,0.08); }}
+#TrimTag {{ color: {ACCENT}; font-size: 11px; font-weight: 600; }}
+#TrimPreview {{ background: #0C0C0E; border: 1px solid {BORDER}; border-radius: 8px; }}
 QPushButton#Chip:disabled {{ background: transparent; border-color: {BORDER}; color: {FAINT}; }}
 QProgressBar#Warn::chunk {{ background: {WARN}; }}
 #OptionSub {{ color: {MUTED}; font-size: 12px; }}
@@ -185,6 +187,9 @@ _SVG = {
     "pause": '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
     "play": '<path d="M6 4l14 8-14 8z"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
+    "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
+    "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+    "trash": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
     "alert": '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
 }
 

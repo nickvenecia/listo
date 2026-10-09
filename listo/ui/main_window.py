@@ -7,16 +7,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence
+from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
+    QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QToolButton, QProgressBar, QPushButton, QScrollArea,
     QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from .. import APP_NAME, __version__, naming
 from ..engine import Conversion, Result
 from ..fileutil import reveal
+from ..links import is_link
 from ..presets import (
     AUDIO_FORMATS, OVERRIDE_KEYS, PHOTO_FORMATS, VIDEO_PRESETS, Settings, format_label,
 )
@@ -27,8 +28,10 @@ from .job_card import JobCard
 from .save_dialog import SaveDialog, summary as save_summary
 from .sidebar import Sidebar
 from .widgets import Toast, repolish
-from .workers import ConvertThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
+from .trim_dialog import TrimDialog, fmt_time
+from .workers import ConvertThread, DownloadThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
 
+_ORPHANS: list = []
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
 
 
@@ -48,20 +51,28 @@ class Item:
     base: Settings | None = None  # settings captured when this file joined a batch
     started: float = 0.0
     speed: float = 0.0
+    url: str = ""  # set for things added from a link
+    trim: tuple[float, float] | None = None
+
+    @property
+    def length(self) -> float:
+        if self.trim:
+            return max(0.1, self.trim[1] - self.trim[0])
+        return self.info.duration if self.info else 0.0
 
     @property
     def weight(self) -> float:
         """How much of the batch this file is, in 'seconds of media'."""
-        if self.info and self.info.duration and self.kind in ("video", "audio"):
-            return max(self.info.duration, 1.0)
+        if self.length and self.kind in ("video", "audio"):
+            return max(self.length, 1.0)
         return 2.0
 
     @property
     def frac(self) -> float:
         if self.state in ("done", "warning"):
             return 1.0
-        if self.state in ("converting", "paused") and self.info and self.info.duration:
-            return min(1.0, self.processed / self.info.duration)
+        if self.state in ("converting", "paused") and self.length:
+            return min(1.0, self.processed / self.length)
         return 0.0
 
 
@@ -132,10 +143,12 @@ class MainWindow(QMainWindow):
         self.reserved: set[str] = set()
         self.counter = 0
         self.active: dict[int, ConvertThread] = {}
+        self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
 
         self._build()
         self._menus()
+        QShortcut(QKeySequence.StandardKey.Paste, self, activated=self._paste)
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
         self._update_save_button()
@@ -177,32 +190,31 @@ class MainWindow(QMainWindow):
         word.setToolTip("Drop it in. Get it back edit-ready.")
         bar.addWidget(word)
         bar.addSpacing(16)
-        self.btn_add = QPushButton(" Add files")
+        self.btn_add = QPushButton(" Add")
+        self.btn_add.setObjectName("Ghost")
         self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
-        self.btn_add.clicked.connect(self.pick_files)
-        self.btn_folder = QPushButton(" Add folder")
-        self.btn_folder.setIcon(theme.icon("folder", theme.MUTED))
-        self.btn_folder.clicked.connect(self.pick_folder)
-        for b in (self.btn_add, self.btn_folder):
-            b.setObjectName("Ghost")
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            bar.addWidget(b)
+        self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_add.setToolTip("Add files, a folder or a link — or just drop them in")
+        add_menu = QMenu(self)
+        add_menu.addAction(theme.icon("file", theme.MUTED), "Files…", self.pick_files)
+        add_menu.addAction(theme.icon("folder", theme.MUTED), "A folder…", self.pick_folder)
+        add_menu.addAction(theme.icon("link", theme.MUTED), "A link…", self.ask_link)
+        self.btn_add.setMenu(add_menu)
+        self.btn_add.setStyleSheet("QPushButton::menu-indicator { image: none; width: 0; }")
+        bar.addWidget(self.btn_add)
         bar.addStretch(1)
         self.q_count = QLabel()
         self.q_count.setObjectName("SectionLabel")
         bar.addWidget(self.q_count)
-        bar.addSpacing(8)
-        self.btn_rm_done = QPushButton("Remove finished")
-        self.btn_rm_done.setObjectName("Ghost")
-        self.btn_rm_done.setToolTip("Take converted, skipped and failed files off the list")
-        self.btn_rm_done.clicked.connect(self.clear_finished)
-        self.btn_clear_all = QPushButton("Clear list")
-        self.btn_clear_all.setObjectName("Ghost")
-        self.btn_clear_all.setToolTip("Empty the list (your files aren't touched)")
+        bar.addSpacing(4)
+        self.btn_clear_all = QToolButton()
+        self.btn_clear_all.setObjectName("IconBtn")
+        self.btn_clear_all.setIcon(theme.icon("trash", theme.MUTED, 16))
+        self.btn_clear_all.setIconSize(QSize(16, 16))
+        self.btn_clear_all.setToolTip("Clear the list (your files aren't touched)")
+        self.btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear_all.clicked.connect(self.clear_all)
-        for b in (self.btn_rm_done, self.btn_clear_all):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            bar.addWidget(b)
+        bar.addWidget(self.btn_clear_all)
         left_col.addLayout(bar)
         self.queue_stack = QStackedWidget()
         empty_wrap = QWidget()
@@ -293,6 +305,10 @@ class MainWindow(QMainWindow):
         a.setShortcut(QKeySequence("Ctrl+Shift+O"))
         a.triggered.connect(self.pick_folder)
         m.addAction(a)
+        a = QAction("Add a Link…", self)
+        a.setShortcut(QKeySequence("Ctrl+L"))
+        a.triggered.connect(self.ask_link)
+        m.addAction(a)
         m.addSeparator()
         a = QAction("Convert", self)
         a.setShortcut(QKeySequence("Ctrl+Return"))
@@ -303,6 +319,143 @@ class MainWindow(QMainWindow):
         a.setMenuRole(QAction.MenuRole.AboutRole)
         a.triggered.connect(self._about)
         h.addAction(a)
+
+    # ------------------------------------------------------------------ links
+    def ask_link(self) -> None:
+        clip = QApplication.clipboard().text().strip()
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Add a link")
+        dlg.setFixedWidth(500)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(22, 20, 22, 18)
+        lay.setSpacing(10)
+        t = QLabel("Add a link")
+        t.setObjectName("DialogTitle")
+        lay.addWidget(t)
+        edit_ = QLineEdit(clip if is_link(clip) else "")
+        edit_.setPlaceholderText("Paste a video link — YouTube, Vimeo, Instagram…")
+        lay.addWidget(edit_)
+        note = QLabel("Only download videos you have the rights to use. Saved to Downloads › Listo.")
+        note.setObjectName("Hint")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        cancel = QPushButton("Cancel")
+        cancel.clicked.connect(dlg.reject)
+        ok = QPushButton("Add")
+        ok.setObjectName("Primary")
+        ok.setDefault(True)
+        ok.clicked.connect(dlg.accept)
+        row.addWidget(cancel)
+        row.addWidget(ok)
+        lay.addLayout(row)
+        edit_.selectAll()
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            links = [w for w in edit_.text().split() if is_link(w)]
+            if links:
+                self.add_links(links)
+            elif edit_.text().strip():
+                self.toast.show_message("That doesn't look like a link.")
+
+    def _paste(self) -> None:
+        md = QApplication.clipboard().mimeData()
+        local = [u.toLocalFile() for u in md.urls() if u.isLocalFile()] if md and md.hasUrls() else []
+        if local:
+            self.add_paths(local)
+            return
+        links = [w for w in QApplication.clipboard().text().split() if is_link(w)]
+        if links:
+            self.add_links(links)
+
+    def add_links(self, urls: list[str]) -> None:
+        have = {it.url for it in self.items.values() if it.url}
+        fresh = []
+        for url in urls:
+            url = url.strip()
+            if url in have:
+                continue
+            have.add(url)
+            fresh.append(url)
+        if fresh:
+            self._auto_clear()
+        added = 0
+        for url in fresh:
+            iid = self._new_card(url, "link", display=_short_url(url))
+            it = self.items[iid]
+            it.url = url
+            self._start_download(it)
+            added += 1
+        if not added:
+            self.toast.show_message("That link is already in the list.")
+        self._refresh_footer()
+
+    def _start_download(self, it: Item) -> None:
+        it.state = "downloading"
+        it.card.set_state("downloading", "Starting…")
+        it.card.set_progress(0)
+        th = DownloadThread(it.id, it.url)
+        th.progress.connect(self._dl_progress)
+        th.titled.connect(self._dl_titled)
+        th.done.connect(self._dl_done)
+        self.downloads[it.id] = th
+        th.start()
+
+    def _dl_progress(self, iid: int, frac: float, text: str) -> None:
+        it = self.items.get(iid)
+        if not it or it.state != "downloading":
+            return
+        if frac >= 0:
+            it.card.set_progress(frac)
+        it.card.set_state("downloading", text if len(text) < 34 else text[:32] + "…")
+        if frac < 0:
+            it.card.set_meta(text)
+
+    def _dl_titled(self, iid: int, title: str) -> None:
+        it = self.items.get(iid)
+        if it and title:
+            it.card.set_name(title)
+            it.card.set_meta(_short_url(it.url))
+
+    def _dl_done(self, iid: int, path: str, error: str) -> None:
+        th = self.downloads.pop(iid, None)
+        if th:
+            th.wait(2000)
+            th.deleteLater()
+        it = self.items.get(iid)
+        if not it:
+            return
+        if error:
+            it.state = "failed"
+            it.message = error
+            it.card.set_state("failed", "Download failed" if error != "Canceled" else "Canceled")
+            it.card.set_output(error)
+        else:
+            it.path = path
+            it.kind = kind_from_ext(path)
+            it.card.kind = it.kind
+            it.card.set_name(Path(path).name)
+            it.state = "probing"
+            it.card.set_state("probing")
+            it.card.set_progress(0)
+            self.pool.start(ProbeTask(iid, path, self.probe_signals))
+        self._refresh_footer()
+        if self.running:
+            self._kick()
+
+    # ------------------------------------------------------------------ trim
+    def trim_item(self, iid: int) -> None:
+        it = self.items.get(iid)
+        if not it or not it.info or it.state not in ("ready", "waiting") or it.kind not in ("video", "audio"):
+            return
+        if not it.info.duration:
+            self.toast.show_message("Listo can't tell how long this file is, so it can't be trimmed.")
+            return
+        dlg = TrimDialog(it.path, it.info, it.trim, self)
+        if dlg.exec() == QDialog.DialogCode.Accepted and it.state in ("ready", "waiting"):
+            it.trim = dlg.result_trim
+            it.card.set_trim(f"✂ {fmt_time(it.trim[0])}–{fmt_time(it.trim[1])}" if it.trim else "")
+            self._refresh_footer()
 
     # ------------------------------------------------------------------ adding files
     def pick_files(self) -> None:
@@ -323,6 +476,16 @@ class MainWindow(QMainWindow):
     def _remember_dir(self, p: str) -> None:
         self.qs.setValue("last_dir", str(Path(p).parent if Path(p).is_file() else p))
 
+    def _auto_clear(self) -> None:
+        """Adding new things after a batch clears the files that went fine (problems stay)."""
+        self._show_summary = False
+        self.btn_show.hide()
+        if self.running:
+            return
+        for iid in list(self.order):
+            if self.items[iid].state in ("done", "skipped"):
+                self.remove_item(iid)
+
     def add_paths(self, paths: list[str]) -> None:
         existing = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         added = dupes = skipped = 0
@@ -341,12 +504,17 @@ class MainWindow(QMainWindow):
                             skipped += 1
             elif pp.is_file():
                 to_add.append((str(pp), True))
+        fresh = []
         for path, explicit in to_add:
             key = naming.reserve_key(Path(path))
             if key in existing:
                 dupes += 1
                 continue
             existing.add(key)
+            fresh.append(path)
+        if any(ext_of(p) in KNOWN_EXTS for p in fresh):
+            self._auto_clear()
+        for path in fresh:
             self._add_item(path)
             added += 1
         msgs = []
@@ -362,24 +530,30 @@ class MainWindow(QMainWindow):
         if self.running:
             self._kick()
 
-    def _add_item(self, path: str) -> None:
+    def _new_card(self, path: str, kind: str, display: str = "") -> int:
         iid = self._next_id
         self._next_id += 1
-        kind = kind_from_ext(path)
         it = Item(iid, path, kind)
-        if self.running:
-            self.reserved.add(naming.reserve_key(Path(path)))
-        card = JobCard(iid, Path(path).name, kind)
+        card = JobCard(iid, display or Path(path).name, kind)
         card.remove.connect(self.remove_item)
         card.retry.connect(self.retry_item)
         card.reveal.connect(self.reveal_item)
         card.details.connect(self.show_details)
         card.format_clicked.connect(self._format_menu)
+        card.trim_clicked.connect(self.trim_item)
         it.card = card
         self.items[iid] = it
         self.order.append(iid)
         self.list_lay.insertWidget(self.list_lay.count() - 1, card)
         self.queue_stack.setCurrentIndex(1)
+        return iid
+
+    def _add_item(self, path: str) -> None:
+        kind = kind_from_ext(path)
+        if self.running:
+            self.reserved.add(naming.reserve_key(Path(path)))
+        iid = self._new_card(path, kind)
+        it, card = self.items[iid], self.items[iid].card
         if kind == "unknown":
             e = ext_of(path)
             it.state = "unsupported"
@@ -395,6 +569,8 @@ class MainWindow(QMainWindow):
         it = self.items.get(iid)
         if not it:
             return
+        if self.running:
+            self.reserved.add(naming.reserve_key(Path(it.path)))
         it.info = info
         it.kind = info.kind if info.kind != "unknown" else it.kind
         card = it.card
@@ -516,6 +692,8 @@ class MainWindow(QMainWindow):
         it = self.items.get(iid)
         if not it or iid in self.active:
             return
+        if iid in self.downloads:
+            self.downloads[iid].job.cancel()  # its thread finishes on its own
         it.card.setParent(None)
         it.card.deleteLater()
         del self.items[iid]
@@ -531,6 +709,13 @@ class MainWindow(QMainWindow):
 
     def retry_item(self, iid: int) -> None:
         it = self.items.get(iid)
+        if it and it.url and not it.info and iid not in self.downloads:
+            it.message = ""
+            self._start_download(it)  # the download itself failed: try it again
+            if self.running and iid not in self.batch:
+                self.batch.append(iid)
+            self._refresh_footer()
+            return
         if not it or not it.info:
             return
         it.result, it.processed, it.message, it.base = None, 0.0, "", None
@@ -617,7 +802,7 @@ class MainWindow(QMainWindow):
         if not self.caps.ok and any(it.kind != "photo" for it in self.items.values()):
             self._missing_ffmpeg()
             return
-        todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing")]
+        todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing", "downloading")]
         if not todo:
             again = [iid for iid in self.order if self.items[iid].state in ("done", "warning", "failed", "canceled", "skipped")]
             if again:
@@ -646,7 +831,7 @@ class MainWindow(QMainWindow):
                 it.card.set_state("waiting")
                 self._update_output_name(it)
                 self.batch.append(iid)
-            elif it.state == "probing":
+            elif it.state in ("probing", "downloading"):
                 it.base = self.settings.copy()  # same settings as the files dropped with it
                 self.batch.append(iid)
 
@@ -664,7 +849,7 @@ class MainWindow(QMainWindow):
                 break
             self._start_item(self.items[nxt])
         if not self.active:
-            if any(self.items.get(i) and self.items[i].state == "probing" for i in self.batch):
+            if any(self.items.get(i) and self.items[i].state in ("probing", "downloading") for i in self.batch):
                 return  # wait for files that are still being read
             self._finish()
             return
@@ -675,7 +860,7 @@ class MainWindow(QMainWindow):
         if it.base is None:
             it.base = self.settings.copy()
         s = self.eff(it)
-        conv = Conversion(it.path, it.info, s, self.caps, self.reserved, self.counter)
+        conv = Conversion(it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim)
         it.state, it.processed, it.speed = "converting", 0.0, 0.0
         it.started = time.monotonic()
         it.card.set_state("converting", "Starting…")
@@ -706,8 +891,8 @@ class MainWindow(QMainWindow):
         frac = it.frac
         it.card.set_progress(frac)
         txt = f"{int(frac * 100)}%"
-        if it.info and it.info.duration and it.speed > 0:
-            txt += f" · {_eta(max(0.0, it.info.duration - processed) / it.speed)}"
+        if it.length and it.speed > 0:
+            txt += f" · {_eta(max(0.0, it.length - processed) / it.speed)}"
         it.card.set_state("converting", txt)
         self._refresh_footer()
 
@@ -813,8 +998,6 @@ class MainWindow(QMainWindow):
         n = len(items)
         self.q_count.setText(f"{n} FILE{'S' if n != 1 else ''}")
         self.q_count.setVisible(n > 0)
-        finished = sum(1 for it in items if it.state in ("done", "warning", "failed", "skipped", "canceled"))
-        self.btn_rm_done.setVisible(0 < finished < n)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
 
     def _refresh_footer(self, finished: bool = False) -> None:
@@ -838,7 +1021,7 @@ class MainWindow(QMainWindow):
             what = f"{busy} files at once" if busy > 1 else f"{min(finished_n + 1, len(batch))} of {len(batch)}"
             self.f_title.setText(("Paused — " if self.paused else "Converting ") + what)
             remaining_media = sum(
-                (it.info.duration if it.info else 0) * (1 - it.frac)
+                it.length * (1 - it.frac)
                 for it in batch if it.state not in FINAL and it.kind in ("video", "audio")
             )
             photos_left = sum(1 for it in batch if it.state not in FINAL and it.kind == "photo")
@@ -858,7 +1041,7 @@ class MainWindow(QMainWindow):
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()
-        ready = [it for it in items if it.state in ("ready", "probing")]
+        ready = [it for it in items if it.state in ("ready", "probing", "downloading")]
         self.btn_start.setEnabled(bool(ready))
         self.btn_start.setText(f"Convert {len(ready)} file{'s' if len(ready) != 1 else ''}" if ready else "Convert")
         if finished and hasattr(self, "_last_summary"):
@@ -879,14 +1062,15 @@ class MainWindow(QMainWindow):
             self.f_sub.setText("")
             self.btn_show.hide()
             return
-        kinds = {"video": 0, "photo": 0, "audio": 0}
+        kinds = {"video": 0, "photo": 0, "audio": 0, "link": 0}
         dur = 0.0
         for it in convertible:
             if it.kind in kinds:
                 kinds[it.kind] += 1
             if it.info and it.kind in ("video", "audio"):
-                dur += it.info.duration
-        bits = [f"{c} {k}{'s' if c != 1 else ''}" for k, c in (("video", kinds["video"]), ("photo", kinds["photo"]), ("audio file", kinds["audio"])) if c]
+                dur += it.length
+        bits = [f"{c} {k}{'s' if c != 1 else ''}" for k, c in (("video", kinds["video"]), ("photo", kinds["photo"]),
+                                                               ("audio file", kinds["audio"]), ("link", kinds["link"])) if c]
         self.f_title.setText(" · ".join(bits) or "Nothing Listo can convert yet")
         sub = []
         if dur:
@@ -919,7 +1103,8 @@ class MainWindow(QMainWindow):
         )
 
     def dragEnterEvent(self, e: QDragEnterEvent) -> None:  # noqa: N802
-        if e.mimeData().hasUrls():
+        md = e.mimeData()
+        if md.hasUrls() or is_link(md.text()):
             e.acceptProposedAction()
             self.drop.set_hot(True)
 
@@ -928,9 +1113,16 @@ class MainWindow(QMainWindow):
 
     def dropEvent(self, e: QDropEvent) -> None:  # noqa: N802
         self.drop.set_hot(False)
-        paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
+        urls = e.mimeData().urls()
+        paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
+        links = [u.toString() for u in urls if not u.isLocalFile() and is_link(u.toString())]
+        if not urls and is_link(e.mimeData().text()):
+            links = [e.mimeData().text().strip()]
         if paths:
             self.add_paths(paths)
+        if links:
+            self.add_links(links)
+        if paths or links:
             e.acceptProposedAction()
 
     def closeEvent(self, e) -> None:  # noqa: N802
@@ -954,8 +1146,11 @@ class MainWindow(QMainWindow):
             self.stop()
         for th in list(self.active.values()):
             th.conversion.cancel()
-        for th in list(self.active.values()):
-            th.wait(30000)
+        for th in list(self.downloads.values()):
+            th.job.cancel()
+        for th in list(self.active.values()) + list(self.downloads.values()):
+            if not th.wait(15000):
+                _ORPHANS.append(th)  # never destroy a running QThread (that crashes on quit)
         self.pool.clear()
         self.pool.waitForDone(3000)
         self.qs.setValue("geometry", self.saveGeometry())
@@ -971,6 +1166,11 @@ def _eta(sec: float) -> str:
     if sec < 3600:
         return f"{sec // 60}m {sec % 60:02d}s"
     return f"{sec // 3600}h {(sec % 3600) // 60}m"
+
+
+def _short_url(url: str) -> str:
+    u = url.split("://", 1)[-1]
+    return u if len(u) <= 60 else u[:57] + "…"
 
 
 def _quote(a: str) -> str:

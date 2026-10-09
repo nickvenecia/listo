@@ -6,7 +6,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
-from .probe import MediaInfo
+from .probe import MediaInfo, tc_add, tc_double_frames
 from .tools import Capabilities
 
 
@@ -53,7 +53,7 @@ def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
 
 
 def look_filters(info: MediaInfo, s: Settings, caps: Capabilities, out_h: int, doubled: bool,
-                 src: str, notes: list[str]) -> tuple[list[str], list[str]]:
+                 src: str, notes: list[str], start_tc: str = "") -> tuple[list[str], list[str]]:
     """(LUT filters to run before scaling, burn-in filters to run after)."""
     pre: list[str] = []
     post: list[str] = []
@@ -77,7 +77,7 @@ def look_filters(info: MediaInfo, s: Settings, caps: Capabilities, out_h: int, d
     if s.burn_timecode:
         rate = _out_rate(info, s, doubled)
         if rate:
-            tc = info.timecode if info.timecode else "00:00:00:00"
+            tc = start_tc or info.timecode or "00:00:00:00"
             if ";" in tc and rate not in ("30000/1001", "60000/1001"):
                 tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
             post.append(f"drawtext={style}:timecode={fesc(tc)}:rate={rate}:x=w-tw-{pad}:y=h-th-{pad}")
@@ -98,21 +98,27 @@ def _pcm_for(info: MediaInfo, little_endian: bool = True) -> str:
     return f"pcm_s{width}{'le' if little_endian else 'be'}"
 
 
-def _input_args(src: str) -> list[str]:
-    return [
+def _input_args(src: str, trim: tuple[float, float] | None = None) -> list[str]:
+    args = [
         "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:1",
         "-fflags", "+genpts", "-probesize", "100M", "-analyzeduration", "100M",
-        "-i", src,
     ]
+    if trim:
+        args += ["-ss", f"{trim[0]:.3f}"]
+    args += ["-i", src]
+    if trim:
+        args += ["-t", f"{max(0.05, trim[1] - trim[0]):.3f}"]
+    return args
 
 
-def _audio_only(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) -> Plan:
+def _audio_only(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
+                trim: tuple[float, float] | None = None) -> Plan:
     if not info.audio:
         raise PlanError("This file has no audio to pull out.")
     fmt = AUDIO_BY_KEY[s.audio_format]
     if fmt.needs and not caps.has_encoder(fmt.needs):
         raise PlanError(f"This copy of ffmpeg can't write {fmt.title}.")
-    args = _input_args(src) + ["-map", f"0:{info.audio[0].index}", "-vn", "-c:a", fmt.codec, *fmt.extra]
+    args = _input_args(src, trim) + ["-map", f"0:{info.audio[0].index}", "-vn", "-c:a", fmt.codec, *fmt.extra]
     if fmt.key in ("mp3", "aac") and info.audio[0].channels not in (1, 2):
         args += ["-ac", "2"]
     args += ["-map_metadata", "0", "-f", fmt.muxer, out]
@@ -122,9 +128,10 @@ def _audio_only(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabili
     return Plan(args, fmt.muxer, notes)
 
 
-def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) -> Plan:
+def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
+          trim: tuple[float, float] | None = None) -> Plan:
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
-        return _audio_only(src, out, info, s, caps)
+        return _audio_only(src, out, info, s, caps, trim)
     if info.kind != "video" or info.video_index is None:
         raise PlanError(info.error or "No video found in this file.")
 
@@ -135,7 +142,11 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
 
     variant = s.variant_for(p.key)
     notes: list[str] = []
-    args = _input_args(src) + ["-map", f"0:{info.video_index}"]
+    args = _input_args(src, trim) + ["-map", f"0:{info.video_index}"]
+    # Timecode of the first frame we keep (so trimmed clips still line up in the edit)
+    start_tc = info.timecode
+    if trim and info.timecode and info.rate:
+        start_tc = tc_add(info.timecode, trim[0], info.rate)
 
     # ---- audio track selection
     tracks = info.audio if (p.edit_format and s.keep_all_audio) else info.audio[:1]
@@ -164,8 +175,10 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
             notes.append("Still interlaced — Rewrap doesn't change the picture.")
         if s.lut_path or s.burn_timecode or s.burn_filename:
             notes.append("LUT and burn-ins skipped — Rewrap doesn't re-encode.")
-        if info.timecode:
-            args += ["-timecode", info.timecode]
+        if trim:
+            notes.append("Rewrap trims on the nearest keyframe, so the start may be a little early.")
+        if start_tc:
+            args += ["-timecode", start_tc]
         args += ["-map_metadata", "0", "-f", "mov", out]
         return Plan(args, "mov", notes)
 
@@ -196,7 +209,9 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
             notes.append(f"{info.hdr_label} source — colors may look flat (tone-mapping unavailable).")
 
     burn_h = info.height if p.key == "gif" else out_size[1]
-    look_pre, look_post = look_filters(info, s, caps, burn_h, doubled, src, notes)
+    if doubled and start_tc:
+        start_tc = tc_double_frames(start_tc)
+    look_pre, look_post = look_filters(info, s, caps, burn_h, doubled, src, notes, start_tc)
     vf += look_pre
     if p.key == "gif":  # burn in before the GIF's frame-rate drop so timecode counts real frames
         vf += look_post
@@ -206,8 +221,12 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
         vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
     elif p.key == "gif":
         width = int(variant)
-        if info.duration > 30:
+        length = (trim[1] - trim[0]) if trim else info.duration
+        if length > 30 and not trim:
             args += ["-t", "30"]
+            notes.append("GIFs are capped at 30 seconds — trim the clip to pick the part you want.")
+        elif length > 30:
+            args[args.index("-t") + 1] = "30.000"
             notes.append("GIFs are capped at 30 seconds.")
         vf.append(f"fps=15,scale='min({width},iw)':-2:flags=lanczos")
     elif s.video_resize == "half":
@@ -289,8 +308,8 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities) 
         args += ["-an"]
 
     muxer = {"mov": "mov", "mp4": "mp4", "webm": "webm", "gif": "gif"}[p.ext]
-    if muxer in ("mov", "mp4") and info.timecode:
-        args += ["-timecode", info.timecode]
+    if muxer in ("mov", "mp4") and start_tc:
+        args += ["-timecode", start_tc]
     if muxer == "mp4":
         args += ["-movflags", "+faststart"]
     args += ["-map_metadata", "0", "-f", muxer, out]

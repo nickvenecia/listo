@@ -41,6 +41,7 @@ class Conversion:
         caps: Capabilities,
         reserved: set[str],
         counter: int = 1,
+        trim: tuple[float, float] | None = None,
     ):
         self.src = src
         self.info = info
@@ -48,6 +49,7 @@ class Conversion:
         self.caps = caps
         self.reserved = reserved
         self.counter = counter
+        self.trim = trim if (trim and info.kind in ("video", "audio") and trim[1] > trim[0]) else None
         self._ff: FFmpegRun | None = None
         self._canceled = False
 
@@ -85,12 +87,14 @@ class Conversion:
             return "The new file has no picture."
         if self.info.audio and not got.audio and (audio_only or self.s.video_preset != "gif"):
             return "The new file has no sound, but the original does."
-        want = self.info.duration
-        if audio_only and self.info.audio:
+        want = (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
+        if audio_only and self.info.audio and not self.trim:
             if self.info.audio[0].codec == "mp3":
                 notes.append("Length not checked (MP3 files only estimate their length).")
                 return ""
             want = self.info.audio[0].duration or want
+        if self.trim and self.s.video_preset == "rewrap":
+            want = 0  # keyframe cuts make the length legitimately differ a little
         if self.s.video_preset == "gif" and not audio_only:
             want = min(want, 30.0)
         if want > 0 and got.duration > 0:
@@ -129,7 +133,7 @@ class Conversion:
             else:
                 if not self.caps.ffmpeg:
                     return Result("failed", message="ffmpeg is missing.")
-                plan = video.build(self.src, str(tmp), self.info, self.s, self.caps)
+                plan = video.build(self.src, str(tmp), self.info, self.s, self.caps, self.trim)
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]
                 self._ff = FFmpegRun(self.caps.ffmpeg, plan.args)
