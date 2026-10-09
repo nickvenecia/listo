@@ -129,6 +129,10 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
 - Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS). With the blue screen on, a single video is
   conformed to itself (48 kHz stereo) so the blue pieces match; its .srt and length check shift by tape.BLUE_SECONDS.
+- VCR badges (tape.vcr: blue screen + VHS + PLAY badge): tape.marks() -> burnin.Marks(play_until, stop_at) passed
+  as Conversion(marks=) -> video.build -> burnin.plan. PLAY blinks on the start blue piece (make_blue badge="play")
+  and for the first 2 s of footage; STOP ■ from STOP_FRAMES_S before the end, then on the end blue piece for
+  STOP_SHOWS_S. Joined videos: only the first part gets play_until, only the last stop_at.
 - presets.SESSION_ONLY (captions, join) reset to off at every launch; everything else in Settings is remembered.
 - ClipPlayer.step(-1/+1) = the previous / next clip arrows; owners call set_steps(has_prev, has_next).
 - New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.

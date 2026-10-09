@@ -52,12 +52,14 @@ class Conversion:
         conform: video.Conform | None = None,
         timecode: str = "",
         cut: bool = False,
+        marks=None,
     ):
         self.captions = captions
         self.target = target  # a fixed output path (one part of a joined video), else from the naming rules
         self.conform = conform
         self.timecode = timecode  # start the burned-in / stored timecode here (joined videos)
         self.cut = cut  # this clip follows another in a joined video (tape glitch at the cut)
+        self.marks = marks  # burnin.Marks: PLAY / STOP timing around a tape blue screen
         # tape blue screen around a single video (a joined video gets one around the whole thing)
         self.blue_added = 0.0  # seconds of blue screen at each end, once added
         self.blue = (
@@ -92,6 +94,9 @@ class Conversion:
         os.replace(tmp, srt)
         notes.append(f"Caption file saved: {srt.name}.")
 
+    def _length(self) -> float:
+        return (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
+
     def _wrap_blue(self, tmp: Path, conform, muxer: str, notes: list[str]) -> None:
         """Tape effect: VCR blue screen before and after the video, joined on without re-encoding."""
         import shutil
@@ -102,9 +107,10 @@ class Conversion:
         folder.mkdir()
         try:
             pieces = []
+            area = tape.picture_area(self.info, self.s)
             for name in ("start", "end"):
                 out = folder / f"{name}{tmp.suffix}"
-                r = tape.make_blue(out, conform, self.s, self.caps)
+                r = tape.make_blue(out, conform, self.s, self.caps, tape.blue_badge(self.s, name), area)
                 if r.status != "done":
                     notes.append("Blue screen skipped (couldn't make it).")
                     log.warning("blue screen failed: %s", r.message)
@@ -212,9 +218,12 @@ class Conversion:
                     from .join import conform_for
 
                     conform = conform_for(self.info, self.s)
+                marks = self.marks
+                if self.blue and marks is None:  # PLAY carries on from the blue screen, STOP before the end
+                    marks = tape.marks(self.s, self._length(), first=True, last=True)
                 plan = video.build(
                     self.src, str(tmp), self.info, self.s, self.caps, self.trim, self.captions,
-                    conform, self.timecode, self.cut,
+                    conform, self.timecode, self.cut, marks,
                 )  # fmt: skip
                 notes += plan.notes
                 cmd = [self.caps.ffmpeg, *plan.args]

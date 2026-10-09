@@ -86,6 +86,7 @@ def burn_plan(
     start_tc: str = "",
     start_s: float = 0.0,
     cues: list | None = None,
+    marks: burnin.Marks | None = None,
 ) -> BurnPlan:
     """Burn-in and caption images for this conversion (drawn by Listo, so any ffmpeg works)."""
     if not s.burns and not cues:
@@ -108,7 +109,7 @@ def burn_plan(
         if not info.created:
             notes.append("No recording time inside the clip — the date comes from the file instead.")
         shot = burnin.shot_start(src, info, start_s)
-    bp = burnin.plan(info, s, frame, area, src, shot, tc, rate, cues)
+    bp = burnin.plan(info, s, frame, area, src, shot, tc, rate, cues, marks)
     if bp.layers:
         notes.append("Burn-ins added" + (" (VHS style)." if s.burn_style == "vhs" else "."))
     if bp.captions:
@@ -198,6 +199,7 @@ def build(
     conform: Conform | None = None,
     timecode: str = "",
     glitch_cut: bool = False,
+    marks: burnin.Marks | None = None,
 ) -> Plan:
     """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim.
     conform: this clip is one part of a joined video and must match the others (rewrap ignores it).
@@ -300,7 +302,7 @@ def build(
         cues = for_output(captions, trim[0] if trim else 0.0, (trim[1] - trim[0]) if trim else None)
     burn = burn_plan(
         info, s, (fw, fh) if p.key == "gif" else out_size, area, doubled, src, notes, start_tc,
-        trim[0] if trim else 0.0, cues,
+        trim[0] if trim else 0.0, cues, marks,
     )  # fmt: skip
     burn_at = len(vf) if p.key == "gif" else -1  # GIF: burn in before the frame-rate drop
 

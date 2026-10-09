@@ -26,7 +26,7 @@ def test_glitch_moments_are_steady_and_follow_the_settings():
     assert rare == tape.glitch_windows(
         Settings(tape_glitches="rare"), "/x/MOV01A.MOD", info, None
     )  # same every time
-    assert all(0.2 <= b - a <= 0.6 for a, b in rare)
+    assert all(0.12 <= b - a <= 0.35 for a, b in rare)
     assert tape.glitch_windows(Settings(), "/x/a.mov", info, None) == []  # off by default
     cut = tape.glitch_windows(Settings(tape_cut_glitch=True), "/x/a.mov", info, None, cut=True)
     assert cut == [(0.0, tape.CUT_GLITCH_S)]
@@ -73,7 +73,7 @@ def test_glitch_filters_go_on_picture_and_sound(tmp_path: Path):
     r = Conversion(str(src), probe(src), s, capabilities(), set(), cut=True).run()
     assert r.status == "done", (r.message, r.log)
     cmd = " ".join(r.command)
-    assert "rgbashift" in cmd and "noise=" in cmd and "acrusher" in cmd and "between(t,0.000,0.450)" in cmd
+    assert "rgbashift" in cmd and "noise=" in cmd and "acrusher" in cmd and "between(t,0.000,0.200)" in cmd
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
@@ -99,3 +99,45 @@ def test_joined_video_gets_one_blue_screen_around_it(tmp_path: Path):
     out = subprocess.run([capabilities().ffprobe, "-v", "error", "-show_entries", "stream=codec_type",
                           "-of", "csv=p=0", str(r.output)], capture_output=True, text=True).stdout.split()  # fmt: skip
     assert out.count("video") == 1 and out.count("audio") == 1
+
+
+def test_play_and_stop_marks_follow_the_vcr_badge():
+    vcr = Settings(
+        video_preset="h264", tape_blue=True, burn_timecode=True, burn_style="vhs", burn_badge="play"
+    )
+    m = tape.marks(vcr, 10.0, first=True, last=True)
+    assert m.play_until == 4.0 - tape.BLUE_SECONDS  # PLAY blinks on the blue screen, then on into the footage
+    assert abs(m.stop_at - (10.0 - tape.STOP_FRAMES_S)) < 1e-9  # STOP on the last frames
+    middle = tape.marks(vcr, 10.0, first=False, last=False)
+    assert middle.play_until == 0 and middle.stop_at is None  # joined clips in between: neither
+    assert tape.blue_badge(vcr, "start") == "play" and tape.blue_badge(vcr, "end") == "stop"
+    plain = vcr.copy()
+    plain.burn_badge = "rec"
+    assert tape.marks(plain, 10.0, True, True) is None and tape.blue_badge(plain, "end") == ""
+    no_blue = vcr.copy()
+    no_blue.tape_blue = False
+    assert tape.marks(no_blue, 10.0, True, True) is None
+
+
+def _bright_top_left(video: Path, at: float, out: Path) -> int:
+    """How many near-white pixels sit in the top-left corner (where PLAY / STOP are drawn)."""
+    ff("-ss", f"{at}", "-i", str(video), "-frames:v", "1", str(out))
+    im = Image.open(out).convert("RGB")
+    w, h = im.size
+    corner = im.crop((0, 0, w // 3, h // 4))
+    px = corner.tobytes()
+    return sum(1 for i in range(0, len(px), 3) if px[i] > 200 and px[i + 1] > 200)
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_play_on_the_blue_start_and_stop_into_the_blue_end(tmp_path: Path):
+    src = _clip(tmp_path / "a.mp4")
+    s = Settings(video_preset="h264", tape_blue=True, burn_timecode=True, burn_style="vhs", burn_badge="play")
+    r = Conversion(str(src), probe(src), s, capabilities(), set()).run()
+    assert r.status == "done", (r.message, r.log)
+    d = probe(r.output).duration
+    assert _bright_top_left(r.output, 0.2, tmp_path / "p.png") > 20  # PLAY on the blue screen
+    assert (
+        _bright_top_left(r.output, d - tape.BLUE_SECONDS + 0.5, tmp_path / "s.png") > 20
+    )  # STOP on the blue end
+    assert _bright_top_left(r.output, d - 0.2, tmp_path / "e.png") == 0  # then the blue is clean

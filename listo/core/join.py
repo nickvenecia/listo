@@ -178,10 +178,11 @@ class Join:
         """Tape effect: VCR blue screen before the first clip and after the last."""
         folder = self.parts[0].parent
         ext = self.parts[0].suffix
+        area = tape.picture_area(self.first_info, self.s)
         made = []
-        for name in ("blue-start", "blue-end"):
-            out = folder / f"{name}{ext}"
-            r = tape.make_blue(out, self.conform, self.s, self.caps)
+        for name in ("start", "end"):
+            out = folder / f"blue-{name}{ext}"
+            r = tape.make_blue(out, self.conform, self.s, self.caps, tape.blue_badge(self.s, name), area)
             if r.status != "done":
                 log.warning("blue screen failed: %s", r.message)
                 return

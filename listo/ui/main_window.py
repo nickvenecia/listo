@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME, __version__
-from ..core import captions, console, join, naming
+from ..core import captions, console, join, naming, tape
 from ..core.captions import sample_cues
 from ..core.engine import Conversion, Result
 from ..core.fileutil import reveal
@@ -1611,6 +1611,9 @@ class MainWindow(QMainWindow):
                 it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues,
                 target=join.part_path(job.folder, job.ids.index(it.id) + 1, s), conform=job.conform,
                 timecode=job.timecodes.get(it.id, ""), cut=job.ids.index(it.id) > 0,
+                marks=tape.marks(
+                    job.settings, it.length, first=job.ids.index(it.id) == 0, last=it.id == job.ids[-1]
+                ),
             )  # fmt: skip
         else:
             conv = Conversion(

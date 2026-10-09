@@ -290,14 +290,32 @@ class _Builder:
             self.layers.append(Layer(path, ox + round(sx), oy, cell, slot.expr))
         return look.line_h
 
-    def badge(self, kind: str, look: Look, mx: int, my: int) -> None:
+    def badge(self, kind: str, look: Look, mx: int, my: int, enable: str = "") -> None:
         """Top-left VCR / camcorder badge. PLAY ► blinks for the first seconds, then goes away (like
-        a VCR after pressing play); ● REC stays, with its red dot blinking (like a camcorder)."""
+        a VCR after pressing play); ● REC stays, with its red dot blinking (like a camcorder);
+        STOP ■ shows steady (like a VCR after pressing stop). `enable` overrides when it shows."""
         start = len(self.layers)
         if kind == "play":
             self.line(["PLAY ►"], look, "tl", mx, my)
             for la in self.layers[start:]:
-                la.enable = "lt(t,4)*lt(mod(t,1),0.7)"
+                la.enable = enable or "lt(t,4)*lt(mod(t,1),0.7)"
+        elif kind == "stop":
+            self.line(["STOP"], look, "tl", mx, my)
+            ascent = look.font.getmetrics()[0]
+            top = look.font.getbbox("S", anchor="ls")[1]  # cap height (negative, from the baseline)
+            d = max(6, round(-top * 0.8))
+            sq = Image.new("RGBA", (d + 2 * look.pad, d + 2 * look.pad), (0, 0, 0, 0))
+            ImageDraw.Draw(sq).rectangle(
+                (look.pad, look.pad, look.pad + d, look.pad + d),
+                fill=look.color, outline=(0, 0, 0, 255), width=max(1, look.outline),
+            )  # fmt: skip
+            if look.soften:
+                sq = sq.filter(ImageFilter.GaussianBlur(look.soften))
+            x = self.left + mx + round(look.font.getlength("STOP ")) - look.pad
+            y = self.top + my + ascent + top + (-top - d) // 2 - look.pad
+            self.layers.append(Layer(self._save(sq), x, y))
+            for la in self.layers[start:]:
+                la.enable = enable
         elif kind == "rec":
             ascent = look.font.getmetrics()[0]
             top = look.font.getbbox("R", anchor="ls")[1]  # cap height (negative, from the baseline)
@@ -325,6 +343,32 @@ def _two(expr: str) -> list[Token]:
     return [_Slot(DIGITS, tens(expr)), _Slot(DIGITS, ones(expr))]
 
 
+@dataclass
+class Marks:
+    """VCR moments around a tape-style video: how long PLAY blinks from the start (the rest of it was
+    on the blue screen before), and when STOP shows at the end (the last frames, then the blue screen)."""
+
+    play_until: float = 4.0
+    stop_at: float | None = None
+
+
+def _vhs_metrics(frame: tuple[int, int], area: Area) -> tuple[Look, int, int]:
+    W, H = frame
+    _, _, aw, ah = area
+    ref = min(W * aw, H * ah) or 1080
+    size = max(12, round(ref / 15))
+    return _look("vhs", size), round(ref * 0.09), round(ref * 0.07)
+
+
+def badge_plan(kind: str, frame: tuple[int, int], area: Area, enable: str) -> BurnPlan:
+    """Just the VCR badge (PLAY / STOP) in the VHS look, for the tape blue screen."""
+    folder = Path(tempfile.mkdtemp(prefix="listo-burn-"))
+    b = _Builder(folder, frame, area if area else FULL)
+    look, mx, my = _vhs_metrics(frame, area if area else FULL)
+    b.badge(kind, look, mx, my, enable)
+    return BurnPlan(b.layers, folder)
+
+
 def plan(
     info: MediaInfo,
     s: Settings,
@@ -335,6 +379,7 @@ def plan(
     tc: str,
     rate: Fraction | None,
     cues: list | None = None,
+    marks: Marks | None = None,
 ) -> BurnPlan:
     """Render the burn-ins (and captions) for one conversion. `shot` is the wall-clock time of the
     first frame, `tc` the timecode of the first frame (with `rate` the output frame rate), `cues`
@@ -356,7 +401,14 @@ def plan(
         look = _look("vhs", size)
         mx, my = round(ref * 0.09), round(ref * 0.07)
         gap = round(size * 0.25)
-        b.badge(s.burn_badge, look, mx, my)
+        marks = marks or Marks()
+        if s.burn_badge == "play":
+            if marks.play_until > 0:
+                b.badge("play", look, mx, my, f"lt(t,{marks.play_until:.3f})*lt(mod(t,1),0.7)")
+        else:
+            b.badge(s.burn_badge, look, mx, my)
+        if marks.stop_at is not None:
+            b.badge("stop", look, mx, my, f"gte(t,{marks.stop_at:.3f})")
         if timecode:
             b.line(timecode, look, "tr", mx, my)
         if s.burn_datetime and shot:
