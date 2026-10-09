@@ -52,7 +52,7 @@ def glitch_windows(
     start = trim[0] if trim else 0.0
     length = (trim[1] - trim[0]) if trim else info.duration
     out: list[tuple[float, float]] = []
-    if cut and s.tape_cut_glitch:
+    if cut and s.tape_glitches != "off":  # every glitch setting also glitches at joined cuts
         out.append((0.0, min(CUT_GLITCH_S, max(0.05, length))))
     every = GLITCH_EVERY.get(s.tape_glitches)
     if every and info.duration > 0:
@@ -234,7 +234,7 @@ def blue_settings(s: Settings) -> Settings:
     b = s.copy()
     b.burn_timecode = b.burn_filename = b.burn_datetime = b.captions = False
     b.lut_path, b.desqueeze, b.aspect, b.video_resize, b.deinterlace = "", "1", "orig", "orig", "off"
-    b.tape_glitches, b.tape_cut_glitch, b.tape_blue, b.join, b.caption_srt = "off", False, False, False, False
+    b.tape_glitches, b.tape_blue, b.join, b.caption_srt = "off", False, False, False
     b.verify = False
     return b
 

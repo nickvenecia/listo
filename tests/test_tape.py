@@ -34,9 +34,11 @@ def test_glitch_moments_are_steady_and_follow_the_settings():
     )  # same every time
     assert all(0.25 <= b - a <= 0.5 for a, b in rare)
     assert tape.glitch_windows(_vhs(), "/x/a.mov", info, None) == []  # off by default
-    cut = tape.glitch_windows(_vhs(tape_cut_glitch=True), "/x/a.mov", info, None, cut=True)
+    cut = tape.glitch_windows(_vhs(tape_glitches="cuts"), "/x/a.mov", info, None, cut=True)
     assert cut == [(0.0, tape.CUT_GLITCH_S)]
-    assert tape.glitch_windows(_vhs(tape_cut_glitch=True), "/x/a.mov", info, None, cut=False) == []
+    assert tape.glitch_windows(_vhs(tape_glitches="cuts"), "/x/a.mov", info, None, cut=False) == []
+    rare_cut = tape.glitch_windows(_vhs(tape_glitches="rare"), "/x/MOV01A.MOD", info, None, cut=True)
+    assert rare_cut[0] == (0.0, tape.CUT_GLITCH_S) and rare_cut[1:] == rare  # random ones glitch the cuts too
     trimmed = tape.glitch_windows(_vhs(tape_glitches="often"), "/x/MOV01A.MOD", info, (100.0, 200.0))
     assert all(0 <= a < b <= 100 for a, b in trimmed)  # moved onto the trimmed clip's own clock
     assert tape.glitch_windows(_vhs(video_preset="rewrap", tape_glitches="often"), "/x/a", info, None) == []
@@ -78,7 +80,7 @@ def test_single_video_gets_blue_screen_and_glitches(tmp_path: Path):
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_glitch_filters_go_on_picture_and_sound(tmp_path: Path):
     src = _clip(tmp_path / "a.mp4")
-    s = _vhs(video_preset="h264", tape_cut_glitch=True)
+    s = _vhs(video_preset="h264", tape_glitches="cuts")
     r = Conversion(str(src), probe(src), s, capabilities(), set(), cut=True).run()
     assert r.status == "done", (r.message, r.log)
     cmd = " ".join(r.command)
@@ -95,7 +97,7 @@ def test_glitch_filters_go_on_picture_and_sound(tmp_path: Path):
 def test_glitch_keeps_ten_bit_pictures_in_range(tmp_path: Path):
     """ProRes is 10-bit: the glitch works in the encoder's own pixel format (0-1023, not 0-255)."""
     src = _clip(tmp_path / "a.mp4")
-    s = _vhs(video_preset="prores", tape_cut_glitch=True)
+    s = _vhs(video_preset="prores", tape_glitches="cuts")
     r = Conversion(str(src), probe(src), s, capabilities(), set(), cut=True).run()
     assert r.status == "done", (r.message, r.log)
     assert "format=yuv422p10le" in " ".join(r.command)
@@ -115,7 +117,7 @@ def _diff(a: Path, b: Path, at: float, tmp: Path) -> float:
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_joined_video_gets_one_blue_screen_around_it(tmp_path: Path):
     a, b = _clip(tmp_path / "a.mp4"), _clip(tmp_path / "b.mp4")
-    s = _vhs(video_preset="prores", join=True, tape_blue=True, tape_cut_glitch=True)
+    s = _vhs(video_preset="prores", join=True, tape_blue=True, tape_glitches="cuts")
     folder = join.parts_folder(str(a), s)
     folder.mkdir()
     conform = join.conform_for(probe(a), s)
@@ -245,7 +247,7 @@ def test_glitch_tears_the_tape_but_not_play(tmp_path: Path):
     from listo.core import burnin, video
 
     src = _clip(tmp_path / "a.mp4")
-    s = _vhs(video_preset="h264", burn_badge="play", tape_cut_glitch=True)
+    s = _vhs(video_preset="h264", burn_badge="play", tape_glitches="cuts")
     plan = video.build(str(src), str(tmp_path / "o.mp4"), probe(src), s, capabilities(), glitch_cut=True)
     graph = plan.args[plan.args.index("-filter_complex") + 1]
     play = next(la for la in plan.burn.layers if la.vcr)  # the PLAY layer
@@ -254,3 +256,10 @@ def test_glitch_tears_the_tape_but_not_play(tmp_path: Path):
     assert graph.index(f"overlay={tc.x}:{tc.y}") < graph.index("geq=")  # timecode glitches with the tape
     plan.cleanup()
     assert burnin.Layer(Path("x"), 0, 0).vcr is False
+
+
+def test_old_recipes_keep_their_cut_glitch():
+    s = Settings.from_dict({"tape_cut_glitch": True})
+    assert s.tape_glitches == "cuts"
+    assert Settings.complete({"tape_cut_glitch": True, "tape_glitches": "often"})["tape_glitches"] == "often"
+    assert "tape_cut_glitch" not in Settings.complete({"tape_cut_glitch": False})

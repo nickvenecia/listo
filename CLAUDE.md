@@ -136,8 +136,10 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   joined video (one Convert = one tape, from 0); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for
   the burn-in and -timecode). Only the first part keeps the PLAY badge (REC stays on every part).
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
-- Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS), and only with the VHS look (the sidebar's
-  Tape Effects section shows only then). With the blue screen on, a single video is
+- Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS), and only with the VHS look. The sidebar's
+  "VHS Tape" section (only with the VHS look, under Clip Info) is four dropdowns: burn_badge, burn_end (-> burn_stop),
+  tape_screen ("none" -> tape_blue False), tape_glitches ("off" / "cuts" / "rare" / "often"; every value but "off"
+  glitches joined cuts). The old tape_cut_glitch switch is migrated by presets._migrate. With the blue screen on, a single video is
   conformed to itself (48 kHz stereo) so the blue pieces match; its .srt and length check shift by tape.BLUE_SECONDS.
 - VCR badges (VHS look): tape.marks() -> burnin.Marks(play_until, stop_at) passed as Conversion(marks=) ->
   video.build -> burnin.plan (single videos compute their own). PLAY (burn_badge "play") blinks 4 s; with a start

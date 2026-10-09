@@ -310,8 +310,8 @@ class Settings:
     tape_blue: bool = False  # a screen at the start and end (core/tape.py; VHS look only)
     tape_screen: str = "blue"  # that screen: "blue" (VCR), "black", "bars" (color bars & tone), "color"
     tape_screen_color: str = ""  # "#RRGGBB" for "color" ("" = VCR blue)
-    tape_cut_glitch: bool = False  # a tracking glitch at each cut of a joined video
-    tape_glitches: str = "off"  # random glitches through the video: "off", "rare", "often"
+    # "off"; "cuts" = a glitch at each cut of a joined video; "rare" / "often" = random glitches too
+    tape_glitches: str = "off"
     verify: bool = True
     parallel: bool = False
 
@@ -350,7 +350,7 @@ class Settings:
     def complete(values: dict) -> dict:
         """A saved recipe with today's defaults filled in for settings added after it was saved
         (so an old recipe turns new options off instead of leaving them as they were)."""
-        return {**Settings().to_dict(), **(values or {})}
+        return {**Settings().to_dict(), **_migrate(values or {})}
 
     def matches(self, values: dict) -> bool:
         cur = self.to_dict()
@@ -370,7 +370,7 @@ class Settings:
     @classmethod
     def from_dict(cls, d: dict) -> Settings:
         s = cls()
-        for k, v in (d or {}).items():
+        for k, v in _migrate(d or {}).items():
             if hasattr(s, k) and type(v) is type(getattr(s, k)):
                 setattr(s, k, v)
         if s.video_preset not in VIDEO_BY_KEY:
@@ -380,6 +380,14 @@ class Settings:
         if s.photo_format not in PHOTO_BY_KEY:
             s.photo_format = "jpeg"
         return s
+
+
+def _migrate(values: dict) -> dict:
+    """Settings saved by older versions, in today's terms."""
+    values = dict(values)
+    if values.pop("tape_cut_glitch", False) and values.get("tape_glitches", "off") == "off":
+        values["tape_glitches"] = "cuts"  # (was its own switch until 2.3)
+    return values
 
 
 # Recipes are made by you (Save as recipe); none are built in.

@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2.3.0
+- **Burn-In is tidier**: with the VHS look, a **VHS Tape** section right under Clip Info holds four dropdowns that read top to bottom: what shows at the start (PLAY ► / ● REC / nothing), at the end (STOP ■ / nothing), the start & end screen (none / VCR blue / black / color bars & tone / custom color) and glitches (none / at each cut / now and then / often; the random ones also glitch the cuts). Old recipes keep their cut glitch
 - **Updates inside Listo**: once a day Listo checks GitHub for a newer version; an **Update to …** button appears in the bottom bar, shows what's new, downloads the right file for your computer (checked against GitHub's fingerprint), swaps it in and reopens Listo. Also in ⋯ → Check for Updates…, where the daily check can be turned off
 - **Download links that always give the newest version** at the top of the README (Mac Apple Silicon / Intel, Windows, Linux)
 - The old SimpleConverter code (legacy/) is gone from the project; it stays in the history
