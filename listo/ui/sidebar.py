@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QInputDialog,
+    QLabel,
     QMessageBox,
     QScrollArea,
     QSlider,
@@ -22,9 +23,11 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.presets import (
+    ASPECT_CHOICES,
     AUDIO_FORMATS,
     BUILTIN_RECIPES,
     DEINTERLACE,
+    DESQUEEZE,
     PHOTO_FORMATS,
     RESIZE_PHOTO,
     RESIZE_VIDEO,
@@ -34,7 +37,7 @@ from ..core.presets import (
 )
 from ..core.tools import Capabilities
 from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import Section, Segmented, combo, disable_item, hbox, set_combo, vbox
+from .widgets import Disclosure, Section, Segmented, combo, disable_item, hbox, hint, set_combo, vbox
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
@@ -107,6 +110,7 @@ class Sidebar(QFrame):
         self.s = settings
         self.qs = QSettings("Listo", "Listo")
         self._loading = False
+        self._can_draw = True  # set by apply_capabilities
         self._current_recipe: str | None = None
         self._emit_timer = QTimer(self)
         self._emit_timer.setSingleShot(True)
@@ -137,6 +141,7 @@ class Sidebar(QFrame):
         self.tabs.set_value("video")
         self._tab("video")
         self._sync_video()
+        self._update_advanced()
         self._sync_photo()
         self._match_recipe()
 
@@ -176,6 +181,46 @@ class Sidebar(QFrame):
         self.v_size.currentIndexChanged.connect(lambda: self._set("video_resize", self.v_size.currentData()))
         self.sec_size.add(self.v_size)
 
+        self.sec_frame = Section("Frame")
+        self.v_squeeze = combo([(c.key, c.label, "") for c in DESQUEEZE], self.s.desqueeze)
+        self.v_squeeze.setToolTip(
+            "For footage shot with an anamorphic lens: stretches it back to its real shape"
+        )
+        self.v_squeeze.currentIndexChanged.connect(
+            lambda: self._set("desqueeze", self.v_squeeze.currentData())
+        )
+        self.v_aspect = combo([(c.key, c.label, "") for c in ASPECT_CHOICES], self.s.aspect)
+        self.v_aspect.setToolTip("The shape of the finished video")
+        self.v_aspect.currentIndexChanged.connect(self._aspect_picked)
+        self.v_fit = combo(
+            [
+                ("crop", "Crop to fill", "Fills the new shape, trimming the edges that don't fit (centered)"),
+                ("bars", "Add black bars", "Keeps the whole picture; the video becomes the new shape"),
+                ("matte", "Cinema bars on top", "Keeps the video's size and draws bars over the picture"),
+            ],
+            self.s.aspect_fit,
+        )
+        self.v_fit.currentIndexChanged.connect(self._fit_picked)
+        for c in (self.v_squeeze, self.v_aspect, self.v_fit):
+            self.sec_frame.add(c)
+        self.matte_row = QWidget()
+        mr = hbox(self.matte_row, spacing=SPACE_3)
+        lbl = QLabel("Bar opacity")
+        lbl.setObjectName("Muted")
+        self.matte_q = QSlider(Qt.Orientation.Horizontal)
+        self.matte_q.setRange(0, 100)
+        self.matte_q.setSingleStep(5)
+        self.matte_q.setPageStep(10)
+        self.matte_q.setValue(self.s.matte_opacity)
+        self.matte_q.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.matte_val = QLabel(f"{self.s.matte_opacity}%")
+        self.matte_val.setObjectName("Muted")
+        self.matte_q.valueChanged.connect(self._matte_opacity)
+        mr.addWidget(lbl)
+        mr.addWidget(self.matte_q, 1)
+        mr.addWidget(self.matte_val)
+        self.sec_frame.add(self.matte_row)
+
         self.sec_deint = Section("Interlaced footage")
         self.v_deint = combo([(c.key, c.label, "") for c in DEINTERLACE], self.s.deinterlace)
         self.v_deint.setToolTip(
@@ -192,9 +237,40 @@ class Sidebar(QFrame):
         self.sec_lut.add(self.lut)
 
         self.sec_burn = Section("Burn in")
-        self.burn_tc = _checkbox("Timecode", self.s.burn_timecode, lambda v: self._set("burn_timecode", v))
-        self.burn_name = _checkbox("File name", self.s.burn_filename, lambda v: self._set("burn_filename", v))
+        self.burn_tc = _checkbox("Timecode", self.s.burn_timecode, lambda v: self._burn("burn_timecode", v))
+        self.burn_name = _checkbox(
+            "File name", self.s.burn_filename, lambda v: self._burn("burn_filename", v)
+        )
+        self.burn_dt = _checkbox(
+            "Date && time",
+            self.s.burn_datetime,
+            lambda v: self._burn("burn_datetime", v),
+            "When the clip was shot, read from the clip itself, with a clock that runs as it plays",
+        )
         self.sec_burn.add(_checks(self.burn_tc, self.burn_name, row=True))
+        self.sec_burn.add(self.burn_dt)
+        self.burn_style = combo(
+            [
+                ("clean", "Clean", "Small labels on dark boxes in the corners"),
+                (
+                    "vhs",
+                    "VHS camcorder",
+                    "PLAY, date and a running clock in a VCR font, like an old camcorder",
+                ),
+            ],
+            self.s.burn_style,
+        )
+        self.burn_style.currentIndexChanged.connect(
+            lambda: self._set("burn_style", self.burn_style.currentData())
+        )
+        self.sec_burn.add(self.burn_style)
+        self.burn_hint = hint("Burn-ins need a copy of ffmpeg that can draw text.")
+        self.burn_hint.setToolTip(
+            "The downloaded Listo app includes one. Running from source? "
+            "Run  python scripts/fetch_ffmpeg.py  once, then restart Listo."
+        )
+        self.burn_hint.hide()
+        self.sec_burn.add(self.burn_hint)
 
         speed = Section("Speed")
         self.v_hw = _checkbox(
@@ -214,17 +290,12 @@ class Sidebar(QFrame):
         )
         self.sec_audio.add(self.v_tracks)
 
-        for sec in (
-            fmt,
-            self.sec_variant,
-            self.sec_size,
-            self.sec_deint,
-            self.sec_lut,
-            self.sec_burn,
-            speed,
-            self.sec_audio,
-        ):
+        for sec in (fmt, self.sec_variant, self.sec_size):
             lay.addWidget(sec)
+        self.v_adv = self._advanced()
+        for sec in (self.sec_frame, self.sec_deint, self.sec_lut, self.sec_burn, speed, self.sec_audio):
+            self.v_adv.add(sec)
+        lay.addWidget(self.v_adv)
         lay.addStretch(1)
         self.stack.addWidget(page)
         self._sync_lut()
@@ -263,8 +334,11 @@ class Sidebar(QFrame):
             lambda v: self._set("photo_keep_metadata", v),
         )
         meta.add(self.p_meta)
-        for sec in (fmt, self.sec_quality, size, meta):
+        for sec in (fmt, self.sec_quality, size):
             lay.addWidget(sec)
+        self.p_adv = self._advanced()
+        self.p_adv.add(meta)
+        lay.addWidget(self.p_adv)
         lay.addStretch(1)
         self.stack.addWidget(page)
 
@@ -286,9 +360,46 @@ class Sidebar(QFrame):
         if self._loading:
             return
         setattr(self.s, attr, value)
+        self._update_advanced()
         self._emit_timer.start()
 
+    # ------------------------------------------------------------------ advanced options
+    VIDEO_ADVANCED = (
+        "desqueeze",
+        "aspect",
+        "deinterlace",
+        "lut_path",
+        "burn_timecode",
+        "burn_filename",
+        "burn_datetime",
+        "hardware",
+        "parallel",
+        "keep_all_audio",
+    )
+    PHOTO_ADVANCED = ("photo_keep_metadata",)
+
+    def _advanced(self) -> Disclosure:
+        d = Disclosure("Advanced options", is_open=self.qs.value("advanced_open", False, type=bool))
+        d.toggled.connect(self._advanced_toggled)
+        return d
+
+    def _advanced_toggled(self, on: bool) -> None:
+        self.qs.setValue("advanced_open", on)
+        for d in (self.v_adv, self.p_adv):
+            if d.is_open() != on:
+                d.set_open(on)
+
+    def _update_advanced(self) -> None:
+        """Say how many advanced settings differ from a fresh start, so nothing changed hides away."""
+        if not hasattr(self, "p_adv"):
+            return
+        base = Settings()
+        for d, keys in ((self.v_adv, self.VIDEO_ADVANCED), (self.p_adv, self.PHOTO_ADVANCED)):
+            n = sum(1 for k in keys if getattr(self.s, k) != getattr(base, k))
+            d.set_summary(f"{n} changed" if n else "")
+
     def _emit_changed(self) -> None:
+        self._update_advanced()
         self._match_recipe()
         self.changed.emit()
 
@@ -299,6 +410,27 @@ class Sidebar(QFrame):
     def _video_preset(self, key: str) -> None:
         self._set("video_preset", key)
         self._sync_video()
+
+    def _aspect_picked(self) -> None:
+        self._set("aspect", self.v_aspect.currentData())
+        self._sync_frame()
+
+    def _fit_picked(self) -> None:
+        self._set("aspect_fit", self.v_fit.currentData())
+        self._sync_frame()
+
+    def _matte_opacity(self, v: int) -> None:
+        self.matte_val.setText(f"{v}%")
+        self._set("matte_opacity", v)
+
+    def _sync_frame(self) -> None:
+        reshaping = self.s.aspect != "orig"
+        self.v_fit.setVisible(reshaping)
+        self.matte_row.setVisible(reshaping and self.s.aspect_fit == "matte")
+
+    def _burn(self, attr: str, value: bool) -> None:
+        self._set(attr, value)
+        self.burn_style.setEnabled(self.s.burns and self._can_draw)
 
     def _variant_picked(self) -> None:
         if self._loading or self.v_variant.signalsBlocked():
@@ -323,6 +455,9 @@ class Sidebar(QFrame):
         looks = p.key not in ("rewrap", "audio")
         self.sec_lut.setVisible(looks)
         self.sec_burn.setVisible(looks)
+        self.sec_frame.setVisible(looks)
+        self._sync_frame()
+        self.burn_style.setEnabled(self.s.burns and self._can_draw)
         self.sec_audio.setVisible(p.edit_format)
 
     def _sync_photo(self) -> None:
@@ -428,7 +563,7 @@ class Sidebar(QFrame):
         found = None
         for name in names:
             vals = next((v for n, v, _ in recipes if n == name), None)
-            if vals is not None and self.s.matches(vals):
+            if vals is not None and self.s.matches(Settings.complete(vals)):
                 found = name
                 break
         self._current_recipe = found
@@ -464,7 +599,7 @@ class Sidebar(QFrame):
         elif data:
             vals = next((v for n, v, _ in self._all_recipes() if n == data), None)
             if vals is not None:
-                self.s.apply(vals)
+                self.s.apply(Settings.complete(vals))
                 if self.s.destination == "folder" and not self.s.dest_folder:
                     self.s.destination = "source"
                 self._current_recipe = data
@@ -506,6 +641,10 @@ class Sidebar(QFrame):
                 (self.v_fmt, self.s.video_preset),
                 (self.v_size, self.s.video_resize),
                 (self.v_deint, self.s.deinterlace),
+                (self.v_squeeze, self.s.desqueeze),
+                (self.v_aspect, self.s.aspect),
+                (self.v_fit, self.s.aspect_fit),
+                (self.burn_style, self.s.burn_style),
                 (self.p_fmt, self.s.photo_format),
                 (self.p_size, self.s.photo_resize),
                 (self.a_fmt, self.s.audio_format),
@@ -517,11 +656,16 @@ class Sidebar(QFrame):
                 (self.v_par, self.s.parallel),
                 (self.burn_tc, self.s.burn_timecode),
                 (self.burn_name, self.s.burn_filename),
+                (self.burn_dt, self.s.burn_datetime),
                 (self.p_meta, self.s.photo_keep_metadata),
             ):
                 box.blockSignals(True)
                 box.setChecked(val)
                 box.blockSignals(False)
+            self.matte_q.blockSignals(True)
+            self.matte_q.setValue(self.s.matte_opacity)
+            self.matte_q.blockSignals(False)
+            self.matte_val.setText(f"{self.s.matte_opacity}%")
             self.p_q.blockSignals(True)
             self.p_q.setValue(self.s.photo_quality)
             self.p_q.blockSignals(False)
@@ -531,6 +675,7 @@ class Sidebar(QFrame):
             self._sync_lut()
         finally:
             self._loading = False
+        self._update_advanced()
         self._match_recipe()
 
     # ------------------------------------------------------------------ capabilities
@@ -549,9 +694,11 @@ class Sidebar(QFrame):
         if not caps.has_filter("lut3d"):
             self.lut.setEnabled(False)
             self.lut.setToolTip("This copy of ffmpeg can't apply LUTs")
-        if not caps.has_filter("drawtext"):
-            self.burn_tc.setEnabled(False)
-            self.burn_name.setEnabled(False)
+        self._can_draw = caps.has_filter("drawtext")
+        if not self._can_draw:
+            for w in (self.burn_tc, self.burn_name, self.burn_dt, self.burn_style):
+                w.setEnabled(False)
+            self.burn_hint.show()
 
     def apply_hardware(self, hw: dict) -> None:
         if hw:

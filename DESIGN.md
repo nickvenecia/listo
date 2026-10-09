@@ -135,13 +135,14 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Secondary button | `Secondary` | Footer buttons beside the primary one (Export options) |
 | Quiet button | `Ghost` | Show files, Pause, Stop |
 | Danger button | `Danger` | Destructive confirmations only |
-| Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, trash), scissors, info, close. **Must** have a tooltip |
+| Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, clear list), scissors, info, close. **Must** have a tooltip |
 | Chip | `Chip` | The per-file format pill on a card |
 | Token button | `Token` | "+ Name" buttons in the naming pattern builder |
 | Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio). Not for settings |
 | Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
 | Checkbox | `QCheckBox` | On/off settings. Label says what happens when it's **on** |
 | Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
+| Fold-away group | `widgets.Disclosure` | "Advanced options": a chevron header with a changed-count summary |
 
 Choosing a control:
 - Pick one setting → **dropdown**, always, even with only 2–3 choices. Format, quality, size, LUT, recipe,
@@ -173,7 +174,7 @@ Listo talks like a helpful person, not like software.
 ## 8. Layout of the main window
 
 ```
-┌ toolbar: wordmark ················ N FILES · + · 🗑 ┬ sidebar (SIDEBAR_W) ─┐
+┌ toolbar: wordmark ················ N FILES · + · ☰× ┬ sidebar (SIDEBAR_W) ─┐
 │ file list (cards, SPACE_2 apart)  — or drop zone     │ RECIPE dropdown      │
 │                                                      │ Video | Photo | Audio│
 │                                                      │ sections…            │
@@ -184,9 +185,18 @@ Listo talks like a helpful person, not like software.
   Shift-click selects a range, Cmd/Ctrl+A selects all, Delete or Backspace removes the selection,
   Esc or a click on empty space clears it. Selected cards: `CARD_SELECTED` background + `ACCENT_EDGE` border
   (a converting card has a solid `ACCENT` border instead).
-- The trash icon follows the selection: it removes the selected files, or clears the list when nothing is selected.
-  Its tooltip always says which. Removing only takes files off the list; it never touches them on disk.
+- The clear-list icon (`list-x`) opens a menu: Remove selected, Clear finished, Clear all. Actions that remove
+  things always go through a menu or a confirmation, never a single click. They only take files off the list; nothing on disk is touched.
+- A value along a range (opacity, photo quality) is a slider with its value shown as text next to it or in the section title.
+- Use `&&` for a literal "&" in Qt labels (a single `&` becomes a keyboard-shortcut underline).
 - Every keyboard shortcut needs a visible way to do the same thing (a button, icon or menu item).
+- **Basic first, the rest folded away.** Each panel shows only what most people change every time
+  (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; Export options: Where, Name).
+  Everything else lives under **Advanced options** (`widgets.Disclosure`), closed by default and remembered.
+  The folded header always says how many advanced settings differ from a fresh start ("· 2 changed"),
+  so nothing that changes the output is ever hidden silently. New settings go into Advanced unless
+  nearly everyone needs them.
+- Burn-ins always sit inside the picture: inside cinema bars, inside black bars, and on the cropped frame.
 - The sidebar holds **what** the files become; Export options holds **where** they go and **what they're called**.
 - The footer's right side is always: Show files / Pause / Stop (when relevant), Export options, then the Primary action.
 - New settings go into an existing section if they fit; a new section needs a short caps label.

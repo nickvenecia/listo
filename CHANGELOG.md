@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- **Advanced options**: the sidebar shows Format, Quality and Size; Frame, Interlaced footage, LUT, Burn in, Speed and Audio fold away (the header says how many are changed). Export options folds away Name taken and After converting the same way
+- Burn-ins stay inside the picture: never on cinema bars or black bars, and sized to the picture
+- **Burn in** is its own section: Timecode, File name and new **Date & time** (when the clip was shot, read from the clip, with a clock that runs as it plays), in a **Clean** or **VHS camcorder** style (VCR OSD Mono font)
+- Burn-ins explain themselves when this copy of ffmpeg can't draw text (Homebrew's ffmpeg can't); `--smoke-test` reports it too
+- **Frame** section: anamorphic desqueeze (1.33×–2×), aspect ratios (16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35, 2.39) with Crop to fill, Add black bars, or Cinema bars on top with adjustable opacity
+- Size now means the short edge (vertical video stays sharp), plus a 1440 option
+- Phone clips: the recording time is read in the time zone it was shot in
+- Non-square-pixel footage (DV, HDV) keeps its real shape when reshaped
+- The list button opens a menu (Remove selected, Clear finished, Clear all) and uses a clear-list icon, so nothing is removed by accident
+- Old recipes turn new options off instead of leaving them as they were
 - Select files in the list like in Finder (click, ⌘-click, Shift-click, ⌘A) and press Delete / Backspace to remove them; the trash icon removes the selection, or clears the list when nothing is selected
 - Dropdown lists have a rounded highlight and proper row spacing on every computer (was square on Mac)
 - Add is now a + icon next to the trash

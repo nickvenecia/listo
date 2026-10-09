@@ -48,7 +48,9 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Workflow:**
 - **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
-- **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode and/or the file name.
+- **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font).
+- **Frame**: desqueeze anamorphic footage (1.33×–2×), and change the shape to 16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35 or 2.39. Crop to fill, add black bars, or draw cinema bars over the picture with adjustable opacity.
+- **Size** means the short edge, so 1080 gives 1920×1080 for widescreen and 1080×1920 for vertical video. Listo never upscales.
 - **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.
 - **Two at once**: optionally convert two files side by side.
 - **Right-click**: on Mac, *Open With → Listo* (or drop on the Dock icon); on Windows, *Send to → Listo*. Files go into the open window.

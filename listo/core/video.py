@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from fractions import Fraction
 from pathlib import Path
 
+from .frame import FULL, Area, frame_plan, resized
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
 from .probe import MediaInfo, tc_add, tc_double_frames
 from .tools import Capabilities
@@ -32,7 +34,9 @@ HW_BPP = {"high": 0.16, "standard": 0.10, "small": 0.06}
 MOV_SAFE_AUDIO = {"pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_f32le", "aac", "alac"}
 
 
-FONT = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Inter-SemiBold.otf"
+FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+FONT = FONTS / "Inter-SemiBold.otf"
+VHS_FONT = FONTS / "VCR_OSD_Mono.ttf"
 
 
 def fesc(value: str) -> str:
@@ -40,6 +44,18 @@ def fesc(value: str) -> str:
     value = value.replace("\\", "/") if (len(value) > 2 and value[1] == ":") else value
     lvl1 = "".join("\\" + c if c in "\\:'[],;=%" else c for c in value)
     return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
+
+
+def fesc_expanding(value: str) -> str:
+    """Like fesc, but keeps %{...} so drawtext can fill in values (a running clock)."""
+    lvl1 = "".join("\\" + c if c in "\\:'[],;=" else c for c in value)
+    return "".join("\\" + c if c in "\\'[],;" else c for c in lvl1)
+
+
+def clock_text(start: datetime, fmt: str) -> str:
+    """drawtext text for a clock that starts at `start` (wall time) and runs with the video."""
+    epoch = round((start.replace(tzinfo=None) - datetime(1970, 1, 1)).total_seconds())
+    return "%{pts:gmtime:" + str(epoch) + ":" + fmt.replace(":", "\\:") + "}"
 
 
 def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
@@ -57,15 +73,16 @@ def look_filters(
     info: MediaInfo,
     s: Settings,
     caps: Capabilities,
-    out_h: int,
+    frame: tuple[int, int],
     doubled: bool,
     src: str,
     notes: list[str],
     start_tc: str = "",
+    start_s: float = 0.0,
+    area: Area = FULL,
 ) -> tuple[list[str], list[str]]:
     """(LUT filters to run before scaling, burn-in filters to run after)."""
     pre: list[str] = []
-    post: list[str] = []
     if s.lut_path:
         if not Path(s.lut_path).is_file():
             raise PlanError(f"The LUT file is missing: {s.lut_path}")
@@ -74,29 +91,116 @@ def look_filters(
         else:
             pre.append(f"lut3d=file={fesc(s.lut_path)}")
             notes.append(f"LUT applied: {Path(s.lut_path).name}.")
-    if (s.burn_timecode or s.burn_filename) and not caps.has_filter("drawtext"):
+    if not s.burns:
+        return pre, []
+    if not caps.has_filter("drawtext"):
         notes.append("Burn-ins skipped — this copy of ffmpeg can't draw text.")
-        return pre, post
-    size = max(12, round((out_h or 1080) / 26))
+        return pre, []
+    post = burn_filters(info, s, frame, doubled, src, notes, start_tc, start_s, area)
+    if post:
+        notes.append("Burn-ins added" + (" (VHS style)." if s.burn_style == "vhs" else "."))
+    return pre, post
+
+
+def _timecode_and_rate(info: MediaInfo, s: Settings, doubled: bool, start_tc: str, notes: list[str]):
+    rate = _out_rate(info, s, doubled)
+    if not rate:
+        notes.append("Timecode burn-in skipped — frame rate unknown.")
+        return "", ""
+    tc = start_tc or info.timecode or "00:00:00:00"
+    if ";" in tc and rate not in ("30000/1001", "60000/1001"):
+        tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
+    return tc, rate
+
+
+def _shot_start(src: str, info: MediaInfo, start_s: float, notes: list[str]) -> datetime:
+    from .probe import file_date
+
+    if not info.created:
+        notes.append("No recording time inside the clip — the date comes from the file instead.")
+    return file_date(src, info) + timedelta(seconds=start_s)
+
+
+def burn_filters(
+    info: MediaInfo,
+    s: Settings,
+    frame: tuple[int, int],
+    doubled: bool,
+    src: str,
+    notes: list[str],
+    start_tc: str = "",
+    start_s: float = 0.0,
+    area: Area = FULL,
+) -> list[str]:
+    """drawtext filters for the chosen burn-ins.
+
+    Everything stays inside `area` (the picture, without black bars or cinema bars) and is sized
+    to it, so burn-ins never sit on the bars."""
+    fw, fh = frame
+    ax, ay, aw, ah = area
+    pic_w, pic_h = (fw * aw, fh * ah) if fw and fh else (1920.0, 1080.0)
+    ref = min(pic_w, pic_h) or 1080
+    # Edges of the picture, as drawtext expressions (w, h = the frame being drawn on).
+    left, top = f"w*{ax:.5f}", f"h*{ay:.5f}"
+    right, bottom = f"w*{ax + aw:.5f}", f"h*{ay + ah:.5f}"
+    out: list[str] = []
+
+    def draw(style: str, text: str, x: str, y: str, expand: bool = False) -> None:
+        value = fesc_expanding(text) if expand else fesc(text)
+        mode = "normal" if expand else "none"
+        out.append(f"drawtext={style}:expansion={mode}:text={value}:x={x}:y={y}")
+
+    if s.burn_style == "vhs":
+        # Camcorder on-screen display: chunky mono font, soft glow, hard shadow, title-safe margins.
+        size = max(12, round(ref / 15))
+        mx, my = round(ref * 0.09), round(ref * 0.07)
+        line = round(size * 1.25)
+        sh = max(1, size // 14)
+        base = f"fontfile={fesc(str(VHS_FONT))}:fontsize={size}"
+        glow = f"{base}:fontcolor=white@0.0:borderw={max(2, size // 12)}:bordercolor=white@0.12"
+        style = f"{base}:fontcolor=0xF4F4F0:shadowcolor=black@0.6:shadowx={sh}:shadowy={sh}"
+
+        def vhs(text: str, x: str, y: str, expand: bool = False) -> None:
+            draw(glow, text, x, y, expand)
+            draw(style, text, x, y, expand)
+
+        vhs("PLAY ►", f"{left}+{mx}", f"{top}+{my}")
+        if s.burn_timecode:
+            tc, rate = _timecode_and_rate(info, s, doubled, start_tc, notes)
+            if tc:
+                for st in (glow, style):
+                    out.append(
+                        f"drawtext={st}:timecode={fesc(tc)}:rate={rate}:x={right}-tw-{mx}:y={top}+{my}"
+                    )
+        if s.burn_datetime:
+            shot = _shot_start(src, info, start_s, notes)
+            vhs(clock_text(shot, "%p %I:%M:%S"), f"{left}+{mx}", f"{bottom}-{my + size + line}", expand=True)
+            vhs(shot.strftime("%b. %d %Y").upper(), f"{left}+{mx}", f"{bottom}-{my + size}")
+        if s.burn_filename:
+            name_size = max(10, round(size * 0.6))
+            name_style = style.replace(f"fontsize={size}", f"fontsize={name_size}")
+            draw(name_style, Path(src).name, f"{right}-tw-{mx}", f"{bottom}-{my + name_size}")
+        return out
+
+    # Clean: small labels on dark boxes in the corners of the picture.
+    size = max(12, round(ref / 26))
     pad = max(8, size)
     style = (
         f"fontfile={fesc(str(FONT))}:fontsize={size}:fontcolor=white:"
         f"box=1:boxcolor=black@0.55:boxborderw={max(4, size // 3)}"
     )
     if s.burn_filename:
-        post.append(f"drawtext={style}:expansion=none:text={fesc(Path(src).name)}:x={pad}:y=h-th-{pad}")
+        draw(style, Path(src).name, f"{left}+{pad}", f"{bottom}-th-{pad}")
     if s.burn_timecode:
-        rate = _out_rate(info, s, doubled)
-        if rate:
-            tc = start_tc or info.timecode or "00:00:00:00"
-            if ";" in tc and rate not in ("30000/1001", "60000/1001"):
-                tc = tc.replace(";", ":")  # drop-frame only exists at 29.97 / 59.94
-            post.append(f"drawtext={style}:timecode={fesc(tc)}:rate={rate}:x=w-tw-{pad}:y=h-th-{pad}")
-        else:
-            notes.append("Timecode burn-in skipped — frame rate unknown.")
-    if post:
-        notes.append("Burn-ins added.")
-    return pre, post
+        tc, rate = _timecode_and_rate(info, s, doubled, start_tc, notes)
+        if tc:
+            out.append(
+                f"drawtext={style}:timecode={fesc(tc)}:rate={rate}:x={right}-tw-{pad}:y={bottom}-th-{pad}"
+            )
+    if s.burn_datetime:
+        shot = _shot_start(src, info, start_s, notes)
+        draw(style, clock_text(shot, "%Y-%m-%d  %H:%M:%S"), f"{left}+{pad}", f"{top}+{pad}", expand=True)
+    return out
 
 
 def preset_available(key: str, caps: Capabilities) -> bool:
@@ -208,8 +312,8 @@ def build(
                 args += ["-c:a", _pcm_for(info)]
         if info.interlaced:
             notes.append("Still interlaced — Rewrap doesn't change the picture.")
-        if s.lut_path or s.burn_timecode or s.burn_filename:
-            notes.append("LUT and burn-ins skipped — Rewrap doesn't re-encode.")
+        if s.lut_path or s.burns or s.desqueeze != "1" or s.aspect != "orig":
+            notes.append("LUT, burn-ins and reshaping skipped — Rewrap doesn't re-encode.")
         if trim:
             notes.append("Rewrap trims on the nearest keyframe, so the start may be a little early.")
         if start_tc:
@@ -243,11 +347,19 @@ def build(
         else:
             notes.append(f"{info.hdr_label} source — colors may look flat (tone-mapping unavailable).")
 
-    burn_h = info.height if p.key == "gif" else out_size[1]
+    # Shape first (desqueeze, crop / bars), so the LUT and burn-ins see the final frame.
+    shape_vf, fw, fh, area = frame_plan(info.width, info.height, info.sar, s)
+    burn_frame = (fw, fh) if p.key == "gif" else out_size
     if doubled and start_tc:
         start_tc = tc_double_frames(start_tc)
-    look_pre, look_post = look_filters(info, s, caps, burn_h, doubled, src, notes, start_tc)
+    look_pre, look_post = look_filters(
+        info, s, caps, burn_frame, doubled, src, notes, start_tc, trim[0] if trim else 0.0, area
+    )
     vf += look_pre
+    vf += shape_vf
+    if shape_vf:
+        bars_only = s.aspect_fit == "matte" and s.desqueeze == "1"
+        notes.append(f"Cinema bars added ({s.aspect})." if bars_only else f"Reshaped to {fw}×{fh}.")
     if p.key == "gif":  # burn in before the GIF's frame-rate drop so timecode counts real frames
         vf += look_post
         look_post = []
@@ -264,12 +376,15 @@ def build(
             args[args.index("-t") + 1] = "30.000"
             notes.append("GIFs are capped at 30 seconds.")
         vf.append(f"fps=15,scale='min({width},iw)':-2:flags=lanczos")
-    elif s.video_resize == "half":
-        vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
     elif s.video_resize != "orig":
-        target = int(s.video_resize)
-        if info.height > target:
-            vf.append(f"scale=-2:{target}:flags=lanczos")
+        if fw and fh:
+            rw, rh = resized(fw, fh, s.video_resize)
+            if (rw, rh) != (fw, fh):
+                vf.append(f"scale={rw}:{rh}:flags=lanczos")
+        elif s.video_resize == "half":
+            vf.append("scale=trunc(iw/4)*2:trunc(ih/4)*2")
+        else:
+            vf.append(f"scale=-2:'min({int(s.video_resize)},ih)':flags=lanczos")
     # 4:2:0 encoders need even dimensions (screen recordings and crops often aren't).
     if p.key not in ("gif",):
         vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")

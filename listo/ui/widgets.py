@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import tokens
+from . import theme, tokens
 
 
 def section_label(text: str) -> QLabel:
@@ -80,6 +80,46 @@ class Section(QWidget):
     def set_title(self, title: str) -> None:
         self.label.setText(title.upper())
         self.label.setVisible(bool(title))
+
+
+class Disclosure(QWidget):
+    """A fold-away group ("Advanced options"): a header row that opens and closes the controls under it.
+
+    The header can show a short summary (e.g. "2 on") so changed settings are never hidden silently."""
+
+    toggled = Signal(bool)
+
+    def __init__(self, title: str, is_open: bool = False, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._title = title
+        self._summary = ""
+        outer = vbox(self, 0, tokens.SPACE_3)
+        self.header = QPushButton()
+        self.header.setObjectName("Disclosure")
+        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header.clicked.connect(lambda: self.set_open(not self.body.isVisibleTo(self), emit=True))
+        outer.addWidget(self.header)
+        self.body = QWidget()
+        self.lay = vbox(self.body, 0, tokens.SPACE_3)
+        outer.addWidget(self.body)
+        self.set_open(is_open)
+
+    def add(self, w: QWidget) -> None:
+        self.lay.addWidget(w)
+
+    def is_open(self) -> bool:
+        return self.body.isVisibleTo(self)
+
+    def set_open(self, on: bool, emit: bool = False) -> None:
+        self.body.setVisible(on)
+        self.header.setIcon(theme.icon("chevron" if on else "chevron-right", theme.MUTED))
+        self.header.setToolTip("Hide" if on else "Show more settings")
+        if emit:
+            self.toggled.emit(on)
+
+    def set_summary(self, text: str) -> None:
+        self._summary = text
+        self.header.setText(f" {self._title}" + (f"  ·  {text}" if text else ""))
 
 
 def repolish(w: QWidget) -> None:

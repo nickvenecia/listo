@@ -16,7 +16,10 @@ The owner is a filmmaker (director/DP/editor/colorist), not a full-time develope
 listo/
   core/            Converting. No Qt imports.
     engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates, verify)
-    video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here
+    video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here;
+                   burn_filters(): clean / VHS drawtext burn-ins (fonts in listo/assets/fonts)
+    frame.py       picture shape: desqueeze, aspect crop / black bars / cinema bars, short-edge resize
+                   (shared by video.build and naming.output_size so names and files agree)
     photo.py       photo decode (incl. RAW/HEIC) + save
     presets.py     preset/format definitions + Settings dataclass (persisted as JSON in QSettings)
     naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
@@ -60,7 +63,12 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 - Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
-- Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click; cards emit `pressed`; the trash removes the selection or clears all.
+- Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins.
+- `frame.frame_plan` also returns the picture area (fractions, without bars); burn_filters keeps everything inside it.
+- Sidebar.VIDEO_ADVANCED / PHOTO_ADVANCED list the settings counted in the "Advanced options · N changed" header; add new advanced settings there.
+- Burn-ins need ffmpeg's drawtext (FreeType + HarfBuzz). Homebrew's ffmpeg doesn't have it; the bundled builds do.
+- New Settings fields must have defaults that mean "off": old recipes are applied through `Settings.complete()`.
+- Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click; cards emit `pressed`; the clear-list icon opens a menu (Remove selected / Clear finished / Clear all).
 - Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.

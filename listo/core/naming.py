@@ -6,6 +6,7 @@ import os
 import re
 from pathlib import Path
 
+from .frame import frame_filters, resized
 from .presets import VIDEO_BY_KEY, Settings, output_ext, preset_tag
 from .probe import MediaInfo, file_date
 
@@ -66,16 +67,17 @@ def output_size(info: MediaInfo | None, s: Settings, kind: str) -> tuple[int, in
                 w, h = round(w * scale), round(h * scale)
         return w, h
     preset = s.video_preset
-    if preset == "proxy" or (preset != "rewrap" and s.video_resize == "half"):
+    if preset == "rewrap":
+        return w - (w % 2), h - (h % 2)
+    _, w, h = frame_filters(w, h, info.sar, s)
+    if preset == "proxy":
         w, h = w // 2, h // 2
     elif preset == "gif":
         target_w = int(s.variant_for("gif"))
         if w > target_w:
             h, w = round(h * target_w / w), target_w
-    elif preset != "rewrap" and s.video_resize != "orig":
-        target = int(s.video_resize)
-        if h > target:
-            w, h = round(w * target / h), target
+    else:
+        w, h = resized(w, h, s.video_resize)
     return w - (w % 2), h - (h % 2)
 
 

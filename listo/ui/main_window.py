@@ -280,11 +280,14 @@ class MainWindow(QMainWindow):
         bar.addWidget(self.btn_add)
         self.btn_clear_all = QToolButton()
         self.btn_clear_all.setObjectName("IconBtn")
-        self.btn_clear_all.setIcon(theme.icon("trash", theme.MUTED))
+        self.btn_clear_all.setIcon(theme.icon("list-x", theme.MUTED))
         self.btn_clear_all.setIconSize(QSize(tokens.ICON, tokens.ICON))
-        self.btn_clear_all.setToolTip("Clear the list (your files aren't touched)")
+        self.btn_clear_all.setToolTip("Remove files from the list (your files aren't touched)")
         self.btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_clear_all.clicked.connect(self._trash_clicked)
+        self.trash_menu = QMenu(self)
+        self.trash_menu.aboutToShow.connect(self._fill_trash_menu)
+        self.btn_clear_all.setMenu(self.trash_menu)
+        self.btn_clear_all.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         bar.addWidget(self.btn_clear_all)
         left_col.addLayout(bar)
         self.queue_stack = QStackedWidget()
@@ -906,12 +909,6 @@ class MainWindow(QMainWindow):
         self.selected = {i for i in ids if i in self.items}
         for iid, it in self.items.items():
             it.card.set_selected(iid in self.selected)
-        n = len(self.selected)
-        self.btn_clear_all.setToolTip(
-            f"Remove {n} selected file{'s' if n != 1 else ''} from the list (your files aren't touched)"
-            if n
-            else "Clear the list (your files aren't touched)"
-        )
 
     def _card_pressed(self, iid: int, mods) -> None:
         self.centralWidget().setFocus()  # so Delete / Backspace reach the list, not a text field
@@ -932,11 +929,22 @@ class MainWindow(QMainWindow):
         for iid in [i for i in self.order if i in self.selected]:
             self.remove_item(iid)  # files that are converting right now are skipped
 
-    def _trash_clicked(self) -> None:
-        if self.selected:
-            self.remove_selected()
-        else:
-            self.clear_all()
+    def _fill_trash_menu(self) -> None:
+        """Nothing is removed until a choice is picked here (only from the list — never from disk)."""
+        m = self.trash_menu
+        m.clear()
+        n = sum(1 for i in self.selected if i not in self.active)
+        a = m.addAction(
+            theme.icon("x", theme.MUTED),
+            f"Remove {n} selected" if n else "Remove selected",
+            self.remove_selected,
+        )
+        a.setEnabled(n > 0)
+        finished = sum(1 for it in self.items.values() if it.state in FINAL)
+        a = m.addAction(theme.icon("check", theme.MUTED), "Clear finished", self.clear_finished)
+        a.setEnabled(finished > 0)
+        m.addSeparator()
+        m.addAction(theme.icon("list-x", theme.MUTED), "Clear all", self.clear_all)
 
     # ------------------------------------------------------------------ converting
     def start(self) -> None:

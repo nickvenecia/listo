@@ -186,6 +186,11 @@ def main() -> int:
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)
+        print(
+            "burn-ins:",
+            "yes" if caps.has_filter("drawtext") else "NO (this ffmpeg can't draw text)",
+            flush=True,
+        )
         QTimer.singleShot(1500, app.quit)
         code = app.exec()
         return code if caps.ok else 3

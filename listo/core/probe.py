@@ -6,7 +6,7 @@ import json
 import math
 import os
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .tools import capabilities, run_quiet
@@ -164,6 +164,7 @@ class MediaInfo:
     audio: list[AudioTrack] = field(default_factory=list)
     timecode: str = ""
     created: datetime | None = None
+    sar: float = 1.0  # pixel shape: 1 = square; DV / HDV store wider or narrower pixels
     error: str = ""
 
     @property
@@ -342,13 +343,38 @@ def _bit_depth(pix_fmt: str, s: dict) -> int:
     return 8
 
 
+def _sar(value: str) -> float:
+    """'4:3' -> 1.333. Missing, '0:1' or nonsense -> 1 (square pixels)."""
+    try:
+        num, den = (float(x) for x in value.split(":"))
+    except ValueError:
+        return 1.0
+    return num / den if num > 0 and den > 0 and 0.2 < num / den < 5 else 1.0
+
+
 def _parse_time(value: str) -> datetime | None:
+    """ISO date from a metadata tag; None for empty or placeholder dates (1904/1970 = 'not set')."""
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        t = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
+    return t if t.year > 1980 else None
+
+
+def _shot_time(fmt_tags: dict, stream_tags: list[dict]) -> datetime | None:
+    """When the clip was shot. Prefer Apple's tag (local time with its time zone), then the
+    usual UTC creation_time on the file, then on any stream."""
+    for tags in (fmt_tags, *stream_tags):
+        t = _parse_time(tags.get("com.apple.quicktime.creationdate", ""))
+        if t:
+            return t
+    for tags in (fmt_tags, *stream_tags):
+        t = _parse_time(tags.get("creation_time", ""))
+        if t:
+            return t
+    return None
 
 
 def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
@@ -387,7 +413,9 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
     except ValueError:
         info.duration = 0.0
     info.timecode = tags.get("timecode", "")
-    info.created = _parse_time(tags.get("creation_time", ""))
+    info.created = _shot_time(
+        tags, [{k.lower(): v for k, v in (st.get("tags") or {}).items()} for st in data.get("streams", [])]
+    )
 
     video = None
     for s in data.get("streams", []):
@@ -441,8 +469,10 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
                     rot = abs(int(float(sd["rotation"])))
                 except ValueError:
                     pass
+        info.sar = _sar(video.get("sample_aspect_ratio", ""))
         if rot in (90, 270):
             info.width, info.height = info.height, info.width
+            info.sar = 1 / info.sar
     elif info.audio:
         info.kind = "audio"
     else:
@@ -464,12 +494,18 @@ def probe_photo(path: str) -> MediaInfo:
 
 
 def file_date(path: str | Path, info: MediaInfo | None = None) -> datetime:
-    """Best 'when was this shot' date: embedded creation time, else file dates."""
+    """Best 'when was this shot' date, as the time on the wall where it was shot (no time zone).
+
+    Embedded creation time first: Apple's tag already carries the local zone; a plain UTC tag is
+    shown in this computer's zone (the best guess). Otherwise the file's own dates."""
     if info and info.created:
+        t = info.created
         try:
-            return info.created.astimezone() if info.created.tzinfo else info.created
+            if t.tzinfo is not None and t.utcoffset() == timedelta(0):
+                t = t.astimezone()  # UTC only: assume it was shot in this computer's zone
         except (ValueError, OSError):
-            return info.created
+            pass
+        return t.replace(tzinfo=None)
     st = os.stat(path)
     ts = getattr(st, "st_birthtime", None) or st.st_mtime
     return datetime.fromtimestamp(ts)

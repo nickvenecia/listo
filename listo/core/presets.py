@@ -203,6 +203,7 @@ PHOTO_BY_KEY = {p.key: p for p in PHOTO_FORMATS}
 RESIZE_VIDEO = (
     Choice("orig", "Original size"),
     Choice("2160", "4K · 2160"),
+    Choice("1440", "1440"),
     Choice("1080", "1080"),
     Choice("720", "720"),
     Choice("540", "540"),
@@ -226,6 +227,38 @@ DESTINATIONS = (
     Choice("source", "Next to the original"),
     Choice("subfolder", "In a subfolder next to the original"),
     Choice("folder", "In one folder…"),
+)
+DESQUEEZE = (
+    Choice("1", "No desqueeze"),
+    Choice("1.33", "Desqueeze 1.33×"),
+    Choice("1.5", "Desqueeze 1.5×"),
+    Choice("1.55", "Desqueeze 1.55×"),
+    Choice("1.6", "Desqueeze 1.6×"),
+    Choice("1.65", "Desqueeze 1.65×"),
+    Choice("1.8", "Desqueeze 1.8×"),
+    Choice("2", "Desqueeze 2×"),
+)
+ASPECT_CHOICES = (
+    Choice("orig", "Keep the original shape"),
+    Choice("16:9", "16:9 · widescreen"),
+    Choice("8:5", "8:5 · 16:10"),
+    Choice("4:3", "4:3 · classic TV"),
+    Choice("1:1", "1:1 · square"),
+    Choice("4:5", "4:5 · Instagram portrait"),
+    Choice("9:16", "9:16 · vertical"),
+    Choice("1.85:1", "1.85:1 · flat"),
+    Choice("2:1", "2:1"),
+    Choice("2.35:1", "2.35:1 · scope"),
+    Choice("2.39:1", "2.39:1 · scope (modern)"),
+)
+ASPECT_FIT = (
+    Choice("crop", "Crop to fill"),
+    Choice("bars", "Add black bars"),
+    Choice("matte", "Cinema bars on top"),
+)
+BURN_STYLES = (
+    Choice("clean", "Clean"),
+    Choice("vhs", "VHS camcorder"),
 )
 COLLISIONS = (
     Choice("number", "Add a number"),
@@ -256,8 +289,19 @@ class Settings:
     lut_path: str = ""
     burn_timecode: bool = False
     burn_filename: bool = False
+    burn_datetime: bool = False  # the clip's own date + a running clock
+    burn_style: str = "clean"  # see BURN_STYLES
+    desqueeze: str = "1"  # anamorphic squeeze factor, see DESQUEEZE
+    aspect: str = "orig"  # see ASPECT_CHOICES (frame.ASPECTS)
+    aspect_fit: str = "crop"  # "crop" to fill, "bars" = pad to the new shape, "matte" = cinema bars on top
+    matte_opacity: int = 100  # how dark cinema bars are, 0-100
     verify: bool = True
     parallel: bool = False
+
+    @property
+    def burns(self) -> bool:
+        """True when anything should be burned into the picture."""
+        return self.burn_timecode or self.burn_filename or self.burn_datetime
 
     def variant_for(self, preset_key: str) -> str:
         p = VIDEO_BY_KEY[preset_key]
@@ -279,6 +323,12 @@ class Settings:
                 self.video_variant.update(v)
             elif hasattr(self, k) and type(v) is type(getattr(self, k)):
                 setattr(self, k, v)
+
+    @staticmethod
+    def complete(values: dict) -> dict:
+        """A saved recipe with today's defaults filled in for settings added after it was saved
+        (so an old recipe turns new options off instead of leaving them as they were)."""
+        return {**Settings().to_dict(), **(values or {})}
 
     def matches(self, values: dict) -> bool:
         cur = self.to_dict()

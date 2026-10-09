@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -22,7 +22,7 @@ from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
 from .tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_5
-from .widgets import FlowLayout, Section, combo, hbox, hint, set_combo, vbox
+from .widgets import Disclosure, FlowLayout, Section, combo, hbox, hint, set_combo, vbox
 
 log = get_logger(__name__)
 
@@ -174,7 +174,12 @@ class ExportDialog(QDialog):
             lambda _i: self._set("collision", self.collision.currentData())
         )
         taken.add(self.collision)
-        lay.addWidget(taken)
+        self.adv = Disclosure(
+            "Advanced options",
+            is_open=QSettings("Listo", "Listo").value("export_advanced_open", False, type=bool),
+        )
+        self.adv.toggled.connect(lambda on: QSettings("Listo", "Listo").setValue("export_advanced_open", on))
+        self.adv.add(taken)
 
         after = Section("After converting")
         self.k_dates = QCheckBox("Keep the original file dates")
@@ -188,7 +193,9 @@ class ExportDialog(QDialog):
         self.k_verify.setChecked(self.s.verify)
         self.k_verify.toggled.connect(lambda v: self._set("verify", v))
         after.add(self.k_verify)
-        lay.addWidget(after)
+        self.adv.add(after)
+        self.adv.toggled.connect(lambda _on: self.adjustSize())
+        lay.addWidget(self.adv)
 
         done_row = hbox(margins=(0, SPACE_2, 0, 0))
         done_row.addStretch(1)
@@ -205,7 +212,13 @@ class ExportDialog(QDialog):
     def _set(self, attr: str, value) -> None:
         setattr(self.s, attr, value)
         self._update_example()
+        self._update_advanced()
         self.changed.emit()
+
+    def _update_advanced(self) -> None:
+        base = Settings()
+        n = sum(1 for k in ("collision", "keep_dates", "verify") if getattr(self.s, k) != getattr(base, k))
+        self.adv.set_summary(f"{n} changed" if n else "")
 
     def _destination(self, key: str) -> None:
         if key == "folder" and not self.s.dest_folder and not self._choose_folder():
@@ -247,6 +260,7 @@ class ExportDialog(QDialog):
         self.d_path.setText(self.s.dest_folder or "No folder chosen")
         self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
+        self._update_advanced()
         # The dialog sizes itself before it knows its width; reserve room for every wrapped row.
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):

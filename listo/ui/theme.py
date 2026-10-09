@@ -133,6 +133,9 @@ QPushButton#Primary:pressed {{ background: {ACCENT_PRESS}; border-color: {ACCENT
 QPushButton#Primary:disabled {{ background: {ACCENT_OFF}; border-color: {ACCENT_OFF}; color: {ACCENT_OFF_TEXT}; }}
 QPushButton#Ghost {{ background: transparent; border-color: transparent; color: {MUTED}; }}
 QPushButton#Ghost:hover {{ background: {CARD_HOVER}; color: {TEXT}; }}
+QPushButton#Disclosure {{ background: transparent; border: none; border-top: 1px solid {BORDER}; border-radius: 0;
+    padding: {SPACE_2}px 0 0 0; color: {MUTED}; font-weight: {WEIGHT_SEMIBOLD}; text-align: left; }}
+QPushButton#Disclosure:hover {{ color: {TEXT}; background: transparent; }}
 QPushButton#Secondary {{ background: transparent; color: {MUTED}; }}
 QPushButton#Secondary:hover {{ background: {CARD_HOVER}; color: {TEXT}; }}
 QPushButton#Danger {{ background: transparent; color: {BAD}; }}
@@ -254,9 +257,11 @@ _SVG = {
     "pause": '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
     "play": '<path d="M6 4l14 8-14 8z"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
+    "chevron-right": '<path d="m9 6 6 6-6 6"/>',
     "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
     "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     "trash": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
+    "list-x": '<path d="M11 12H3M16 6H3M16 18H3"/><path d="m15 10 4 4M19 10l-4 4"/>',
     "export": '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5"/>',
     "alert": '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
 }

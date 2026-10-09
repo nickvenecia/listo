@@ -13,6 +13,7 @@ The packaged app includes these open-source components. Thank you to their autho
 | psutil | BSD-3 | https://github.com/giampaolo/psutil |
 | Python | PSF License | https://www.python.org |
 | Inter typeface | SIL Open Font License 1.1 | https://github.com/rsms/inter (see `listo/assets/fonts/OFL.txt`) |
+| VCR OSD Mono typeface, by Riciery Leal (MrManet) | "100% Free" (free for personal and commercial use) | https://www.dafont.com/vcr-osd-mono.font |
 | Icons (redrawn line icons) | ISC (Lucide) | https://lucide.dev |
 
 FFmpeg is included as unmodified separate programs that Listo runs. Its full source code is available at the links above.
