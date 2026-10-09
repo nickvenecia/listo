@@ -4,11 +4,14 @@ yt-dlp (and Deno, which it needs for YouTube) are downloaded the first time a li
 used, into Listo's own folder, and yt-dlp updates itself at most once a day — sites
 change often and an old copy stops working.
 """
+
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import platform
+import re
 import shutil
 import ssl
 import stat
@@ -18,10 +21,14 @@ import threading
 import time
 import urllib.request
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
-from .tools import EXE, IS_MAC, IS_WIN, capabilities, popen_kwargs
+from .log import get_logger
+from .paths import downloads_dir, tools_dir
+from .tools import EXE, IS_WIN, capabilities, popen_kwargs
+
+log = get_logger(__name__)
 
 YTDLP_URLS = {
     "darwin": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos",
@@ -29,6 +36,7 @@ YTDLP_URLS = {
     "linux-x86_64": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux",
     "linux-aarch64": "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64",
 }
+YTDLP_SUMS = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
 DENO_BASE = "https://github.com/denoland/deno/releases/latest/download/"
 UPDATE_EVERY = 24 * 3600
 
@@ -39,25 +47,6 @@ class LinkError(Exception):
 
 class Canceled(Exception):
     pass
-
-
-def data_dir() -> Path:
-    home = Path.home()
-    if IS_MAC:
-        d = home / "Library" / "Application Support" / "Listo"
-    elif IS_WIN:
-        d = Path(os.environ.get("LOCALAPPDATA", home / "AppData" / "Local")) / "Listo"
-    else:
-        d = Path(os.environ.get("XDG_DATA_HOME", home / ".local" / "share")) / "listo"
-    return d
-
-
-def tools_dir() -> Path:
-    return data_dir() / "tools"
-
-
-def downloads_dir() -> Path:
-    return Path.home() / "Downloads" / "Listo"
 
 
 def is_link(text: str) -> bool:
@@ -77,12 +66,13 @@ def _ssl_context() -> ssl.SSLContext:
         import certifi
 
         return ssl.create_default_context(cafile=certifi.where())
-    except Exception:  # noqa: BLE001
+    except Exception:
         return ssl.create_default_context()
 
 
-def _fetch(url: str, on_status: Callable[[str], None], label: str,
-           cancel: threading.Event | None = None) -> bytes:
+def _fetch(
+    url: str, on_status: Callable[[str], None], label: str, cancel: threading.Event | None = None
+) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "Listo"})
     with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as r:
         total = int(r.headers.get("Content-Length") or 0)
@@ -101,6 +91,33 @@ def _fetch(url: str, on_status: Callable[[str], None], label: str,
                 last = time.monotonic()
                 on_status(f"{label} {int(got / total * 100)}%")
         return buf.getvalue()
+
+
+def expected_sha256(sums: str, name: str | None = None) -> str | None:
+    """Pull the SHA-256 for `name` out of a checksum file.
+
+    Handles `<hash>  <file>` lines (yt-dlp's SHA2-256SUMS, Deno on mac/Linux) and files that
+    hold a single hash (Deno's Windows .sha256sum is a PowerShell table)."""
+    hashes = []
+    for line in sums.splitlines():
+        m = re.search(r"\b([0-9a-fA-F]{64})\b", line)
+        if not m:
+            continue
+        if name is None:
+            hashes.append(m.group(1).lower())
+        elif line.split()[-1].lstrip("*").replace("\\", "/").rsplit("/", 1)[-1] == name:
+            return m.group(1).lower()
+    return hashes[0] if len(hashes) == 1 else None
+
+
+def _verified(data: bytes, sums: bytes, name: str | None) -> bytes:
+    """Refuse a download whose SHA-256 doesn't match the one published with the release."""
+    want = expected_sha256(sums.decode("utf-8", "replace"), name)
+    if not want:
+        raise LinkError("Couldn't check the download (no checksum published).")
+    if hashlib.sha256(data).hexdigest() != want:
+        raise LinkError("The download didn't match its checksum, so it wasn't used. Try again later.")
+    return data
 
 
 def _make_exec(p: Path) -> None:
@@ -135,8 +152,9 @@ def deno_path() -> str | None:
 _setup_lock = threading.Lock()
 
 
-def ensure_tools(on_status: Callable[[str], None],
-                 cancel: threading.Event | None = None) -> tuple[list[str], str | None]:
+def ensure_tools(
+    on_status: Callable[[str], None], cancel: threading.Event | None = None
+) -> tuple[list[str], str | None]:
     """Make sure yt-dlp (and Deno) are available; download them the first time."""
     with _setup_lock:
         tdir = tools_dir()
@@ -152,10 +170,13 @@ def ensure_tools(on_status: Callable[[str], None],
                 raise LinkError("Link downloads aren't available on this kind of computer.")
             try:
                 data = _fetch(url, on_status, "Setting up link downloads (one time)…", cancel)
+                sums = _fetch(YTDLP_SUMS, lambda _: None, "", cancel)
             except Canceled:
                 raise
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
+                log.warning("yt-dlp download failed", exc_info=True)
                 raise LinkError(f"Couldn't download the link tool: {e}") from e
+            data = _verified(data, sums, url.rsplit("/", 1)[-1])
             tmp = own.with_suffix(".part")
             tmp.write_bytes(data)
             _make_exec(tmp)
@@ -174,7 +195,11 @@ def ensure_tools(on_status: Callable[[str], None],
             }.get(("linux" if sys.platform.startswith("linux") else sys.platform, _arch()))
             if target:
                 try:
-                    data = _fetch(DENO_BASE + target, on_status, "Setting up YouTube support (one time)…", cancel)
+                    data = _fetch(
+                        DENO_BASE + target, on_status, "Setting up YouTube support (one time)…", cancel
+                    )
+                    sums = _fetch(DENO_BASE + target + ".sha256sum", lambda _: None, "", cancel)
+                    data = _verified(data, sums, None)
                     with zipfile.ZipFile(io.BytesIO(data)) as z:
                         name = next(n for n in z.namelist() if Path(n).name == f"deno{EXE}")
                         dest = tdir / f"deno{EXE}"
@@ -185,7 +210,8 @@ def ensure_tools(on_status: Callable[[str], None],
                     deno_fail.unlink(missing_ok=True)
                 except Canceled:
                     raise
-                except Exception:  # noqa: BLE001 — other sites still work without it; retry tomorrow
+                except Exception:
+                    log.warning("Deno setup failed; YouTube may not work", exc_info=True)
                     try:
                         deno_fail.write_text(str(time.time()))
                     except OSError:
@@ -202,7 +228,9 @@ def _kill_tree(proc: subprocess.Popen) -> None:
         return
     try:
         if IS_WIN:
-            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, **popen_kwargs())
+            subprocess.run(
+                ["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, **popen_kwargs()
+            )
         else:
             import signal
 
@@ -218,7 +246,7 @@ def _group_kwargs() -> dict:
     return {} if IS_WIN else {"start_new_session": True}
 
 
-def maybe_update(cmd: list[str], on_status: Callable[[str], None], job: "LinkDownload | None" = None) -> None:
+def maybe_update(cmd: list[str], on_status: Callable[[str], None], job: LinkDownload | None = None) -> None:
     """Keep Listo's own yt-dlp fresh (at most once a day)."""
     own = tools_dir() / f"yt-dlp{EXE}"
     if cmd != [str(own)]:
@@ -227,7 +255,7 @@ def maybe_update(cmd: list[str], on_status: Callable[[str], None], job: "LinkDow
         _update_locked(cmd, on_status, job)
 
 
-def _update_locked(cmd: list[str], on_status: Callable[[str], None], job: "LinkDownload | None") -> None:
+def _update_locked(cmd: list[str], on_status: Callable[[str], None], job: LinkDownload | None) -> None:
     stamp = tools_dir() / "yt-dlp.updated"
     try:
         last = float(stamp.read_text())
@@ -237,8 +265,14 @@ def _update_locked(cmd: list[str], on_status: Callable[[str], None], job: "LinkD
         return
     on_status("Checking for link tool updates…")
     try:
-        proc = subprocess.Popen([*cmd, "-U"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, **popen_kwargs(), **_group_kwargs())
+        proc = subprocess.Popen(
+            [*cmd, "-U"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            **popen_kwargs(),
+            **_group_kwargs(),
+        )
         if job is not None:
             job.proc = proc
             if job._canceled:
@@ -286,15 +320,32 @@ class LinkDownload:
         self.dest.mkdir(parents=True, exist_ok=True)
         caps = capabilities()
         args = [
-            *cmd, "--no-playlist", "-I", "1", "--newline", "--progress", "--no-simulate", "--no-colors",
-            "--print", "before_dl:LISTO_TITLE %(title)s",
-            "--print", "after_move:LISTO_FILE %(filepath)s",
-            "--progress-template", "download:LISTO_PROG %(progress._percent_str)s|%(progress._eta_str)s",
-            "--progress-template", "postprocess:LISTO_PP %(progress.postprocessor)s|%(progress.status)s",
-            "-f", "bv*[vcodec^=avc1]+ba[ext=m4a]/bv*+ba/b",
-            "--merge-output-format", "mp4/mkv",
-            "--windows-filenames", "--no-mtime",
-            "-o", "%(title).120B [%(id)s].%(ext)s", "-P", str(self.dest),
+            *cmd,
+            "--no-playlist",
+            "-I",
+            "1",
+            "--newline",
+            "--progress",
+            "--no-simulate",
+            "--no-colors",
+            "--print",
+            "before_dl:LISTO_TITLE %(title)s",
+            "--print",
+            "after_move:LISTO_FILE %(filepath)s",
+            "--progress-template",
+            "download:LISTO_PROG %(progress._percent_str)s|%(progress._eta_str)s",
+            "--progress-template",
+            "postprocess:LISTO_PP %(progress.postprocessor)s|%(progress.status)s",
+            "-f",
+            "bv*[vcodec^=avc1]+ba[ext=m4a]/bv*+ba/b",
+            "--merge-output-format",
+            "mp4/mkv",
+            "--windows-filenames",
+            "--no-mtime",
+            "-o",
+            "%(title).120B [%(id)s].%(ext)s",
+            "-P",
+            str(self.dest),
         ]
         if caps.ffmpeg:
             args += ["--ffmpeg-location", str(Path(caps.ffmpeg).parent)]
@@ -303,8 +354,16 @@ class LinkDownload:
         args.append(self.url)
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         self.proc = subprocess.Popen(
-            args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace", bufsize=1, env=env, **popen_kwargs(),
+            args,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            env=env,
+            **popen_kwargs(),
             **_group_kwargs(),
         )
         if self._canceled:
@@ -313,16 +372,17 @@ class LinkDownload:
         errors: list[str] = []
         streams = 0
         last_pct = 0.0
-        assert self.proc.stdout
+        if self.proc.stdout is None:
+            raise LinkError("Couldn't start the download.")
         for raw in self.proc.stdout:
             line = raw.strip()
             if line.startswith("LISTO_TITLE "):
-                self.title = line[len("LISTO_TITLE "):]
+                self.title = line[len("LISTO_TITLE ") :]
                 on_title(self.title)
             elif line.startswith("LISTO_FILE "):
-                path = line[len("LISTO_FILE "):]
+                path = line[len("LISTO_FILE ") :]
             elif line.startswith("LISTO_PROG "):
-                pct_s, _, eta = line[len("LISTO_PROG "):].partition("|")
+                pct_s, _, eta = line[len("LISTO_PROG ") :].partition("|")
                 try:
                     pct = float(pct_s.strip().rstrip("%"))
                 except ValueError:
@@ -339,7 +399,7 @@ class LinkDownload:
                 if "Merger" in line or "started" in line:
                     on_progress(1.0, "Putting it together…")
             elif line.startswith("ERROR:"):
-                errors.append(line[len("ERROR:"):].strip())
+                errors.append(line[len("ERROR:") :].strip())
         rc = self.proc.wait()
         if self._canceled:
             raise Canceled()

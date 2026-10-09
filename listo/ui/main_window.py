@@ -1,4 +1,5 @@
 """The main window: queue on the left, settings on the right, controls at the bottom."""
+
 from __future__ import annotations
 
 import os
@@ -9,27 +10,53 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, QSize, Qt, QThreadPool, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QDragEnterEvent, QDropEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout, QLabel,
-    QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QToolButton, QProgressBar, QPushButton, QScrollArea,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QStackedWidget,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from .. import APP_NAME, __version__, naming
-from ..engine import Conversion, Result
-from ..fileutil import reveal
-from ..links import is_link
-from ..presets import (
-    AUDIO_FORMATS, OVERRIDE_KEYS, PHOTO_FORMATS, VIDEO_PRESETS, Settings, format_label,
+from .. import APP_NAME, __version__
+from ..core import naming
+from ..core.engine import Conversion, Result
+from ..core.fileutil import reveal
+from ..core.links import is_link
+from ..core.log import get_logger
+from ..core.presets import (
+    AUDIO_FORMATS,
+    OVERRIDE_KEYS,
+    PHOTO_FORMATS,
+    VIDEO_PRESETS,
+    Settings,
+    format_label,
 )
-from ..probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_duration, kind_from_ext
-from ..tools import capabilities
-from . import theme
+from ..core.probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_duration, kind_from_ext
+from ..core.tools import capabilities
+from . import theme, tokens
+from .export_dialog import ExportDialog
+from .export_dialog import summary as export_summary
 from .job_card import JobCard
-from .save_dialog import SaveDialog, summary as save_summary
 from .sidebar import Sidebar
-from .widgets import Toast, repolish
 from .trim_dialog import TrimDialog, fmt_time
+from .widgets import Toast, repolish
 from .workers import ConvertThread, DownloadThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
+
+log = get_logger(__name__)
 
 _ORPHANS: list = []
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
@@ -84,9 +111,9 @@ class DropZone(QFrame):
         self._on_click = on_click
         lay = QVBoxLayout(self)
         lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.setSpacing(10)
+        lay.setSpacing(tokens.SPACE_2)
         ic = QLabel()
-        ic.setPixmap(theme.pixmap("drop", 44, theme.ACCENT, 1.6))
+        ic.setPixmap(theme.pixmap("drop", tokens.ICON_XL, theme.ACCENT, 1.6))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title = QLabel("Drop videos, photos or audio here")
         title.setObjectName("DropTitle")
@@ -94,25 +121,27 @@ class DropZone(QFrame):
         sub = QLabel("or click to choose files — folders work too")
         sub.setObjectName("DropSub")
         sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        fmts = QLabel("MOV · MP4 · MTS · MXF · AVI · MKV · MOD · MPG · HEIC · RAW · JPG · PNG · WAV · AIFF · MP3 …")
+        fmts = QLabel(
+            "MOV · MP4 · MTS · MXF · AVI · MKV · MOD · MPG · HEIC · RAW · JPG · PNG · WAV · AIFF · MP3 …"
+        )
         fmts.setObjectName("DropFormats")
         fmts.setAlignment(Qt.AlignmentFlag.AlignCenter)
         fmts.setWordWrap(True)
         lay.addWidget(ic)
-        lay.addSpacing(4)
+        lay.addSpacing(tokens.SPACE_1)
         lay.addWidget(title)
         lay.addWidget(sub)
-        lay.addSpacing(8)
+        lay.addSpacing(tokens.SPACE_2)
         lay.addWidget(fmts)
         if on_link is not None:
-            lay.addSpacing(18)
+            lay.addSpacing(tokens.SPACE_4)
             row = QHBoxLayout()
-            row.setSpacing(6)
+            row.setSpacing(tokens.SPACE_2)
             row.addStretch(1)
             self.link = QLineEdit()
             self.link.setObjectName("LinkBox")
             self.link.setPlaceholderText("…or paste a video link (YouTube, Vimeo, Instagram…)")
-            self.link.setFixedWidth(380)
+            self.link.setFixedWidth(tokens.LINK_BOX_W)
             self.link.setCursor(Qt.CursorShape.IBeamCursor)
             go = QPushButton("Add")
             go.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -134,7 +163,7 @@ class DropZone(QFrame):
         self.setProperty("hot", "true" if on else "false")
         repolish(self)
 
-    def mousePressEvent(self, e):  # noqa: N802
+    def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             self._on_click()
 
@@ -149,7 +178,7 @@ class MainWindow(QMainWindow):
             import json
 
             self.settings = Settings.from_dict(json.loads(self.qs.value("settings", "{}") or "{}"))
-        except Exception:  # noqa: BLE001
+        except Exception:
             self.settings = Settings()
 
         self.items: dict[int, Item] = {}
@@ -176,7 +205,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.StandardKey.Paste, self, activated=self._paste)
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
-        self._update_save_button()
+        self._update_export_button()
         self._refresh_footer()
         self.centralWidget().setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         QTimer.singleShot(0, self.centralWidget().setFocus)
@@ -185,8 +214,8 @@ class MainWindow(QMainWindow):
         if geo is not None:
             self.restoreGeometry(geo)
         else:
-            self.resize(1120, 720)
-        self.setMinimumSize(QSize(880, 560))
+            self.resize(*tokens.WINDOW_SIZE)
+        self.setMinimumSize(QSize(*tokens.WINDOW_MIN))
 
         if not self.caps.ok:
             QTimer.singleShot(300, self._missing_ffmpeg)
@@ -207,14 +236,14 @@ class MainWindow(QMainWindow):
         left_col.setContentsMargins(0, 0, 0, 0)
         left_col.setSpacing(0)
         bar = QHBoxLayout()
-        bar.setContentsMargins(18, 10, 14, 4)
-        bar.setSpacing(4)
+        bar.setContentsMargins(tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_4, tokens.SPACE_2)
+        bar.setSpacing(tokens.SPACE_2)
         word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
         word.setObjectName("Wordmark")
         word.setTextFormat(Qt.TextFormat.RichText)
         word.setToolTip("Drop it in. Get it back edit-ready.")
         bar.addWidget(word)
-        bar.addSpacing(16)
+        bar.addSpacing(tokens.SPACE_3)
         self.btn_add = QPushButton(" Add")
         self.btn_add.setObjectName("Ghost")
         self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
@@ -225,17 +254,16 @@ class MainWindow(QMainWindow):
         add_menu.addAction(theme.icon("folder", theme.MUTED), "A folder…", self.pick_folder)
         add_menu.addAction(theme.icon("link", theme.MUTED), "A link…", self.ask_link)
         self.btn_add.setMenu(add_menu)
-        self.btn_add.setStyleSheet("QPushButton::menu-indicator { image: none; width: 0; }")
         bar.addWidget(self.btn_add)
         bar.addStretch(1)
         self.q_count = QLabel()
         self.q_count.setObjectName("SectionLabel")
         bar.addWidget(self.q_count)
-        bar.addSpacing(4)
+        bar.addSpacing(tokens.SPACE_1)
         self.btn_clear_all = QToolButton()
         self.btn_clear_all.setObjectName("IconBtn")
         self.btn_clear_all.setIcon(theme.icon("trash", theme.MUTED, 16))
-        self.btn_clear_all.setIconSize(QSize(16, 16))
+        self.btn_clear_all.setIconSize(QSize(tokens.ICON, tokens.ICON))
         self.btn_clear_all.setToolTip("Clear the list (your files aren't touched)")
         self.btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear_all.clicked.connect(self.clear_all)
@@ -244,7 +272,7 @@ class MainWindow(QMainWindow):
         self.queue_stack = QStackedWidget()
         empty_wrap = QWidget()
         ew = QVBoxLayout(empty_wrap)
-        ew.setContentsMargins(18, 18, 18, 18)
+        ew.setContentsMargins(*(tokens.SPACE_4,) * 4)
         self.drop = DropZone(self.pick_files, self._link_typed)
         ew.addWidget(self.drop)
         self.queue_stack.addWidget(empty_wrap)
@@ -258,8 +286,8 @@ class MainWindow(QMainWindow):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         lst = QWidget()
         self.list_lay = QVBoxLayout(lst)
-        self.list_lay.setContentsMargins(18, 6, 12, 14)
-        self.list_lay.setSpacing(6)
+        self.list_lay.setContentsMargins(tokens.SPACE_4, tokens.SPACE_1, tokens.SPACE_3, tokens.SPACE_4)
+        self.list_lay.setSpacing(tokens.SPACE_2)
         self.list_lay.addStretch(1)
         self.scroll.setWidget(lst)
         qp.addWidget(self.scroll, 1)
@@ -269,19 +297,19 @@ class MainWindow(QMainWindow):
 
         self.sidebar = Sidebar(self.settings)
         self.sidebar.changed.connect(self._settings_changed)
-        self.save_dialog = SaveDialog(self.settings, self)
-        self.save_dialog.changed.connect(self._settings_changed)
-        self.sidebar.recipe_applied.connect(self.save_dialog.reload)
+        self.export_dialog = ExportDialog(self.settings, self)
+        self.export_dialog.changed.connect(self._settings_changed)
+        self.sidebar.recipe_applied.connect(self.export_dialog.reload)
         body.addWidget(self.sidebar)
         v.addLayout(body, 1)
 
         footer = QFrame()
         footer.setObjectName("Footer")
         f = QHBoxLayout(footer)
-        f.setContentsMargins(18, 10, 14, 10)
-        f.setSpacing(10)
+        f.setContentsMargins(tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_4, tokens.SPACE_3)
+        f.setSpacing(tokens.SPACE_2)
         left = QVBoxLayout()
-        left.setSpacing(4)
+        left.setSpacing(tokens.SPACE_1)
         self.f_title = QLabel()
         self.f_title.setObjectName("FooterTitle")
         self.f_sub = QLabel()
@@ -294,12 +322,12 @@ class MainWindow(QMainWindow):
         left.addWidget(self.f_sub)
         left.addWidget(self.f_bar)
         f.addLayout(left, 1)
-        self.btn_save = QPushButton("  Export options")
-        self.btn_save.setObjectName("SaveBtn")
-        self.btn_save.setIcon(theme.icon("export", theme.MUTED))
-        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_save.clicked.connect(self.open_save_options)
-        f.addWidget(self.btn_save)
+        self.btn_export = QPushButton("  Export options")
+        self.btn_export.setObjectName("Secondary")
+        self.btn_export.setIcon(theme.icon("export", theme.MUTED))
+        self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_export.clicked.connect(self.open_export_options)
+        f.addWidget(self.btn_export)
         self.btn_show = QPushButton("Show files")
         self.btn_show.setObjectName("Ghost")
         self.btn_show.clicked.connect(self._show_outputs)
@@ -349,10 +377,10 @@ class MainWindow(QMainWindow):
         clip = QApplication.clipboard().text().strip()
         dlg = QDialog(self)
         dlg.setWindowTitle("Add a link")
-        dlg.setFixedWidth(500)
+        dlg.setFixedWidth(tokens.DIALOG_W)
         lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(22, 20, 22, 18)
-        lay.setSpacing(10)
+        lay.setContentsMargins(*(tokens.SPACE_5,) * 4)
+        lay.setSpacing(tokens.SPACE_3)
         t = QLabel("Add a link")
         t.setObjectName("DialogTitle")
         lay.addWidget(t)
@@ -461,6 +489,7 @@ class MainWindow(QMainWindow):
         if not it:
             return
         if error:
+            log.warning("download failed: %s — %s", it.url, error)
             it.state = "failed"
             it.message = error
             it.card.set_state("failed", "Download failed" if error != "Canceled" else "Canceled")
@@ -540,7 +569,7 @@ class MainWindow(QMainWindow):
             elif pp.is_file():
                 to_add.append((str(pp), True))
         fresh = []
-        for path, explicit in to_add:
+        for path, _explicit in to_add:
             key = naming.reserve_key(Path(path))
             if key in existing:
                 dupes += 1
@@ -556,11 +585,15 @@ class MainWindow(QMainWindow):
         if dupes:
             msgs.append(f"{dupes} already in the list")
         if skipped:
-            msgs.append(f"skipped {skipped} file{'s' if skipped != 1 else ''} that aren't video, photo or audio")
+            msgs.append(
+                f"skipped {skipped} file{'s' if skipped != 1 else ''} that aren't video, photo or audio"
+            )
         if added:
             self._show_summary = False
         if msgs:
-            self.toast.show_message((f"Added {added}. " if added else "") + "; ".join(msgs).capitalize() + ".")
+            self.toast.show_message(
+                (f"Added {added}. " if added else "") + "; ".join(msgs).capitalize() + "."
+            )
         self._refresh_footer()
         if self.running:
             self._kick()
@@ -634,7 +667,11 @@ class MainWindow(QMainWindow):
         return (it.base or self.settings).with_override(it.override)
 
     def _update_output_name(self, it: Item) -> None:
-        if not it.info or it.state in ("unsupported",) or it.state in FINAL and it.result and it.result.output:
+        if (
+            not it.info
+            or it.state in ("unsupported",)
+            or (it.state in FINAL and it.result and it.result.output)
+        ):
             return
         s = self.eff(it)
         it.card.set_format(format_label(it.kind, s), bool(it.override), it.state in ("ready", "waiting"))
@@ -648,29 +685,29 @@ class MainWindow(QMainWindow):
                 it.card.set_output(f"→  {where}{name}  (exists — will be skipped)")
             else:
                 it.card.set_output(f"→  {where}{target.name}")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("output preview failed", exc_info=True)
 
     def _update_sample(self) -> None:
         for iid in self.order:
             it = self.items[iid]
             if it.info and it.state not in ("unsupported",):
-                self.save_dialog.set_sample(it.path, it.info, it.kind)
+                self.export_dialog.set_sample(it.path, it.info, it.kind)
                 return
-        self.save_dialog.set_sample(None, None, "video")
+        self.export_dialog.set_sample(None, None, "video")
 
-    def open_save_options(self) -> None:
-        self.save_dialog.exec()
+    def open_export_options(self) -> None:
+        self.export_dialog.exec()
         self._settings_changed()
 
-    def _update_save_button(self) -> None:
-        where, name = save_summary(self.settings)
-        self.btn_save.setToolTip(f"Where files go and how they're named\n{where} · {name}")
+    def _update_export_button(self) -> None:
+        where, name = export_summary(self.settings)
+        self.btn_export.setToolTip(f"Where files go and how they're named\n{where} · {name}")
 
     def _settings_changed(self) -> None:
         import json
 
-        self._update_save_button()
+        self._update_export_button()
         self.sidebar.notify_external_change()
         self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
         for it in self.items.values():
@@ -701,8 +738,12 @@ class MainWindow(QMainWindow):
                 if p.key in ("prores", "dnxhr"):
                     sub = m.addMenu(p.title)
                     for c in p.variants:
-                        add(sub, c.label, {"video_preset": p.key, "video_variant": {p.key: c.key}},
-                            bool(it.override) and s.video_preset == p.key and s.variant_for(p.key) == c.key)
+                        add(
+                            sub,
+                            c.label,
+                            {"video_preset": p.key, "video_variant": {p.key: c.key}},
+                            bool(it.override) and s.video_preset == p.key and s.variant_for(p.key) == c.key,
+                        )
                 else:
                     add(m, p.title, {"video_preset": p.key}, bool(it.override) and s.video_preset == p.key)
         elif it.kind == "photo":
@@ -775,13 +816,18 @@ class MainWindow(QMainWindow):
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(Path(it.path).name)
-        dlg.resize(640, 420)
+        dlg.resize(*tokens.DETAILS_SIZE)
         lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(18, 18, 18, 14)
+        lay.setContentsMargins(*(tokens.SPACE_5,) * 4)
+        lay.setSpacing(tokens.SPACE_3)
         r = it.result
-        title = {"done": "Converted", "failed": "This one didn't convert", "skipped": "Skipped",
-                 "warning": "Converted — but double-check it",
-                 "unsupported": "Can't convert this file"}.get(it.state, it.state.title())
+        title = {
+            "done": "Converted",
+            "failed": "This one didn't convert",
+            "skipped": "Skipped",
+            "warning": "Converted — but double-check it",
+            "unsupported": "Can't convert this file",
+        }.get(it.state, it.state.title())
         t = QLabel(title)
         t.setObjectName("FileName")
         lay.addWidget(t)
@@ -815,8 +861,11 @@ class MainWindow(QMainWindow):
         bb.accepted.connect(dlg.accept)
         if r and (r.log or r.command):
             copy = bb.addButton("Copy details", QDialogButtonBox.ButtonRole.ActionRole)
-            copy.clicked.connect(lambda: QApplication.clipboard().setText(
-                "\n".join(lines) + "\n\n" + (log.toPlainText() if r.log or r.command else "")))
+            copy.clicked.connect(
+                lambda: QApplication.clipboard().setText(
+                    "\n".join(lines) + "\n\n" + (log.toPlainText() if r.log or r.command else "")
+                )
+            )
         lay.addWidget(bb)
         dlg.exec()
 
@@ -839,9 +888,15 @@ class MainWindow(QMainWindow):
             return
         todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing", "downloading")]
         if not todo:
-            again = [iid for iid in self.order if self.items[iid].state in ("done", "warning", "failed", "canceled", "skipped")]
+            again = [
+                iid
+                for iid in self.order
+                if self.items[iid].state in ("done", "warning", "failed", "canceled", "skipped")
+            ]
             if again:
-                self.toast.show_message("Everything here is finished. Use ↻ on a file to run it again, or add more.")
+                self.toast.show_message(
+                    "Everything here is finished. Use ↻ on a file to run it again, or add more."
+                )
             return
         self.batch = []
         self.running, self.paused = True, False
@@ -884,7 +939,9 @@ class MainWindow(QMainWindow):
                 break
             self._start_item(self.items[nxt])
         if not self.active:
-            if any(self.items.get(i) and self.items[i].state in ("probing", "downloading") for i in self.batch):
+            if any(
+                self.items.get(i) and self.items[i].state in ("probing", "downloading") for i in self.batch
+            ):
                 return  # wait for files that are still being read
             self._finish()
             return
@@ -953,6 +1010,8 @@ class MainWindow(QMainWindow):
                     card.set_output(f"→  {where}{r.output.name}")
             else:
                 it.state = r.status
+                if r.status == "failed":
+                    log.warning("conversion failed: %s — %s", it.path, r.message)
                 if r.status in ("failed", "skipped"):
                     card.set_state(r.status)
                     card.set_output(r.message)
@@ -966,7 +1025,9 @@ class MainWindow(QMainWindow):
     def toggle_pause(self) -> None:
         if not self.running or (not self.active and not self.paused):
             return
-        convs = [(self.items.get(i), th.conversion) for i, th in self.active.items() if not th.conversion.canceled]
+        convs = [
+            (self.items.get(i), th.conversion) for i, th in self.active.items() if not th.conversion.canceled
+        ]
         if not self.paused:
             paused_any = False
             for it, c in convs:
@@ -1053,32 +1114,39 @@ class MainWindow(QMainWindow):
             self.f_bar.show()
             self.f_bar.setValue(int(done_w / total_w * 1000))
             busy = len(self.active)
-            what = f"{busy} files at once" if busy > 1 else f"{min(finished_n + 1, len(batch))} of {len(batch)}"
+            what = (
+                f"{busy} files at once" if busy > 1 else f"{min(finished_n + 1, len(batch))} of {len(batch)}"
+            )
             self.f_title.setText(("Paused — " if self.paused else "Converting ") + what)
             remaining_media = sum(
                 it.length * (1 - it.frac)
-                for it in batch if it.state not in FINAL and it.kind in ("video", "audio")
+                for it in batch
+                if it.state not in FINAL and it.kind in ("video", "audio")
             )
             photos_left = sum(1 for it in batch if it.state not in FINAL and it.kind == "photo")
             speed = self._total_speed()
             if speed > 0 and not self.paused:
-                self.f_sub.setText(f"{finished_n} of {len(batch)} done · about {_eta(remaining_media / speed + photos_left * 0.6)} left · {speed:.1f}× speed")
+                self.f_sub.setText(
+                    f"{finished_n} of {len(batch)} done · about {_eta(remaining_media / speed + photos_left * 0.6)} left · {speed:.1f}× speed"
+                )
             else:
                 self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
             self.btn_start.hide()
-            self.btn_save.hide()
+            self.btn_export.hide()
             self.btn_pause.show()
             self.btn_cancel.show()
             self.btn_add.setEnabled(True)
             return
         self.btn_start.show()
-        self.btn_save.show()
+        self.btn_export.show()
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()
         ready = [it for it in items if it.state in ("ready", "probing", "downloading")]
         self.btn_start.setEnabled(bool(ready))
-        self.btn_start.setText(f"Convert {len(ready)} file{'s' if len(ready) != 1 else ''}" if ready else "Convert")
+        self.btn_start.setText(
+            f"Convert {len(ready)} file{'s' if len(ready) != 1 else ''}" if ready else "Convert"
+        )
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary
             parts = [f"{d} converted"]
@@ -1104,8 +1172,16 @@ class MainWindow(QMainWindow):
                 kinds[it.kind] += 1
             if it.info and it.kind in ("video", "audio"):
                 dur += it.length
-        bits = [f"{c} {k}{'s' if c != 1 else ''}" for k, c in (("video", kinds["video"]), ("photo", kinds["photo"]),
-                                                               ("audio file", kinds["audio"]), ("link", kinds["link"])) if c]
+        bits = [
+            f"{c} {k}{'s' if c != 1 else ''}"
+            for k, c in (
+                ("video", kinds["video"]),
+                ("photo", kinds["photo"]),
+                ("audio file", kinds["audio"]),
+                ("link", kinds["link"]),
+            )
+            if c
+        ]
         self.f_title.setText(" · ".join(bits) or "Nothing Listo can convert yet")
         sub = []
         if dur:
@@ -1124,29 +1200,31 @@ class MainWindow(QMainWindow):
 
     def _missing_ffmpeg(self) -> None:
         QMessageBox.warning(
-            self, "ffmpeg is missing",
+            self,
+            "ffmpeg is missing",
             "Listo couldn't find its copy of ffmpeg, so it can only convert photos right now.\n\n"
             "If you're running from source, run:  python scripts/fetch_ffmpeg.py",
         )
 
     def _about(self) -> None:
         QMessageBox.about(
-            self, f"About {APP_NAME}",
+            self,
+            f"About {APP_NAME}",
             f"<b>{APP_NAME}</b> {__version__}<br>Drop it in. Get it back edit-ready.<br><br>"
             f"<span style='color:{theme.MUTED}'>{self.caps.version or 'ffmpeg not found'}</span><br>"
             "Video conversion by <a href='https://ffmpeg.org'>FFmpeg</a> (GPL).",
         )
 
-    def dragEnterEvent(self, e: QDragEnterEvent) -> None:  # noqa: N802
+    def dragEnterEvent(self, e: QDragEnterEvent) -> None:
         md = e.mimeData()
         if md.hasUrls() or is_link(md.text()):
             e.acceptProposedAction()
             self.drop.set_hot(True)
 
-    def dragLeaveEvent(self, e) -> None:  # noqa: N802
+    def dragLeaveEvent(self, e) -> None:
         self.drop.set_hot(False)
 
-    def dropEvent(self, e: QDropEvent) -> None:  # noqa: N802
+    def dropEvent(self, e: QDropEvent) -> None:
         self.drop.set_hot(False)
         urls = e.mimeData().urls()
         paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
@@ -1160,10 +1238,11 @@ class MainWindow(QMainWindow):
         if paths or links:
             e.acceptProposedAction()
 
-    def closeEvent(self, e) -> None:  # noqa: N802
+    def closeEvent(self, e) -> None:
         if self.running:
             ans = QMessageBox.question(
-                self, "Stop converting?",
+                self,
+                "Stop converting?",
                 "A conversion is still running. Quit and stop it? The unfinished file will be cleaned up.",
             )
             if ans != QMessageBox.StandardButton.Yes:
@@ -1195,7 +1274,7 @@ class MainWindow(QMainWindow):
 
 
 def _eta(sec: float) -> str:
-    sec = int(round(sec))
+    sec = round(sec)
     if sec < 60:
         return f"{max(sec, 1)}s"
     if sec < 3600:

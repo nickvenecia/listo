@@ -15,7 +15,7 @@ Grab the latest build from the **[Releases page](../../releases/latest)**:
 | Mac with Apple Silicon (M1 and newer) | `Listo-mac-apple-silicon.dmg` |
 | Intel Mac | `Listo-mac-intel.dmg` |
 | Windows | `Listo-windows-setup.exe` (or the portable `.zip`) |
-| Linux | `Listo-linux-x64.tar.gz` → unzip, run `./install.sh` |
+| Linux | `Listo-linux-x64.AppImage` → double-click (allow it to run the first time) |
 
 ffmpeg and everything else comes bundled. There's no Homebrew, Python or terminal needed.
 

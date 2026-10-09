@@ -1,11 +1,12 @@
 """Output naming: templates like "{name}_{preset}_{date}" and never clobbering originals."""
+
 from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
 
-from .presets import Settings, VIDEO_BY_KEY, output_ext, preset_tag
+from .presets import VIDEO_BY_KEY, Settings, output_ext, preset_tag
 from .probe import MediaInfo, file_date
 
 TOKENS: tuple[tuple[str, str], ...] = (
@@ -78,7 +79,9 @@ def output_size(info: MediaInfo | None, s: Settings, kind: str) -> tuple[int, in
     return w - (w % 2), h - (h % 2)
 
 
-def make_context(src: str | Path, info: MediaInfo | None, s: Settings, kind: str, n: int = 1) -> dict[str, str]:
+def make_context(
+    src: str | Path, info: MediaInfo | None, s: Settings, kind: str, n: int = 1
+) -> dict[str, str]:
     p = Path(src)
     try:
         d = file_date(p, info)
@@ -137,9 +140,7 @@ def _same_file(a: Path, b: Path) -> bool:
         return False
 
 
-def resolve_output(
-    src: str | Path, target: Path, policy: str, reserved: set[str]
-) -> tuple[Path | None, str]:
+def resolve_output(src: str | Path, target: Path, policy: str, reserved: set[str]) -> tuple[Path | None, str]:
     """Pick the final output path. Returns (path or None to skip, note for the UI).
 
     The original is never overwritten, whatever the policy says.

@@ -7,6 +7,7 @@ Listo never have to install anything. Sources:
   macOS / Linux : https://ffmpeg.martin-riedl.de  (static release builds)
   Windows       : https://github.com/BtbN/FFmpeg-Builds (static GPL release builds)
 """
+
 from __future__ import annotations
 
 import io
@@ -18,7 +19,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tarfile
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -68,9 +68,12 @@ def btbn_windows() -> None:
                     best = (ver, a["browser_download_url"])
         if best:
             url = best[1]
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print("GitHub API lookup failed, using master build:", e)
-    url = url or "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    url = (
+        url
+        or "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+    )
     print("downloading", url)
     with zipfile.ZipFile(io.BytesIO(get(url))) as z:
         for tool in ("ffmpeg.exe", "ffprobe.exe"):
@@ -100,9 +103,13 @@ def main() -> int:
         "macOS/Linux builds: https://ffmpeg.martin-riedl.de  ·  Windows builds: https://github.com/BtbN/FFmpeg-Builds\n"
     )
     exe = ".exe" if sys.platform == "win32" else ""
-    out = subprocess.run([str(DEST / f"ffmpeg{exe}"), "-hide_banner", "-version"], capture_output=True, text=True)
+    out = subprocess.run(
+        [str(DEST / f"ffmpeg{exe}"), "-hide_banner", "-version"], capture_output=True, text=True
+    )
     print(out.stdout.splitlines()[0] if out.stdout else out.stderr)
-    enc = subprocess.run([str(DEST / f"ffmpeg{exe}"), "-hide_banner", "-encoders"], capture_output=True, text=True).stdout
+    enc = subprocess.run(
+        [str(DEST / f"ffmpeg{exe}"), "-hide_banner", "-encoders"], capture_output=True, text=True
+    ).stdout
     for e in ("prores_ks", "dnxhd", "libx264", "libx265", "libsvtav1", "libvpx-vp9", "libmp3lame", "libopus"):
         print(f"  {e:12} {'yes' if (' ' + e + ' ') in enc else 'MISSING'}")
     return 0

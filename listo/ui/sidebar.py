@@ -1,4 +1,5 @@
 """The settings panel on the right: recipe picker + Video / Photo / Audio settings."""
+
 from __future__ import annotations
 
 import json
@@ -6,29 +7,53 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QMessageBox,
-    QScrollArea, QSlider, QStackedWidget, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QInputDialog,
+    QMessageBox,
+    QScrollArea,
+    QSlider,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..presets import (
-    AUDIO_FORMATS, BUILTIN_RECIPES, DEINTERLACE, PHOTO_FORMATS, RESIZE_PHOTO, RESIZE_VIDEO,
-    VIDEO_BY_KEY, VIDEO_PRESETS, Settings,
+from ..core.presets import (
+    AUDIO_FORMATS,
+    BUILTIN_RECIPES,
+    DEINTERLACE,
+    PHOTO_FORMATS,
+    RESIZE_PHOTO,
+    RESIZE_VIDEO,
+    VIDEO_BY_KEY,
+    VIDEO_PRESETS,
+    Settings,
 )
-from ..tools import Capabilities
-from .widgets import Segmented, section_label
+from ..core.tools import Capabilities
+from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
+from .widgets import Section, Segmented, hbox, vbox
 
-SIDEBAR_W = 310
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
 LUT_EXTS = {".cube", ".3dl", ".dat", ".m3d", ".csp"}
 
 PHOTO_TIPS = {
-    "jpeg": "Smallest, works everywhere", "png": "Lossless, keeps transparency",
-    "tiff": "Lossless, for print & retouching", "webp": "Small, for the web", "heic": "iPhone format, very small",
+    "jpeg": "Smallest, works everywhere",
+    "png": "Lossless, keeps transparency",
+    "tiff": "Lossless, for print & retouching",
+    "webp": "Small, for the web",
+    "heic": "iPhone format, very small",
 }
 AUDIO_TIPS = {
-    "wav24": "Edit-ready, lossless", "wav16": "CD quality, lossless", "aiff": "Lossless, Mac-friendly",
-    "flac": "Lossless, half the size", "mp3": "Plays everywhere", "aac": "Small, great quality",
+    "wav24": "Edit-ready, lossless",
+    "wav16": "CD quality, lossless",
+    "aiff": "Lossless, Mac-friendly",
+    "flac": "Lossless, half the size",
+    "mp3": "Plays everywhere",
+    "aac": "Small, great quality",
 }
 
 
@@ -61,22 +86,40 @@ def _disable_item(c: QComboBox, key: str, why: str) -> None:
 class _FitScroll(QScrollArea):
     """Scroll area whose content always matches the visible width (no clipped edges)."""
 
-    def resizeEvent(self, e):  # noqa: N802
+    def resizeEvent(self, e):
         super().resizeEvent(e)
         if self.widget():
             self.widget().setFixedWidth(self.viewport().width())
 
 
 def _page() -> tuple[QScrollArea, QVBoxLayout]:
+    """A scrolling settings page. Sections go in it; the layout spaces them SPACE_3 apart."""
     area = _FitScroll()
     area.setWidgetResizable(True)
     area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     inner = QWidget()
-    lay = QVBoxLayout(inner)
-    lay.setContentsMargins(14, 6, 14, 16)
-    lay.setSpacing(6)
+    lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4, SPACE_4), SPACE_3)
     area.setWidget(inner)
     return area, lay
+
+
+def _checks(*boxes: QCheckBox, row: bool = False) -> QHBoxLayout | QVBoxLayout:
+    """Checkboxes in a row (short labels) or a stack, SPACE_2 apart."""
+    lay = hbox(spacing=SPACE_4) if row else vbox(spacing=SPACE_1)
+    for b in boxes:
+        lay.addWidget(b)
+    if row:
+        lay.addStretch(1)
+    return lay
+
+
+def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> QCheckBox:
+    box = QCheckBox(text)
+    box.setChecked(value)
+    box.toggled.connect(on_toggle)
+    if tip:
+        box.setToolTip(tip)
+    return box
 
 
 class Sidebar(QFrame):
@@ -96,26 +139,20 @@ class Sidebar(QFrame):
         self._emit_timer.setInterval(120)
         self._emit_timer.timeout.connect(self._emit_changed)
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 12, 0, 0)
-        lay.setSpacing(8)
-
-        rwrap = QVBoxLayout()
-        rwrap.setContentsMargins(14, 0, 14, 0)
-        rwrap.setSpacing(4)
-        rwrap.addWidget(section_label("Recipe"))
+        lay = vbox(self, (0, SPACE_3, 0, 0), SPACE_3)
+        top = vbox(margins=(SPACE_4, 0, SPACE_4, 0), spacing=SPACE_3)
+        recipe = Section("Recipe")
         self.recipe = QComboBox()
         self.recipe.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.recipe.setToolTip("Recipes remember format, folder and naming so you can reuse them in one click")
+        self.recipe.setToolTip(
+            "Recipes remember format, folder and naming so you can reuse them in one click"
+        )
         self.recipe.activated.connect(self._recipe_picked)
-        rwrap.addWidget(self.recipe)
-        lay.addLayout(rwrap)
-
-        tabs_wrap = QHBoxLayout()
-        tabs_wrap.setContentsMargins(14, 6, 14, 0)
+        recipe.add(self.recipe)
+        top.addWidget(recipe)
         self.tabs = Segmented([("video", "Video"), ("photo", "Photo"), ("audio", "Audio")])
-        tabs_wrap.addWidget(self.tabs)
-        lay.addLayout(tabs_wrap)
+        top.addWidget(self.tabs)
+        lay.addLayout(top)
         self.stack = QStackedWidget()
         lay.addWidget(self.stack, 1)
 
@@ -139,124 +176,134 @@ class Sidebar(QFrame):
 
     def _build_video(self) -> None:
         page, lay = _page()
-        lay.addWidget(section_label("Format"))
+        fmt = Section("Format")
         self.v_fmt = _combo(
-            [(p.key, f"{p.title}   ·   {'.' + p.ext if p.ext else 'audio file'}", p.subtitle.split(" · ")[0])
-             for p in VIDEO_PRESETS],
+            [
+                (
+                    p.key,
+                    f"{p.title}   ·   {'.' + p.ext if p.ext else 'audio file'}",
+                    p.subtitle.split(" · ")[0],
+                )
+                for p in VIDEO_PRESETS
+            ],
             self.s.video_preset,
         )
         self.v_fmt.currentIndexChanged.connect(lambda: self._video_preset(self.v_fmt.currentData()))
-        lay.addWidget(self.v_fmt)
+        fmt.add(self.v_fmt)
 
-        lay.addSpacing(6)
-        self.v_variant_label = section_label("Flavor")
-        lay.addWidget(self.v_variant_label)
+        self.sec_variant = Section("Flavor")
         self.v_variant = QComboBox()
         self.v_variant.setCursor(Qt.CursorShape.PointingHandCursor)
         self.v_variant.currentIndexChanged.connect(self._variant_picked)
-        lay.addWidget(self.v_variant)
+        self.sec_variant.add(self.v_variant)
 
-        self.v_size_label = section_label("Size")
-        lay.addSpacing(6)
-        lay.addWidget(self.v_size_label)
+        self.sec_size = Section("Size")
         self.v_size = _combo([(c.key, c.label, "") for c in RESIZE_VIDEO], self.s.video_resize)
         self.v_size.currentIndexChanged.connect(lambda: self._set("video_resize", self.v_size.currentData()))
-        lay.addWidget(self.v_size)
+        self.sec_size.add(self.v_size)
 
-        lay.addSpacing(6)
-        self.v_deint_label = section_label("Interlaced footage")
-        lay.addWidget(self.v_deint_label)
+        self.sec_deint = Section("Interlaced footage")
         self.v_deint = _combo([(c.key, c.label, "") for c in DEINTERLACE], self.s.deinterlace)
-        self.v_deint.setToolTip("Only affects footage that's actually interlaced (old camcorders, broadcast, 1080i)")
+        self.v_deint.setToolTip(
+            "Only affects footage that's actually interlaced (old camcorders, broadcast, 1080i)"
+        )
         self.v_deint.currentIndexChanged.connect(lambda: self._set("deinterlace", self.v_deint.currentData()))
-        lay.addWidget(self.v_deint)
+        self.sec_deint.add(self.v_deint)
 
-        # ---- look: LUT + burn-ins
-        self.look_box = QWidget()
-        lb = QVBoxLayout(self.look_box)
-        lb.setContentsMargins(0, 6, 0, 0)
-        lb.setSpacing(6)
-        lb.addWidget(section_label("LUT"))
+        self.sec_lut = Section("LUT")
         self.lut = QComboBox()
         self.lut.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lut.setToolTip("Apply a LUT to every video — handy for review copies")
         self.lut.activated.connect(self._lut_picked)
-        lb.addWidget(self.lut)
-        lb.addSpacing(4)
-        lb.addWidget(section_label("Burn in"))
-        self.burn_tc = QCheckBox("Timecode")
-        self.burn_tc.setChecked(self.s.burn_timecode)
-        self.burn_tc.toggled.connect(lambda v: self._set("burn_timecode", v))
-        self.burn_name = QCheckBox("File name")
-        self.burn_name.setChecked(self.s.burn_filename)
-        self.burn_name.toggled.connect(lambda v: self._set("burn_filename", v))
-        brow = QHBoxLayout()
-        brow.setSpacing(18)
-        brow.addWidget(self.burn_tc)
-        brow.addWidget(self.burn_name)
-        brow.addStretch(1)
-        lb.addLayout(brow)
-        lay.addWidget(self.look_box)
+        self.sec_lut.add(self.lut)
 
-        # ---- speed
-        lay.addSpacing(6)
-        lay.addWidget(section_label("Speed"))
-        self.v_hw = QCheckBox("Hardware encoding (faster)")
-        self.v_hw.setChecked(self.s.hardware)
-        self.v_hw.toggled.connect(lambda v: self._set("hardware", v))
-        lay.addWidget(self.v_hw)
-        self.v_par = QCheckBox("Convert two files at once")
-        self.v_par.setToolTip("Fastest with the hardware encoder or lots of small files")
-        self.v_par.setChecked(self.s.parallel)
-        self.v_par.toggled.connect(lambda v: self._set("parallel", v))
-        lay.addWidget(self.v_par)
-        lay.addSpacing(6)
-        self.v_tracks = QCheckBox("Keep every audio track")
-        self.v_tracks.setChecked(self.s.keep_all_audio)
-        self.v_tracks.toggled.connect(lambda v: self._set("keep_all_audio", v))
-        lay.addWidget(self.v_tracks)
+        self.sec_burn = Section("Burn in")
+        self.burn_tc = _checkbox("Timecode", self.s.burn_timecode, lambda v: self._set("burn_timecode", v))
+        self.burn_name = _checkbox("File name", self.s.burn_filename, lambda v: self._set("burn_filename", v))
+        self.sec_burn.add(_checks(self.burn_tc, self.burn_name, row=True))
+
+        speed = Section("Speed")
+        self.v_hw = _checkbox(
+            "Hardware encoding (faster)", self.s.hardware, lambda v: self._set("hardware", v)
+        )
+        self.v_par = _checkbox(
+            "Convert two files at once",
+            self.s.parallel,
+            lambda v: self._set("parallel", v),
+            "Fastest with the hardware encoder or lots of small files",
+        )
+        speed.add(_checks(self.v_hw, self.v_par))
+
+        self.sec_audio = Section("Audio")
+        self.v_tracks = _checkbox(
+            "Keep every audio track", self.s.keep_all_audio, lambda v: self._set("keep_all_audio", v)
+        )
+        self.sec_audio.add(self.v_tracks)
+
+        for sec in (
+            fmt,
+            self.sec_variant,
+            self.sec_size,
+            self.sec_deint,
+            self.sec_lut,
+            self.sec_burn,
+            speed,
+            self.sec_audio,
+        ):
+            lay.addWidget(sec)
         lay.addStretch(1)
         self.stack.addWidget(page)
         self._sync_lut()
 
     def _build_photo(self) -> None:
         page, lay = _page()
-        lay.addWidget(section_label("Format"))
-        self.p_fmt = _combo([(f.key, f"{f.title.split(' ·')[0]}   ·   .{f.ext}", PHOTO_TIPS.get(f.key, ""))
-                             for f in PHOTO_FORMATS], self.s.photo_format)
+        fmt = Section("Format")
+        self.p_fmt = _combo(
+            [
+                (f.key, f"{f.title.split(' ·')[0]}   ·   .{f.ext}", PHOTO_TIPS.get(f.key, ""))
+                for f in PHOTO_FORMATS
+            ],
+            self.s.photo_format,
+        )
         self.p_fmt.currentIndexChanged.connect(
-            lambda: (self._set("photo_format", self.p_fmt.currentData()), self._sync_photo()))
-        lay.addWidget(self.p_fmt)
+            lambda: (self._set("photo_format", self.p_fmt.currentData()), self._sync_photo())
+        )
+        fmt.add(self.p_fmt)
 
-        lay.addSpacing(6)
-        self.p_q_label = section_label(f"Quality · {self.s.photo_quality}")
-        lay.addWidget(self.p_q_label)
+        self.sec_quality = Section(f"Quality · {self.s.photo_quality}")
         self.p_q = QSlider(Qt.Orientation.Horizontal)
         self.p_q.setRange(50, 100)
         self.p_q.setValue(self.s.photo_quality)
         self.p_q.valueChanged.connect(self._photo_q)
-        lay.addWidget(self.p_q)
+        self.sec_quality.add(self.p_q)
 
-        lay.addSpacing(6)
-        lay.addWidget(section_label("Size"))
+        size = Section("Size")
         self.p_size = _combo([(c.key, c.label, "") for c in RESIZE_PHOTO], self.s.photo_resize)
         self.p_size.currentIndexChanged.connect(lambda: self._set("photo_resize", self.p_size.currentData()))
-        lay.addWidget(self.p_size)
-        lay.addSpacing(6)
-        self.p_meta = QCheckBox("Keep camera info and color profile")
-        self.p_meta.setChecked(self.s.photo_keep_metadata)
-        self.p_meta.toggled.connect(lambda v: self._set("photo_keep_metadata", v))
-        lay.addWidget(self.p_meta)
+        size.add(self.p_size)
+
+        meta = Section("Metadata")
+        self.p_meta = _checkbox(
+            "Keep camera info and color profile",
+            self.s.photo_keep_metadata,
+            lambda v: self._set("photo_keep_metadata", v),
+        )
+        meta.add(self.p_meta)
+        for sec in (fmt, self.sec_quality, size, meta):
+            lay.addWidget(sec)
         lay.addStretch(1)
         self.stack.addWidget(page)
 
     def _build_audio(self) -> None:
         page, lay = _page()
-        lay.addWidget(section_label("Format"))
-        self.a_fmt = _combo([(f.key, f"{f.title}   ·   .{f.ext}", AUDIO_TIPS.get(f.key, ""))
-                             for f in AUDIO_FORMATS], self.s.audio_format)
+        fmt = Section("Format")
+        self.a_fmt = _combo(
+            [(f.key, f"{f.title}   ·   .{f.ext}", AUDIO_TIPS.get(f.key, "")) for f in AUDIO_FORMATS],
+            self.s.audio_format,
+        )
         self.a_fmt.currentIndexChanged.connect(lambda: self._set("audio_format", self.a_fmt.currentData()))
-        lay.addWidget(self.a_fmt)
+        fmt.add(self.a_fmt)
+        lay.addWidget(fmt)
         lay.addStretch(1)
         self.stack.addWidget(page)
 
@@ -295,25 +342,21 @@ class Sidebar(QFrame):
             self.v_variant.addItem(c.label, c.key)
         self.v_variant.setCurrentIndex(max(0, self.v_variant.findData(self.s.variant_for(p.key))))
         self.v_variant.blockSignals(False)
-        self.v_variant_label.setText(p.variant_label.upper() if p.variants else "")
-        for w in (self.v_variant_label, self.v_variant):
-            w.setVisible(bool(p.variants))
-        resizable = p.key not in ("rewrap", "proxy", "gif", "audio")
-        self.v_size_label.setVisible(resizable)
-        self.v_size.setVisible(resizable)
-        deint = p.key not in ("rewrap", "audio")
-        for w in (self.v_deint_label, self.v_deint):
-            w.setVisible(deint)
-        self.look_box.setVisible(p.key not in ("rewrap", "audio"))
-        self.v_tracks.setVisible(p.edit_format)
+        self.sec_variant.set_title(p.variant_label)
+        self.sec_variant.setVisible(bool(p.variants))
+        self.sec_size.setVisible(p.key not in ("rewrap", "proxy", "gif", "audio"))
+        self.sec_deint.setVisible(p.key not in ("rewrap", "audio"))
+        looks = p.key not in ("rewrap", "audio")
+        self.sec_lut.setVisible(looks)
+        self.sec_burn.setVisible(looks)
+        self.sec_audio.setVisible(p.edit_format)
 
     def _sync_photo(self) -> None:
         q = next(f for f in PHOTO_FORMATS if f.key == self.s.photo_format).has_quality
-        self.p_q_label.setVisible(q)
-        self.p_q.setVisible(q)
+        self.sec_quality.setVisible(q)
 
     def _photo_q(self, v: int) -> None:
-        self.p_q_label.setText(f"QUALITY · {v}")
+        self.sec_quality.set_title(f"Quality · {v}")
         self._set("photo_quality", v)
 
     # ---- LUTs: a dropdown of your LUT folder + recently used LUTs
@@ -329,8 +372,10 @@ class Sidebar(QFrame):
         if not folder or not Path(folder).is_dir():
             return []
         try:
-            return sorted((str(p) for p in Path(folder).rglob("*") if p.suffix.lower() in LUT_EXTS and p.is_file()),
-                          key=lambda p: Path(p).name.lower())[:300]
+            return sorted(
+                (str(p) for p in Path(folder).rglob("*") if p.suffix.lower() in LUT_EXTS and p.is_file()),
+                key=lambda p: Path(p).name.lower(),
+            )[:300]
         except OSError:
             return []
 
@@ -357,7 +402,9 @@ class Sidebar(QFrame):
         c.insertSeparator(c.count())
         c.addItem("Choose a LUT file…", LUT_FILE)
         lut_folder = str(self.qs.value("lut_folder", "") or "")
-        c.addItem(f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT folder…", LUT_FOLDER)
+        c.addItem(
+            f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT folder…", LUT_FOLDER
+        )
         c.setCurrentIndex(max(0, c.findData(current)))
         c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
         c.blockSignals(False)
@@ -367,7 +414,8 @@ class Sidebar(QFrame):
         if data == LUT_FILE:
             start = str(Path(self.s.lut_path).parent) if self.s.lut_path else str(Path.home())
             f, _ = QFileDialog.getOpenFileName(
-                self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)")
+                self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)"
+            )
             if f:
                 self._remember_lut(f)
                 self._set("lut_path", f)
@@ -386,7 +434,9 @@ class Sidebar(QFrame):
     def _user_recipes(self) -> list[dict]:
         try:
             data = json.loads(self.qs.value("recipes", "[]") or "[]")
-            return [r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)]
+            return [
+                r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)
+            ]
         except (ValueError, TypeError):
             return []
 
@@ -398,8 +448,9 @@ class Sidebar(QFrame):
     def _match_recipe(self) -> None:
         """Show which recipe the current settings match (if any) and rebuild the picker."""
         recipes = self._all_recipes()
-        names = ([self._current_recipe] if self._current_recipe else []) + \
-            [n for n, _, _ in recipes if n != self._current_recipe]
+        names = ([self._current_recipe] if self._current_recipe else []) + [
+            n for n, _, _ in recipes if n != self._current_recipe
+        ]
         found = None
         for name in names:
             vals = next((v for n, v, _ in recipes if n == name), None)
@@ -431,8 +482,10 @@ class Sidebar(QFrame):
         elif data == ACTION_UPDATE and current:
             self._store_recipe(current)
         elif data == ACTION_DELETE and current:
-            if QMessageBox.question(self, "Delete recipe", f"Delete the recipe “{current}”?") == \
-                    QMessageBox.StandardButton.Yes:
+            if (
+                QMessageBox.question(self, "Delete recipe", f"Delete the recipe “{current}”?")
+                == QMessageBox.StandardButton.Yes
+            ):
                 self._delete_recipe(current)
         elif data:
             vals = next((v for n, v, _ in self._all_recipes() if n == data), None)
@@ -475,20 +528,30 @@ class Sidebar(QFrame):
         """Refresh every control from the settings (after a recipe is applied)."""
         self._loading = True
         try:
-            for combo, key in ((self.v_fmt, self.s.video_preset), (self.v_size, self.s.video_resize),
-                               (self.v_deint, self.s.deinterlace), (self.p_fmt, self.s.photo_format),
-                               (self.p_size, self.s.photo_resize), (self.a_fmt, self.s.audio_format)):
+            for combo, key in (
+                (self.v_fmt, self.s.video_preset),
+                (self.v_size, self.s.video_resize),
+                (self.v_deint, self.s.deinterlace),
+                (self.p_fmt, self.s.photo_format),
+                (self.p_size, self.s.photo_resize),
+                (self.a_fmt, self.s.audio_format),
+            ):
                 _set_combo(combo, key)
-            for box, val in ((self.v_hw, self.s.hardware), (self.v_tracks, self.s.keep_all_audio),
-                             (self.v_par, self.s.parallel), (self.burn_tc, self.s.burn_timecode),
-                             (self.burn_name, self.s.burn_filename), (self.p_meta, self.s.photo_keep_metadata)):
+            for box, val in (
+                (self.v_hw, self.s.hardware),
+                (self.v_tracks, self.s.keep_all_audio),
+                (self.v_par, self.s.parallel),
+                (self.burn_tc, self.s.burn_timecode),
+                (self.burn_name, self.s.burn_filename),
+                (self.p_meta, self.s.photo_keep_metadata),
+            ):
                 box.blockSignals(True)
                 box.setChecked(val)
                 box.blockSignals(False)
             self.p_q.blockSignals(True)
             self.p_q.setValue(self.s.photo_quality)
             self.p_q.blockSignals(False)
-            self.p_q_label.setText(f"QUALITY · {self.s.photo_quality}")
+            self.sec_quality.set_title(f"Quality · {self.s.photo_quality}")
             self._sync_video()
             self._sync_photo()
             self._sync_lut()
@@ -498,8 +561,8 @@ class Sidebar(QFrame):
 
     # ------------------------------------------------------------------ capabilities
     def apply_capabilities(self, caps: Capabilities) -> None:
-        from ..photo import is_heic_encodable
-        from ..video import preset_available
+        from ..core.photo import is_heic_encodable
+        from ..core.video import preset_available
 
         for p in VIDEO_PRESETS:
             ok = preset_available(p.key, caps) if p.needs else caps.ok
@@ -518,7 +581,11 @@ class Sidebar(QFrame):
 
     def apply_hardware(self, hw: dict) -> None:
         if hw:
-            names = ", ".join(sorted({("Apple VideoToolbox" if "videotoolbox" in e else "NVIDIA NVENC") for e in hw.values()}))
+            names = ", ".join(
+                sorted(
+                    {("Apple VideoToolbox" if "videotoolbox" in e else "NVIDIA NVENC") for e in hw.values()}
+                )
+            )
             self.v_hw.setEnabled(True)
             self.v_hw.setToolTip(f"Uses {names} — much faster for H.264 and HEVC")
         else:

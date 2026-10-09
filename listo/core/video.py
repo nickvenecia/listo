@@ -1,4 +1,5 @@
 """Turn (file, settings) into an ffmpeg command line."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -31,7 +32,7 @@ HW_BPP = {"high": 0.16, "standard": 0.10, "small": 0.06}
 MOV_SAFE_AUDIO = {"pcm_s16le", "pcm_s24le", "pcm_s16be", "pcm_s24be", "pcm_f32le", "aac", "alac"}
 
 
-FONT = Path(__file__).resolve().parent / "assets" / "fonts" / "Inter-SemiBold.otf"
+FONT = Path(__file__).resolve().parent.parent / "assets" / "fonts" / "Inter-SemiBold.otf"
 
 
 def fesc(value: str) -> str:
@@ -52,8 +53,16 @@ def _out_rate(info: MediaInfo, s: Settings, doubled: bool) -> str:
     return f"{r.numerator}/{r.denominator}"
 
 
-def look_filters(info: MediaInfo, s: Settings, caps: Capabilities, out_h: int, doubled: bool,
-                 src: str, notes: list[str], start_tc: str = "") -> tuple[list[str], list[str]]:
+def look_filters(
+    info: MediaInfo,
+    s: Settings,
+    caps: Capabilities,
+    out_h: int,
+    doubled: bool,
+    src: str,
+    notes: list[str],
+    start_tc: str = "",
+) -> tuple[list[str], list[str]]:
     """(LUT filters to run before scaling, burn-in filters to run after)."""
     pre: list[str] = []
     post: list[str] = []
@@ -70,8 +79,10 @@ def look_filters(info: MediaInfo, s: Settings, caps: Capabilities, out_h: int, d
         return pre, post
     size = max(12, round((out_h or 1080) / 26))
     pad = max(8, size)
-    style = (f"fontfile={fesc(str(FONT))}:fontsize={size}:fontcolor=white:"
-             f"box=1:boxcolor=black@0.55:boxborderw={max(4, size // 3)}")
+    style = (
+        f"fontfile={fesc(str(FONT))}:fontsize={size}:fontcolor=white:"
+        f"box=1:boxcolor=black@0.55:boxborderw={max(4, size // 3)}"
+    )
     if s.burn_filename:
         post.append(f"drawtext={style}:expansion=none:text={fesc(Path(src).name)}:x={pad}:y=h-th-{pad}")
     if s.burn_timecode:
@@ -100,8 +111,18 @@ def _pcm_for(info: MediaInfo, little_endian: bool = True) -> str:
 
 def _input_args(src: str, trim: tuple[float, float] | None = None) -> list[str]:
     args = [
-        "-hide_banner", "-nostdin", "-y", "-nostats", "-progress", "pipe:1",
-        "-fflags", "+genpts", "-probesize", "100M", "-analyzeduration", "100M",
+        "-hide_banner",
+        "-nostdin",
+        "-y",
+        "-nostats",
+        "-progress",
+        "pipe:1",
+        "-fflags",
+        "+genpts",
+        "-probesize",
+        "100M",
+        "-analyzeduration",
+        "100M",
     ]
     if trim:
         args += ["-ss", f"{trim[0]:.3f}"]
@@ -111,14 +132,20 @@ def _input_args(src: str, trim: tuple[float, float] | None = None) -> list[str]:
     return args
 
 
-def _audio_only(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
-                trim: tuple[float, float] | None = None) -> Plan:
+def _audio_only(
+    src: str,
+    out: str,
+    info: MediaInfo,
+    s: Settings,
+    caps: Capabilities,
+    trim: tuple[float, float] | None = None,
+) -> Plan:
     if not info.audio:
         raise PlanError("This file has no audio to pull out.")
     fmt = AUDIO_BY_KEY[s.audio_format]
     if fmt.needs and not caps.has_encoder(fmt.needs):
         raise PlanError(f"This copy of ffmpeg can't write {fmt.title}.")
-    args = _input_args(src, trim) + ["-map", f"0:{info.audio[0].index}", "-vn", "-c:a", fmt.codec, *fmt.extra]
+    args = [*_input_args(src, trim), "-map", f"0:{info.audio[0].index}", "-vn", "-c:a", fmt.codec, *fmt.extra]
     if fmt.key in ("mp3", "aac") and info.audio[0].channels not in (1, 2):
         args += ["-ac", "2"]
     args += ["-map_metadata", "0", "-f", fmt.muxer, out]
@@ -128,8 +155,14 @@ def _audio_only(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabili
     return Plan(args, fmt.muxer, notes)
 
 
-def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
-          trim: tuple[float, float] | None = None) -> Plan:
+def build(
+    src: str,
+    out: str,
+    info: MediaInfo,
+    s: Settings,
+    caps: Capabilities,
+    trim: tuple[float, float] | None = None,
+) -> Plan:
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
         return _audio_only(src, out, info, s, caps, trim)
     if info.kind != "video" or info.video_index is None:
@@ -142,7 +175,7 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
 
     variant = s.variant_for(p.key)
     notes: list[str] = []
-    args = _input_args(src, trim) + ["-map", f"0:{info.video_index}"]
+    args = [*_input_args(src, trim), "-map", f"0:{info.video_index}"]
     # Timecode of the first frame we keep (so trimmed clips still line up in the edit)
     start_tc = info.timecode
     if trim and info.timecode and info.rate:
@@ -157,7 +190,9 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
 
     # ---- rewrap: copy the picture untouched
     if p.key == "rewrap" and info.vcodec in ("vp8", "vp9", "av1"):
-        raise PlanError(f"{info.vcodec.upper()} video can't be rewrapped into a .mov — pick H.264, HEVC or ProRes instead.")
+        raise PlanError(
+            f"{info.vcodec.upper()} video can't be rewrapped into a .mov — pick H.264, HEVC or ProRes instead."
+        )
     if p.key == "dnxhr" and (info.width < 256 or info.height < 120):
         raise PlanError("DNxHR needs video at least 256×120 — pick ProRes or H.264 for tiny clips.")
     if p.key == "av1" and (info.width < 64 or info.height < 64):
@@ -259,30 +294,82 @@ def build(src: str, out: str, info: MediaInfo, s: Settings, caps: Capabilities,
             vargs = ["-c:v", hw_enc, *_hw_rate(hw_enc, info, variant, out_size), "-pix_fmt", "yuv420p"]
             notes.append("Encoded with hardware acceleration.")
         else:
-            vargs = ["-c:v", "libx264", "-preset", "medium", "-crf", str(H264_CRF[variant]),
-                     "-profile:v", "high", "-pix_fmt", "yuv420p"]
+            vargs = [
+                "-c:v",
+                "libx264",
+                "-preset",
+                "medium",
+                "-crf",
+                str(H264_CRF[variant]),
+                "-profile:v",
+                "high",
+                "-pix_fmt",
+                "yuv420p",
+            ]
     elif p.key == "hevc":
         pix = "yuv420p10le" if (info.bit_depth > 8 or info.hdr) else "yuv420p"
         if hw_enc:
             hw_pix = "p010le" if pix.endswith("10le") else "yuv420p"
-            vargs = ["-c:v", hw_enc, *_hw_rate(hw_enc, info, variant, out_size), "-pix_fmt", hw_pix, "-tag:v", "hvc1"]
+            vargs = [
+                "-c:v",
+                hw_enc,
+                *_hw_rate(hw_enc, info, variant, out_size),
+                "-pix_fmt",
+                hw_pix,
+                "-tag:v",
+                "hvc1",
+            ]
             notes.append("Encoded with hardware acceleration.")
         else:
-            vargs = ["-c:v", "libx265", "-preset", "medium", "-crf", str(HEVC_CRF[variant]),
-                     "-pix_fmt", pix, "-tag:v", "hvc1", "-x265-params", "log-level=error"]
+            vargs = [
+                "-c:v",
+                "libx265",
+                "-preset",
+                "medium",
+                "-crf",
+                str(HEVC_CRF[variant]),
+                "-pix_fmt",
+                pix,
+                "-tag:v",
+                "hvc1",
+                "-x265-params",
+                "log-level=error",
+            ]
     elif p.key == "av1":
         pix = "yuv420p10le" if (info.bit_depth > 8 or info.hdr) else "yuv420p"
         vargs = ["-c:v", "libsvtav1", "-preset", "8", "-crf", str(AV1_CRF[variant]), "-pix_fmt", pix]
     elif p.key == "webm":
-        vargs = ["-c:v", "libvpx-vp9", "-crf", str(VP9_CRF[variant]), "-b:v", "0", "-row-mt", "1",
-                 "-deadline", "good", "-cpu-used", "4", "-pix_fmt", "yuv420p"]
+        vargs = [
+            "-c:v",
+            "libvpx-vp9",
+            "-crf",
+            str(VP9_CRF[variant]),
+            "-b:v",
+            "0",
+            "-row-mt",
+            "1",
+            "-deadline",
+            "good",
+            "-cpu-used",
+            "4",
+            "-pix_fmt",
+            "yuv420p",
+        ]
     elif p.key == "gif":
-        vf[-1] += ",split[a][b];[a]palettegen=stats_mode=diff[pal];[b][pal]paletteuse=dither=bayer:bayer_scale=4"
+        vf[-1] += (
+            ",split[a][b];[a]palettegen=stats_mode=diff[pal];[b][pal]paletteuse=dither=bayer:bayer_scale=4"
+        )
         vargs = ["-loop", "0"]
 
     if ten_bit_hdr:
-        vargs += ["-color_primaries", info.color_primaries or "bt2020",
-                  "-color_trc", info.color_transfer, "-colorspace", info.color_space or "bt2020nc"]
+        vargs += [
+            "-color_primaries",
+            info.color_primaries or "bt2020",
+            "-color_trc",
+            info.color_transfer,
+            "-colorspace",
+            info.color_space or "bt2020nc",
+        ]
         notes.append(f"Kept {info.hdr_label}.")
     elif tonemap and caps.has_filter("zscale"):
         vargs += ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"]
@@ -323,6 +410,16 @@ def _hw_rate(enc: str, info: MediaInfo, variant: str, size: tuple[int, int]) -> 
     bitrate = max(bitrate, 1_500_000)
     if enc.endswith("_nvenc"):
         cq = {"high": 19, "standard": 23, "small": 28}[variant]
-        return ["-preset", "p5", "-rc", "vbr", "-cq", str(cq), "-b:v", str(bitrate),
-                "-maxrate", str(int(bitrate * 1.5))]
+        return [
+            "-preset",
+            "p5",
+            "-rc",
+            "vbr",
+            "-cq",
+            str(cq),
+            "-b:v",
+            str(bitrate),
+            "-maxrate",
+            str(int(bitrate * 1.5)),
+        ]
     return ["-b:v", str(bitrate), "-maxrate", str(int(bitrate * 1.5))]

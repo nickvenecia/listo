@@ -1,4 +1,5 @@
 """Trim one file: pick a start and end point, with a frame preview of each."""
+
 from __future__ import annotations
 
 import math
@@ -7,14 +8,23 @@ import re
 from PySide6.QtCore import Qt, QThreadPool, QTimer
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSlider, QVBoxLayout, QWidget,
+    QDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
 )
 
-from ..probe import MediaInfo
+from ..core.probe import MediaInfo
+from . import tokens
 from .widgets import section_label
 from .workers import FrameSignals, FrameTask
 
-PREVIEW_W, PREVIEW_H = 240, 135
+PREVIEW_W, PREVIEW_H = tokens.PREVIEW_W, tokens.PREVIEW_H
 STEP = 10  # slider units per second (0.1 s precision)
 
 
@@ -44,17 +54,17 @@ def parse_time(text: str) -> float | None:
 class _End(QWidget):
     """One end of the trim: preview + time box + slider."""
 
-    def __init__(self, label: str, dialog: "TrimDialog", is_video: bool):
+    def __init__(self, label: str, dialog: TrimDialog, is_video: bool):
         super().__init__()
         self.d = dialog
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(6)
+        lay.setSpacing(tokens.SPACE_1)
         top = QHBoxLayout()
         top.addWidget(section_label(label))
         top.addStretch(1)
         self.time = QLineEdit()
-        self.time.setFixedWidth(92)
+        self.time.setFixedWidth(tokens.TIME_FIELD_W)
         self.time.setAlignment(Qt.AlignmentFlag.AlignRight)
         self.time.editingFinished.connect(self._typed)
         top.addWidget(self.time)
@@ -79,7 +89,7 @@ class _End(QWidget):
         return self.slider.value() / STEP
 
     def set_seconds(self, sec: float) -> None:
-        self.slider.setValue(int(round(sec * STEP)))
+        self.slider.setValue(round(sec * STEP))
         self.time.setText(fmt_time(self.seconds()))
 
     def _moved(self, _v: int) -> None:
@@ -106,12 +116,20 @@ class _End(QWidget):
             return
         img = QImage.fromData(data)
         if not img.isNull():
-            self.preview.setPixmap(QPixmap.fromImage(img).scaled(
-                PREVIEW_W, PREVIEW_H, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            self.preview.setPixmap(
+                QPixmap.fromImage(img).scaled(
+                    PREVIEW_W,
+                    PREVIEW_H,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
 
 
 class TrimDialog(QDialog):
-    def __init__(self, path: str, info: MediaInfo, trim: tuple[float, float] | None, parent: QWidget | None = None):
+    def __init__(
+        self, path: str, info: MediaInfo, trim: tuple[float, float] | None, parent: QWidget | None = None
+    ):
         super().__init__(parent)
         self.setWindowTitle("Trim")
         self.path, self.info = path, info
@@ -123,14 +141,14 @@ class TrimDialog(QDialog):
         is_video = info.kind == "video"
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(22, 20, 22, 18)
-        lay.setSpacing(12)
+        lay.setContentsMargins(*(tokens.SPACE_5,) * 4)
+        lay.setSpacing(tokens.SPACE_3)
         title = QLabel("Trim")
         title.setObjectName("DialogTitle")
         lay.addWidget(title)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(18)
+        grid.setHorizontalSpacing(tokens.SPACE_4)
         self.start = _End("Start", self, is_video)
         self.end = _End("End", self, is_video)
         for e in (self.start, self.end):
@@ -186,8 +204,9 @@ class TrimDialog(QDialog):
         self._update_length()
 
     def _update_length(self) -> None:
-        self.length.setText(f"Keeps {fmt_time(self.end.seconds() - self.start.seconds())} "
-                            f"of {fmt_time(self.duration)}")
+        self.length.setText(
+            f"Keeps {fmt_time(self.end.seconds() - self.start.seconds())} of {fmt_time(self.duration)}"
+        )
 
     def _reset(self) -> None:
         self.start.set_seconds(0)
@@ -199,7 +218,7 @@ class TrimDialog(QDialog):
         self.result_trim = None if whole else (s, e)
         self.accept()
 
-    def done(self, r: int) -> None:  # noqa: D401
+    def done(self, r: int) -> None:
         self.pool.clear()
         self.pool.waitForDone(2000)
         super().done(r)

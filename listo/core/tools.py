@@ -6,6 +6,7 @@ Lookup order:
   3. vendor/ffmpeg/ in a source checkout (scripts/fetch_ffmpeg.py puts it there)
   4. PATH and the usual Homebrew / system locations
 """
+
 from __future__ import annotations
 
 import os
@@ -36,7 +37,7 @@ def _candidate_dirs() -> list[Path]:
     if getattr(sys, "frozen", False):
         base = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
         dirs += [base / "ffmpeg", Path(sys.executable).parent / "ffmpeg"]
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parents[2]
     dirs.append(repo / "vendor" / "ffmpeg")
     return dirs
 
@@ -127,9 +128,7 @@ def capabilities(refresh: bool = False) -> Capabilities:
             _, flt = run_quiet([caps.ffmpeg, "-hide_banner", "-filters"])
             # filter lines look like: " TS. bwdif   V->V   Deinterlace..."
             caps.filters = {
-                ln.split()[1]
-                for ln in flt.splitlines()
-                if len(ln.split()) >= 3 and "->" in ln.split()[2]
+                ln.split()[1] for ln in flt.splitlines() if len(ln.split()) >= 3 and "->" in ln.split()[2]
             }
         _caps = caps
         return caps
@@ -152,9 +151,21 @@ def detect_hardware(caps: Capabilities) -> dict[str, str]:
                 continue
             rc, _ = run_quiet(
                 [
-                    caps.ffmpeg, "-hide_banner", "-v", "error",
-                    "-f", "lavfi", "-i", "testsrc2=s=640x360:d=0.2",
-                    "-c:v", enc, "-b:v", "2M", "-f", "null", "-",
+                    caps.ffmpeg,
+                    "-hide_banner",
+                    "-v",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "testsrc2=s=640x360:d=0.2",
+                    "-c:v",
+                    enc,
+                    "-b:v",
+                    "2M",
+                    "-f",
+                    "null",
+                    "-",
                 ],
                 timeout=20,
             )

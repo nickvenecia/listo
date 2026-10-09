@@ -1,14 +1,25 @@
 """Small reusable widgets."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy,
-    QVBoxLayout, QWidget,
+    QButtonGroup,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLayout,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
+
+from . import tokens
 
 
 def section_label(text: str) -> QLabel:
+    """The small CAPS label above a group of controls."""
     lbl = QLabel(text.upper())
     lbl.setObjectName("SectionLabel")
     return lbl
@@ -19,6 +30,53 @@ def hint(text: str) -> QLabel:
     lbl.setObjectName("Hint")
     lbl.setWordWrap(True)
     return lbl
+
+
+def vbox(
+    widget: QWidget | None = None, margins: int | tuple[int, int, int, int] = 0, spacing: int = tokens.SPACE_2
+) -> QVBoxLayout:
+    """A vertical layout using the spacing tokens (never type raw numbers in layouts)."""
+    lay = QVBoxLayout(widget) if widget is not None else QVBoxLayout()
+    m = (margins,) * 4 if isinstance(margins, int) else margins
+    lay.setContentsMargins(*m)
+    lay.setSpacing(spacing)
+    return lay
+
+
+def hbox(
+    widget: QWidget | None = None, margins: int | tuple[int, int, int, int] = 0, spacing: int = tokens.SPACE_2
+) -> QHBoxLayout:
+    """A horizontal layout using the spacing tokens."""
+    lay = QHBoxLayout(widget) if widget is not None else QHBoxLayout()
+    m = (margins,) * 4 if isinstance(margins, int) else margins
+    lay.setContentsMargins(*m)
+    lay.setSpacing(spacing)
+    return lay
+
+
+class Section(QWidget):
+    """A labelled group: CAPS label, then its controls SPACE_1 below it.
+
+    Put Sections in a layout with spacing SPACE_3 and every panel lines up the same way.
+    Hiding a Section hides its label and controls together (and the gap collapses).
+    """
+
+    def __init__(self, title: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self.lay = vbox(self, 0, tokens.SPACE_1)
+        self.label = section_label(title)
+        self.label.setVisible(bool(title))
+        self.lay.addWidget(self.label)
+
+    def add(self, item: QWidget | QHBoxLayout | QVBoxLayout) -> None:
+        if isinstance(item, QWidget):
+            self.lay.addWidget(item)
+        else:
+            self.lay.addLayout(item)
+
+    def set_title(self, title: str) -> None:
+        self.label.setText(title.upper())
+        self.label.setVisible(bool(title))
 
 
 def repolish(w: QWidget) -> None:
@@ -36,8 +94,8 @@ class Segmented(QFrame):
         super().__init__(parent)
         self.setObjectName("Seg")
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(3, 3, 3, 3)
-        lay.setSpacing(2)
+        lay.setContentsMargins(*(tokens.SEG_INSET,) * 4)
+        lay.setSpacing(tokens.SEG_INSET)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.buttons: dict[str, QPushButton] = {}
@@ -66,8 +124,15 @@ class Segmented(QFrame):
 class Option(QFrame):
     clicked = Signal(str)
 
-    def __init__(self, key: str, title: str, subtitle: str = "", parent: QWidget | None = None,
-                 right: str = "", tip: str = ""):
+    def __init__(
+        self,
+        key: str,
+        title: str,
+        subtitle: str = "",
+        parent: QWidget | None = None,
+        right: str = "",
+        tip: str = "",
+    ):
         super().__init__(parent)
         self.key = key
         self._tip = tip
@@ -75,8 +140,8 @@ class Option(QFrame):
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(tip)
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(11, 7, 11, 7)
-        outer.setSpacing(8)
+        outer.setContentsMargins(tokens.SPACE_3, tokens.SPACE_2, tokens.SPACE_3, tokens.SPACE_2)
+        outer.setSpacing(tokens.SPACE_2)
         lay = QVBoxLayout()
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -102,14 +167,13 @@ class Option(QFrame):
     def set_available(self, on: bool, why: str = "") -> None:
         self._enabled = on
         self.setProperty("enabled", "true" if on else "false")
-        self.title.setStyleSheet("" if on else "color: #6E6A64;")
-        self.sub.setStyleSheet("" if on else "color: #55524D;")
-        self.right.setStyleSheet("" if on else "color: #55524D;")
+        for lbl in (self.title, self.sub, self.right):
+            lbl.setEnabled(on)  # the stylesheet greys out disabled labels
         self.setToolTip(self._tip if on else why)
         self.setCursor(Qt.CursorShape.PointingHandCursor if on else Qt.CursorShape.ArrowCursor)
         repolish(self)
 
-    def mousePressEvent(self, e):  # noqa: N802
+    def mousePressEvent(self, e):
         if self._enabled and e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.key)
 
@@ -123,7 +187,7 @@ class OptionList(QWidget):
         super().__init__(parent)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(2)
+        lay.setSpacing(tokens.SPACE_1)
         self.options: dict[str, Option] = {}
         for item in items:
             key, title, sub = item[0], item[1], item[2]
@@ -132,7 +196,7 @@ class OptionList(QWidget):
             if key.startswith("#"):  # group header
                 lbl = QLabel(title)
                 lbl.setObjectName("GroupLabel")
-                lay.addSpacing(4 if self.options else 0)
+                lay.addSpacing(tokens.SPACE_1 if self.options else 0)
                 lay.addWidget(lbl)
                 continue
             o = Option(key, title, sub, right=right, tip=tip)
@@ -158,41 +222,41 @@ class OptionList(QWidget):
 class FlowLayout(QLayout):
     """Wraps children onto new lines (used for naming tokens)."""
 
-    def __init__(self, parent: QWidget | None = None, spacing: int = 6):
+    def __init__(self, parent: QWidget | None = None, spacing: int = tokens.SPACE_2):
         super().__init__(parent)
         self._items = []
         self._spacing = spacing
         self.setContentsMargins(0, 0, 0, 0)
 
-    def addItem(self, item):  # noqa: N802
+    def addItem(self, item):
         self._items.append(item)
 
     def count(self):
         return len(self._items)
 
-    def itemAt(self, i):  # noqa: N802
+    def itemAt(self, i):
         return self._items[i] if 0 <= i < len(self._items) else None
 
-    def takeAt(self, i):  # noqa: N802
+    def takeAt(self, i):
         return self._items.pop(i) if 0 <= i < len(self._items) else None
 
-    def expandingDirections(self):  # noqa: N802
+    def expandingDirections(self):
         return Qt.Orientation(0)
 
-    def hasHeightForWidth(self):  # noqa: N802
+    def hasHeightForWidth(self):
         return True
 
-    def heightForWidth(self, w):  # noqa: N802
+    def heightForWidth(self, w):
         return self._do(QRect(0, 0, w, 0), True)
 
-    def setGeometry(self, r):  # noqa: N802
+    def setGeometry(self, r):
         super().setGeometry(r)
         self._do(r, False)
 
-    def sizeHint(self):  # noqa: N802
+    def sizeHint(self):
         return self.minimumSize()
 
-    def minimumSize(self):  # noqa: N802
+    def minimumSize(self):
         s = QSize()
         for it in self._items:
             s = s.expandedTo(it.minimumSize())

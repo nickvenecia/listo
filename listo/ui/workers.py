@@ -1,4 +1,5 @@
 """Background work: probing files, grabbing thumbnails, converting."""
+
 from __future__ import annotations
 
 import io
@@ -6,9 +7,12 @@ import subprocess
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
-from ..engine import Conversion, Result
-from ..probe import MediaInfo, probe
-from ..tools import capabilities, detect_hardware, popen_kwargs
+from ..core.engine import Conversion, Result
+from ..core.log import get_logger
+from ..core.probe import MediaInfo, probe
+from ..core.tools import capabilities, detect_hardware, popen_kwargs
+
+log = get_logger(__name__)
 
 
 class ProbeSignals(QObject):
@@ -23,9 +27,29 @@ def video_thumb(path: str, info: MediaInfo, width: int = 240) -> bytes:
     vf = ("yadif," if info.interlaced else "") + f"scale={width}:-2"
     try:
         cp = subprocess.run(
-            [caps.ffmpeg, "-hide_banner", "-v", "error", "-ss", f"{t:.2f}", "-i", path,
-             "-frames:v", "1", "-vf", vf, "-f", "image2pipe", "-c:v", "png", "-"],
-            stdin=subprocess.DEVNULL, capture_output=True, timeout=30, **popen_kwargs(),
+            [
+                caps.ffmpeg,
+                "-hide_banner",
+                "-v",
+                "error",
+                "-ss",
+                f"{t:.2f}",
+                "-i",
+                path,
+                "-frames:v",
+                "1",
+                "-vf",
+                vf,
+                "-f",
+                "image2pipe",
+                "-c:v",
+                "png",
+                "-",
+            ],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=30,
+            **popen_kwargs(),
         )
         return cp.stdout if cp.returncode == 0 else b""
     except (OSError, subprocess.SubprocessError):
@@ -33,7 +57,7 @@ def video_thumb(path: str, info: MediaInfo, width: int = 240) -> bytes:
 
 
 def photo_thumb(path: str) -> bytes:
-    from .. import photo
+    from ..core import photo
 
     im = photo.thumbnail(path, 240)
     if im is None:
@@ -52,7 +76,7 @@ class ProbeTask(QRunnable):
     def run(self) -> None:
         try:
             info = probe(self.path)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             info = MediaInfo(kind="unknown", error=str(e))
         thumb = b""
         try:
@@ -60,7 +84,8 @@ class ProbeTask(QRunnable):
                 thumb = video_thumb(self.path, info)
             elif info.kind == "photo" and not info.error:
                 thumb = photo_thumb(self.path)
-        except Exception:  # noqa: BLE001
+        except Exception:
+            log.warning("thumbnail failed for %s", self.path, exc_info=True)
             thumb = b""
         try:
             self.signals.done.emit(self.item_id, info, thumb)
@@ -92,7 +117,9 @@ class FrameSignals(QObject):
 class FrameTask(QRunnable):
     """Grab one frame at a time position (for the trim previews)."""
 
-    def __init__(self, seq: int, path: str, t: float, info: MediaInfo, signals: FrameSignals, width: int = 320):
+    def __init__(
+        self, seq: int, path: str, t: float, info: MediaInfo, signals: FrameSignals, width: int = 320
+    ):
         super().__init__()
         self.seq, self.path, self.t, self.info, self.signals, self.width = seq, path, t, info, signals, width
         self.setAutoDelete(True)
@@ -104,9 +131,29 @@ class FrameTask(QRunnable):
             vf = ("yadif," if self.info.interlaced else "") + f"scale={self.width}:-2"
             try:
                 cp = subprocess.run(
-                    [caps.ffmpeg, "-hide_banner", "-v", "error", "-ss", f"{max(0.0, self.t):.3f}", "-i", self.path,
-                     "-frames:v", "1", "-vf", vf, "-f", "image2pipe", "-c:v", "png", "-"],
-                    stdin=subprocess.DEVNULL, capture_output=True, timeout=20, **popen_kwargs(),
+                    [
+                        caps.ffmpeg,
+                        "-hide_banner",
+                        "-v",
+                        "error",
+                        "-ss",
+                        f"{max(0.0, self.t):.3f}",
+                        "-i",
+                        self.path,
+                        "-frames:v",
+                        "1",
+                        "-vf",
+                        vf,
+                        "-f",
+                        "image2pipe",
+                        "-c:v",
+                        "png",
+                        "-",
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=20,
+                    **popen_kwargs(),
                 )
                 data = cp.stdout if cp.returncode == 0 else b""
             except (OSError, subprocess.SubprocessError):
@@ -124,23 +171,25 @@ class DownloadThread(QThread):
 
     def __init__(self, item_id: int, url: str):
         super().__init__()
-        from ..links import LinkDownload
+        from ..core.links import LinkDownload
 
         self.item_id = item_id
         self.job = LinkDownload(url)
 
     def run(self) -> None:
-        from ..links import Canceled, LinkError
+        from ..core.links import Canceled, LinkError
 
         try:
-            path = self.job.run(lambda p, t: self.progress.emit(self.item_id, p, t),
-                                lambda title: self.titled.emit(self.item_id, title))
+            path = self.job.run(
+                lambda p, t: self.progress.emit(self.item_id, p, t),
+                lambda title: self.titled.emit(self.item_id, title),
+            )
             self.done.emit(self.item_id, path, "")
         except Canceled:
             self.done.emit(self.item_id, "", "Canceled")
         except LinkError as e:
             self.done.emit(self.item_id, "", str(e))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self.done.emit(self.item_id, "", f"{e.__class__.__name__}: {e}")
 
 
@@ -156,6 +205,6 @@ class ConvertThread(QThread):
     def run(self) -> None:
         try:
             r = self.conversion.run(lambda p, s: self.progress.emit(self.item_id, p, s))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             r = Result("failed", message=f"{e.__class__.__name__}: {e}")
         self.finished_item.emit(self.item_id, r)

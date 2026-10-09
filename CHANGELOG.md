@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+- Every button, dropdown and text field is the same height; spacing, type and colors follow one set of rules ([DESIGN.md](DESIGN.md))
+- Linux download is now one double-clickable file (AppImage)
+- Safer setup: the link tools Listo downloads are checked against their published checksums before use
+- Only your own user account can send files to an open Listo window
+- Problems are written to a log file (`listo.log` in Listo's data folder) to make bugs easier to track down
+- No more leftover folders in the system temp folder after each launch
+- Code reorganized (`listo/core` for converting, `listo/ui` for the window) with code rules in [CONTRIBUTING.md](CONTRIBUTING.md); ruff checks every change
+
 ## 2.2.0
 - **Add a link**: paste a YouTube / Vimeo / Instagram link (or drag it from your browser, or ⌘V) and it downloads into the list, ready for any format — Audio only, GIF, H.264, ProRes…
   yt-dlp and Deno are fetched the first time and yt-dlp keeps itself up to date (daily check)

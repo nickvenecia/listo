@@ -1,7 +1,8 @@
 """Render the app offscreen and save screenshots (dev helper).
 
-    QT_QPA_PLATFORM=offscreen python tests/screenshot.py OUTDIR [SAMPLES_DIR]
+QT_QPA_PLATFORM=offscreen python tests/screenshot.py OUTDIR [SAMPLES_DIR]
 """
+
 from __future__ import annotations
 
 import sys
@@ -9,12 +10,11 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from listo import app as appmod  # noqa: E402
-from listo.ui import theme  # noqa: E402
+from listo import app as appmod
+from listo.ui import theme
 
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
 out.mkdir(parents=True, exist_ok=True)
@@ -44,6 +44,7 @@ def main() -> None:
         def go():
             w.grab().save(str(out / f"{name}.png"))
             print("saved", name)
+
         return go
 
     steps.append((400, shot("01-empty")))
@@ -55,28 +56,44 @@ def main() -> None:
             for it in w.items.values():
                 if it.path.endswith("IMG_0001.MOV"):
                     w._set_override(it.id, {"video_preset": "h264"})
+
         steps.append((2500, override_one))
         steps.append((300, shot("02-queue")))
+
         def save_shot():
-            d = w.save_dialog
+            d = w.export_dialog
             d.styles.options["custom"].clicked.emit("custom")
             d.show()
-            QTimer.singleShot(400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide()))
+            QTimer.singleShot(
+                400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide())
+            )
+
         steps.append((100, save_shot))
         steps.append((800, lambda: None))
+
         def recipe():
-            w.settings.apply({"video_preset": "h264", "video_resize": "1080", "burn_timecode": True,
-                              "burn_filename": True, "destination": "subfolder", "subfolder_name": "Review",
-                              "naming": "{name}_review"})
+            w.settings.apply(
+                {
+                    "video_preset": "h264",
+                    "video_resize": "1080",
+                    "burn_timecode": True,
+                    "burn_filename": True,
+                    "destination": "subfolder",
+                    "subfolder_name": "Review",
+                    "naming": "{name}_review",
+                }
+            )
             w.sidebar.reload()
-            w.save_dialog.reload()
+            w.export_dialog.reload()
             w.sidebar._store_recipe("Client review")
             w._settings_changed()
+
         steps.append((100, recipe))
         steps.append((400, shot("04-recipe")))
         steps.append((100, lambda: (setattr(w.settings, "parallel", True), w.start())))
         steps.append((1500, shot("05-converting")))
         steps.append((100, lambda: wait_done()))
+
     def wait_done():
         if w.running:
             QTimer.singleShot(500, wait_done)

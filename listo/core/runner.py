@@ -1,11 +1,12 @@
 """Run ffmpeg with live progress, pause/resume and cancel — on every OS."""
+
 from __future__ import annotations
 
 import collections
 import subprocess
 import threading
 import time
-from typing import Callable
+from collections.abc import Callable
 
 import psutil
 
@@ -92,7 +93,8 @@ class FFmpegRun:
 
         # Drain stderr continuously so a chatty file can never fill the pipe and freeze ffmpeg.
         def drain() -> None:
-            assert self.proc and self.proc.stderr
+            if not (self.proc and self.proc.stderr):
+                return
             for line in self.proc.stderr:
                 line = line.rstrip()
                 if line:
@@ -103,7 +105,8 @@ class FFmpegRun:
 
         processed, speed = 0.0, 0.0
         last_emit = 0.0
-        assert self.proc.stdout
+        if self.proc.stdout is None:
+            raise FFmpegFailed("Couldn't start ffmpeg.", "")
         for line in self.proc.stdout:
             key, _, val = line.strip().partition("=")
             if key in ("out_time_us", "out_time_ms"):  # both are microseconds in ffmpeg

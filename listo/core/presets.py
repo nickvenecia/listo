@@ -1,4 +1,5 @@
 """Output formats and the settings a conversion runs with."""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -30,54 +31,121 @@ QUALITY = (Choice("high", "High"), Choice("standard", "Standard"), Choice("small
 
 VIDEO_PRESETS: tuple[VideoPreset, ...] = (
     VideoPreset(
-        "prores", "ProRes", "Edit-ready master · .mov", "mov", "prores",
+        "prores",
+        "ProRes",
+        "Edit-ready master · .mov",
+        "mov",
+        "prores",
         variants=(
-            Choice("0", "Proxy"), Choice("1", "LT"), Choice("2", "422"),
-            Choice("3", "422 HQ"), Choice("4", "4444"),
+            Choice("0", "Proxy"),
+            Choice("1", "LT"),
+            Choice("2", "422"),
+            Choice("3", "422 HQ"),
+            Choice("4", "4444"),
         ),
-        variant_label="Flavor", default_variant="2", needs=("prores_ks",), edit_format=True,
-    ),
-    VideoPreset(
-        "dnxhr", "DNxHR", "Edit-ready for Avid & Resolve · .mov", "mov", "dnxhr",
-        variants=(
-            Choice("dnxhr_lb", "LB"), Choice("dnxhr_sq", "SQ"), Choice("dnxhr_hq", "HQ"),
-            Choice("dnxhr_hqx", "HQX 10-bit"), Choice("dnxhr_444", "444"),
-        ),
-        variant_label="Flavor", default_variant="dnxhr_hq", needs=("dnxhd",), edit_format=True,
-    ),
-    VideoPreset(
-        "h264", "H.264", "Plays everywhere · .mp4", "mp4", "h264",
-        variants=QUALITY, variant_label="Quality", default_variant="high",
-        needs=("libx264",), hw_codec="h264",
-    ),
-    VideoPreset(
-        "hevc", "HEVC (H.265)", "Same quality, about half the size · .mp4", "mp4", "hevc",
-        variants=QUALITY, variant_label="Quality", default_variant="high",
-        needs=("libx265",), hw_codec="hevc",
-    ),
-    VideoPreset(
-        "av1", "AV1", "Smallest files, newest players · .mp4", "mp4", "av1",
-        variants=QUALITY, variant_label="Quality", default_variant="standard", needs=("libsvtav1",),
-    ),
-    VideoPreset(
-        "webm", "WebM", "For websites · .webm", "webm", "webm",
-        variants=QUALITY, variant_label="Quality", default_variant="standard", needs=("libvpx-vp9",),
-    ),
-    VideoPreset(
-        "proxy", "Edit proxy", "Half-res ProRes Proxy, goes in a Proxy folder · .mov", "mov", "proxy",
-        needs=("prores_ks",), edit_format=True,
-    ),
-    VideoPreset(
-        "rewrap", "Rewrap", "No re-encode — instant and lossless · .mov", "mov", "rewrap",
+        variant_label="Flavor",
+        default_variant="2",
+        needs=("prores_ks",),
         edit_format=True,
     ),
     VideoPreset(
-        "gif", "GIF", "Silent looping clip · .gif", "gif", "gif",
-        variants=(Choice("480", "480 wide"), Choice("640", "640 wide"), Choice("960", "960 wide")),
-        variant_label="Size", default_variant="640", needs=("gif",),
+        "dnxhr",
+        "DNxHR",
+        "Edit-ready for Avid & Resolve · .mov",
+        "mov",
+        "dnxhr",
+        variants=(
+            Choice("dnxhr_lb", "LB"),
+            Choice("dnxhr_sq", "SQ"),
+            Choice("dnxhr_hq", "HQ"),
+            Choice("dnxhr_hqx", "HQX 10-bit"),
+            Choice("dnxhr_444", "444"),
+        ),
+        variant_label="Flavor",
+        default_variant="dnxhr_hq",
+        needs=("dnxhd",),
+        edit_format=True,
     ),
     VideoPreset(
-        "audio", "Audio only", "Pull the sound out (uses the Audio tab's format)", "", "audio",
+        "h264",
+        "H.264",
+        "Plays everywhere · .mp4",
+        "mp4",
+        "h264",
+        variants=QUALITY,
+        variant_label="Quality",
+        default_variant="high",
+        needs=("libx264",),
+        hw_codec="h264",
+    ),
+    VideoPreset(
+        "hevc",
+        "HEVC (H.265)",
+        "Same quality, about half the size · .mp4",
+        "mp4",
+        "hevc",
+        variants=QUALITY,
+        variant_label="Quality",
+        default_variant="high",
+        needs=("libx265",),
+        hw_codec="hevc",
+    ),
+    VideoPreset(
+        "av1",
+        "AV1",
+        "Smallest files, newest players · .mp4",
+        "mp4",
+        "av1",
+        variants=QUALITY,
+        variant_label="Quality",
+        default_variant="standard",
+        needs=("libsvtav1",),
+    ),
+    VideoPreset(
+        "webm",
+        "WebM",
+        "For websites · .webm",
+        "webm",
+        "webm",
+        variants=QUALITY,
+        variant_label="Quality",
+        default_variant="standard",
+        needs=("libvpx-vp9",),
+    ),
+    VideoPreset(
+        "proxy",
+        "Edit proxy",
+        "Half-res ProRes Proxy, goes in a Proxy folder · .mov",
+        "mov",
+        "proxy",
+        needs=("prores_ks",),
+        edit_format=True,
+    ),
+    VideoPreset(
+        "rewrap",
+        "Rewrap",
+        "No re-encode — instant and lossless · .mov",
+        "mov",
+        "rewrap",
+        edit_format=True,
+    ),
+    VideoPreset(
+        "gif",
+        "GIF",
+        "Silent looping clip · .gif",
+        "gif",
+        "gif",
+        variants=(Choice("480", "480 wide"), Choice("640", "640 wide"), Choice("960", "960 wide")),
+        variant_label="Size",
+        default_variant="640",
+        needs=("gif",),
+    ),
+    VideoPreset(
+        "audio",
+        "Audio only",
+        "Pull the sound out (uses the Audio tab's format)",
+        "",
+        "audio",
     ),
 )
 
@@ -201,7 +269,7 @@ class Settings:
     def to_dict(self) -> dict:
         return asdict(self)
 
-    def copy(self) -> "Settings":
+    def copy(self) -> Settings:
         return Settings.from_dict(self.to_dict())
 
     def apply(self, values: dict) -> None:
@@ -222,13 +290,13 @@ class Settings:
                 return False
         return True
 
-    def with_override(self, override: dict) -> "Settings":
+    def with_override(self, override: dict) -> Settings:
         s = self.copy()
         s.apply(override)
         return s
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Settings":
+    def from_dict(cls, d: dict) -> Settings:
         s = cls()
         for k, v in (d or {}).items():
             if hasattr(s, k) and type(v) is type(getattr(s, k)):

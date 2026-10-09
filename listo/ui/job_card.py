@@ -1,17 +1,25 @@
 """One file in the queue."""
+
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QImage, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QProgressBar, QPushButton, QSizePolicy, QToolButton, QVBoxLayout,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QToolButton,
+    QVBoxLayout,
     QWidget,
 )
 
-from . import theme
+from . import theme, tokens
 from .widgets import repolish
 
-THUMB_W, THUMB_H = 96, 54
+THUMB_W, THUMB_H = tokens.THUMB_W, tokens.THUMB_H
 
 
 class ElidedLabel(QLabel):
@@ -22,7 +30,7 @@ class ElidedLabel(QLabel):
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setText(text)
 
-    def setText(self, text: str) -> None:  # noqa: N802
+    def setText(self, text: str) -> None:
         self._full = text
         self.setToolTip(text if len(text) > 30 else "")
         self._refresh()
@@ -30,7 +38,7 @@ class ElidedLabel(QLabel):
     def full_text(self) -> str:
         return self._full
 
-    def resizeEvent(self, e):  # noqa: N802
+    def resizeEvent(self, e):
         super().resizeEvent(e)
         self._refresh()
 
@@ -39,14 +47,16 @@ class ElidedLabel(QLabel):
         super().setText(self.fontMetrics().elidedText(self._full, self._mode, w))
 
 
-def _rounded(pm: QPixmap, w: int, h: int, radius: float = 8) -> QPixmap:
+def _rounded(pm: QPixmap, w: int, h: int, radius: float = tokens.RADIUS) -> QPixmap:
     dpr = 2.0
     out = QPixmap(int(w * dpr), int(h * dpr))
     out.setDevicePixelRatio(dpr)
     out.fill(Qt.GlobalColor.transparent)
     scaled = pm.scaled(
-        int(w * dpr), int(h * dpr),
-        Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation,
+        int(w * dpr),
+        int(h * dpr),
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
     )
     scaled.setDevicePixelRatio(dpr)
     p = QPainter(out)
@@ -75,11 +85,11 @@ class JobCard(QFrame):
         self.kind = kind
         self.setObjectName("Card")
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.setFixedHeight(THUMB_H + 18)
+        self.setFixedHeight(tokens.CARD_H)
 
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(9, 9, 10, 9)
-        lay.setSpacing(12)
+        lay.setContentsMargins(*(tokens.SPACE_2,) * 4)
+        lay.setSpacing(tokens.SPACE_3)
 
         self.thumb = QLabel()
         self.thumb.setObjectName("Thumb")
@@ -89,7 +99,7 @@ class JobCard(QFrame):
         lay.addWidget(self.thumb)
 
         mid = QVBoxLayout()
-        mid.setSpacing(3)
+        mid.setSpacing(0)
         mid.setContentsMargins(0, 0, 0, 0)
         self.name = ElidedLabel(name)
         self.name.setObjectName("FileName")
@@ -104,8 +114,8 @@ class JobCard(QFrame):
         self.chip.clicked.connect(lambda: self.format_clicked.emit(self.item_id, self.chip))
         self.chip.hide()
         out_row = QHBoxLayout()
-        out_row.setContentsMargins(0, 1, 0, 0)
-        out_row.setSpacing(7)
+        out_row.setContentsMargins(0, tokens.SPACE_1, 0, 0)
+        out_row.setSpacing(tokens.SPACE_2)
         self.trim_tag = QLabel("")
         self.trim_tag.setObjectName("TrimTag")
         self.trim_tag.hide()
@@ -120,20 +130,22 @@ class JobCard(QFrame):
         lay.addLayout(mid, 1)
 
         right = QVBoxLayout()
-        right.setSpacing(7)
+        right.setSpacing(tokens.SPACE_2)
         right.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        top.setSpacing(2)
+        top.setSpacing(tokens.SPACE_1)
         self.status = QLabel("")
         self.status.setObjectName("Status")
         self.status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         top.addStretch(1)
         top.addWidget(self.status)
-        top.addSpacing(6)
+        top.addSpacing(tokens.SPACE_2)
         self.btn_trim = self._icon_btn("scissors", "Trim", lambda: self.trim_clicked.emit(self.item_id))
         self.btn_details = self._icon_btn("info", "Details", lambda: self.details.emit(self.item_id))
         self.btn_retry = self._icon_btn("retry", "Try again", lambda: self.retry.emit(self.item_id))
-        self.btn_reveal = self._icon_btn("reveal", "Show the new file", lambda: self.reveal.emit(self.item_id))
+        self.btn_reveal = self._icon_btn(
+            "reveal", "Show the new file", lambda: self.reveal.emit(self.item_id)
+        )
         self.btn_remove = self._icon_btn("x", "Remove from list", lambda: self.remove.emit(self.item_id))
         for b in (self.btn_trim, self.btn_details, self.btn_retry, self.btn_reveal, self.btn_remove):
             top.addWidget(b)
@@ -142,7 +154,7 @@ class JobCard(QFrame):
         self.bar = QProgressBar()
         self.bar.setRange(0, 1000)
         self.bar.setTextVisible(False)
-        self.bar.setFixedWidth(170)
+        self.bar.setFixedWidth(tokens.CARD_BAR_W)
         self.bar.hide()
         bar_row = QHBoxLayout()
         bar_row.addStretch(1)
@@ -151,15 +163,15 @@ class JobCard(QFrame):
         right.addStretch(1)
         wrap = QWidget()
         wrap.setLayout(right)
-        wrap.setFixedWidth(215)
+        wrap.setFixedWidth(tokens.STATUS_W)
         lay.addWidget(wrap)
         self.set_state("probing")
 
     def _icon_btn(self, name: str, tip: str, fn) -> QToolButton:
         b = QToolButton()
         b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(name, theme.MUTED, 16))
-        b.setIconSize(QSize(16, 16))
+        b.setIcon(theme.icon(name, theme.MUTED, tokens.ICON))
+        b.setIconSize(QSize(tokens.ICON, tokens.ICON))
         b.setToolTip(tip)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.clicked.connect(fn)
@@ -168,7 +180,7 @@ class JobCard(QFrame):
 
     def _set_kind_icon(self) -> None:
         name = {"video": "film", "photo": "image", "audio": "audio", "link": "link"}.get(self.kind, "file")
-        self.thumb.setPixmap(theme.pixmap(name, 26, theme.FAINT, 1.6))
+        self.thumb.setPixmap(theme.pixmap(name, tokens.ICON_LG, theme.FAINT, 1.6))
 
     # ---- updates
     def set_thumb(self, data: bytes) -> None:
@@ -203,20 +215,23 @@ class JobCard(QFrame):
         self.bar.setValue(int(max(0.0, min(1.0, frac)) * 1000))
 
     def set_state(self, state: str, text: str = "") -> None:
-        colors = {
-            "probing": theme.FAINT, "ready": theme.MUTED, "waiting": theme.MUTED,
-            "converting": theme.ACCENT, "paused": theme.WARN, "done": theme.GOOD,
-            "failed": theme.BAD, "skipped": theme.MUTED, "canceled": theme.MUTED,
-            "unsupported": theme.BAD, "warning": theme.WARN, "downloading": theme.ACCENT,
-        }
         default = {
-            "probing": "Reading…", "ready": "Ready", "waiting": "Waiting",
-            "converting": "Converting", "paused": "Paused", "done": "Listo",
-            "failed": "Failed", "skipped": "Skipped", "canceled": "Canceled",
-            "unsupported": "Can't convert", "warning": "Check this one", "downloading": "Downloading",
+            "probing": "Reading…",
+            "ready": "Ready",
+            "waiting": "Waiting",
+            "converting": "Converting",
+            "paused": "Paused",
+            "done": "Listo",
+            "failed": "Failed",
+            "skipped": "Skipped",
+            "canceled": "Canceled",
+            "unsupported": "Can't convert",
+            "warning": "Check this one",
+            "downloading": "Downloading",
         }
         self.status.setText(text or default.get(state, state))
-        self.status.setStyleSheet(f"color: {colors.get(state, theme.MUTED)};")
+        self.status.setProperty("tone", state)  # colored by the stylesheet (#Status[tone=...])
+        repolish(self.status)
         busy = state in ("converting", "paused", "downloading")
         finished_ok = state in ("done", "warning")
         self.bar.setVisible(busy or finished_ok)
@@ -229,5 +244,10 @@ class JobCard(QFrame):
         self.btn_retry.setVisible(state in ("failed", "canceled", "skipped", "warning"))
         self.btn_reveal.setVisible(finished_ok)
         self.btn_details.setVisible(state in ("failed", "done", "skipped", "unsupported", "warning"))
-        self.setProperty("state", "active" if state in ("converting", "paused") else ("failed" if state in ("failed", "unsupported") else ""))
+        self.setProperty(
+            "state",
+            "active"
+            if state in ("converting", "paused")
+            else ("failed" if state in ("failed", "unsupported") else ""),
+        )
         repolish(self)

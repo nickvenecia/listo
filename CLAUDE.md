@@ -5,30 +5,45 @@ Python 3.12 + PySide6 (Qt Widgets) UI, ffmpeg/ffprobe for video and audio, Pillo
 Shipped as a PyInstaller app with ffmpeg bundled; GitHub Actions builds the downloads.
 The owner is a filmmaker (director/DP/editor/colorist), not a full-time developer. Explain changes in plain words.
 
+## Read these first
+- **[DESIGN.md](DESIGN.md)**: how the app looks and reads. Sizes, spacing, type, colors, which control to use, wording.
+  All values live in `listo/ui/tokens.py`; never type a size or color anywhere else.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)**: code rules. Layout, style (ruff), safety rules, threads, tests, commits.
+- Before finishing any change: `ruff format . && ruff check . && python -m pytest -q`.
+
 ## Layout
 ```
 listo/
-  engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates)
-  video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here
-  photo.py       photo decode (incl. RAW/HEIC) + save
-  presets.py     preset/format definitions + Settings dataclass (persisted as JSON in QSettings)
-  naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
-  probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension
-  runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
-  tools.py       find bundled/system ffmpeg; encoder/filter detection; hardware encoder test
-  links.py       "Add a link": yt-dlp (+ Deno for YouTube) downloaded on first use into the user data dir
-                 (links.tools_dir()), yt-dlp -U at most daily; downloads land in ~/Downloads/Listo
-  fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
-  cli.py         `python -m listo cli ...`: same engine, no UI (great for testing)
-  app.py         QApplication, fonts, stylesheet, Dock-icon file opens, --smoke-test
-  ui/trim_dialog.py  start/end sliders with ffmpeg frame-grab previews
-  ui/            main_window (queue + batch controller), sidebar (Video/Photo/Audio format settings),
-                 save_dialog (where + naming, opened from the bottom bar), job_card, theme (colors/QSS/icons),
-                 widgets, workers (threads)
+  core/            Converting. No Qt imports.
+    engine.py      Conversion: one file start→finish (plan path, temp file, run, rename, copy dates, verify)
+    video.py       build(): (file, MediaInfo, Settings, Capabilities) -> ffmpeg args.  All video/audio presets live here
+    photo.py       photo decode (incl. RAW/HEIC) + save
+    presets.py     preset/format definitions + Settings dataclass (persisted as JSON in QSettings)
+    naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
+    probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension; timecode math
+    runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
+    tools.py       find bundled/system ffmpeg; encoder/filter detection; hardware encoder test; popen_kwargs()
+    links.py       "Add a link": yt-dlp (+ Deno for YouTube) downloaded on first use into paths.tools_dir(),
+                   SHA-256 checked against the release's published sums; yt-dlp -U at most daily
+    fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
+    paths.py       per-user folders: data_dir(), tools_dir(), log_dir(), downloads_dir() (~/Downloads/Listo)
+    log.py         rotating log file (listo.log in log_dir()); get_logger(__name__)
+  ui/
+    tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
+    theme.py       stylesheet built from tokens, SVG icons (icon(name, color))
+    widgets.py     shared building blocks: vbox/hbox, Section, Segmented, Option/OptionList, FlowLayout, repolish
+    main_window.py queue + batch controller, toolbar, drop zone, footer
+    sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
+    export_dialog.py  "Export options": where files go + naming + collisions (opened from the footer)
+    trim_dialog.py start/end sliders with ffmpeg frame-grab previews
+    job_card.py    one file in the list
+    workers.py     threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads)
+  cli.py           `python -m listo cli ...`: same engine, no UI (great for testing)
+  app.py           QApplication, fonts, stylesheet, rounded popups, single-instance hand-off, --smoke-test
 scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor/ffmpeg (gitignored)
 listo.spec                PyInstaller recipe
-packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh
-.github/workflows/build.yml  build + test + smoke-test on 4 runners; tags v* publish a Release
+packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh + build_appimage.sh
+.github/workflows/build.yml  lint, then build + test + smoke-test on 4 runners; tags v* publish a Release
 legacy/                   the original SimpleConverter (Swift + first Python port), for reference only
 ```
 
@@ -51,7 +66,7 @@ legacy/                   the original SimpleConverter (Swift + first Python por
 
 ## Commands
 ```bash
-pip install -r requirements-dev.txt
+pip install -r requirements-dev.txt     # includes ruff, pytest, pyinstaller
 python scripts/fetch_ffmpeg.py         # or have ffmpeg on PATH
 python -m listo                        # run the app
 python -m listo cli FILES --video prores --variant 3 --out OUT --naming "{name}_{preset}"
@@ -63,7 +78,8 @@ pyinstaller listo.spec --noconfirm     # build the app into dist/
 
 ## Releasing
 Bump `__version__` in `listo/__init__.py`, commit, `git tag vX.Y.Z && git push --tags`.
-CI attaches: Listo-mac-apple-silicon.dmg, Listo-mac-intel.dmg, Listo-windows-setup.exe, Listo-windows-portable.zip, Listo-linux-x64.tar.gz.
+CI attaches: Listo-mac-apple-silicon.dmg, Listo-mac-intel.dmg, Listo-windows-setup.exe, Listo-windows-portable.zip,
+Listo-linux-x64.AppImage, Listo-linux-x64.tar.gz.
 
 ## Ideas not done yet
 - Watch folder ("anything dropped in here gets converted")

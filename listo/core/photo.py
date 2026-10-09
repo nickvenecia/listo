@@ -1,4 +1,5 @@
 """Photo conversion: JPEG/PNG/TIFF/WebP/HEIC in and out, plus camera RAW in."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -6,6 +7,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from .log import get_logger
 from .presets import PHOTO_BY_KEY, Settings
 from .probe import RAW_EXTS, ext_of
 
@@ -14,15 +16,17 @@ try:
 
     pillow_heif.register_heif_opener()
     HEIF_OK = True
-except Exception:  # noqa: BLE001
+except Exception:
     HEIF_OK = False
 
 try:
     import rawpy
 
     RAW_OK = True
-except Exception:  # noqa: BLE001
+except Exception:
     RAW_OK = False
+
+log = get_logger(__name__)
 
 Image.MAX_IMAGE_PIXELS = 400_000_000  # big panoramas are fine; still guards against bombs
 
@@ -36,8 +40,8 @@ def _exif_date(img: Image.Image) -> datetime | None:
         raw = exif.get_ifd(0x8769).get(EXIF_DATETIME_ORIGINAL) or exif.get(EXIF_DATETIME)
         if raw:
             return datetime.strptime(str(raw).strip("\x00 "), "%Y:%m:%d %H:%M:%S")
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        log.debug("photo metadata step skipped", exc_info=True)
     return None
 
 
@@ -55,8 +59,8 @@ def peek(path: str) -> tuple[int, int, datetime | None]:
         try:  # many RAWs are TIFF-based, so Pillow can read their EXIF
             with Image.open(path) as im:
                 created = _exif_date(im)
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("photo metadata step skipped", exc_info=True)
         return w, h, created
     with Image.open(path) as im:
         w, h = im.size
@@ -64,8 +68,8 @@ def peek(path: str) -> tuple[int, int, datetime | None]:
             orient = im.getexif().get(0x0112, 1)
             if orient in (5, 6, 7, 8):
                 w, h = h, w
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("photo metadata step skipped", exc_info=True)
         return w, h, _exif_date(im)
 
 
@@ -81,7 +85,7 @@ def thumbnail(path: str, size: int = 240) -> Image.Image | None:
                         im = Image.open(io.BytesIO(th.data))
                     else:
                         im = Image.fromarray(th.data)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     im = Image.fromarray(raw.postprocess(half_size=True, use_camera_wb=True))
         else:
             im = Image.open(path)
@@ -89,7 +93,7 @@ def thumbnail(path: str, size: int = 240) -> Image.Image | None:
         im = ImageOps.exif_transpose(im)
         im.thumbnail((size, size))
         return im.convert("RGB")
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -108,8 +112,8 @@ def _load(path: str) -> tuple[Image.Image, bytes | None, bytes | None, list[str]
                 if e:
                     e[0x0112] = 1  # rawpy already rotated the pixels
                     exif = e.tobytes()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("photo metadata step skipped", exc_info=True)
         notes.append("RAW developed with the camera's white balance.")
         return img, exif, None, notes
     img = Image.open(path)
@@ -124,8 +128,8 @@ def _load(path: str) -> tuple[Image.Image, bytes | None, bytes | None, list[str]
             e = img.getexif()
             e[0x0112] = 1
             exif = e.tobytes()
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("photo metadata step skipped", exc_info=True)
     return img, exif, icc, notes
 
 
@@ -153,8 +157,8 @@ def _cmyk_to_rgb(img: Image.Image, icc: bytes | None) -> tuple[Image.Image, byte
             src = ImageCms.ImageCmsProfile(io.BytesIO(icc))
             img = ImageCms.profileToProfile(img, src, srgb, outputMode="RGB")
             return img, srgb.tobytes()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        log.debug("photo metadata step skipped", exc_info=True)
     return img.convert("RGB"), None  # the CMYK profile no longer applies
 
 

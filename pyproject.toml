@@ -1,0 +1,76 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "listo"
+dynamic = ["version"]
+description = "Drop it in. Get it back edit-ready. Batch converter for video, photos and audio."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.11"
+authors = [{ name = "Nick Venecia" }]
+dependencies = [
+    "PySide6-Essentials>=6.7",
+    "psutil>=5.9",
+    "Pillow>=10.3",
+    "pillow-heif>=0.18",
+    "rawpy>=0.21",
+    "certifi>=2024.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pyinstaller>=6.10"]
+
+[project.scripts]
+listo-cli = "listo.cli:main"
+
+[project.gui-scripts]
+listo = "listo.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "listo.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["listo*"]
+
+[tool.setuptools.package-data]
+listo = ["assets/*", "assets/fonts/*"]
+
+# ---------------------------------------------------------------- code style
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["legacy", "build", "dist", "vendor"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes (unused imports, undefined names)
+    "I",        # import sorting
+    "B",        # bugbear (likely bugs)
+    "UP",       # modern Python syntax
+    "S",        # bandit (security)
+    "SIM",      # simplifications
+    "RUF",      # ruff-specific
+]
+ignore = [
+    "E501",     # long lines are wrapped by the formatter where possible
+    "S603",     # subprocess without shell: we never use shell=True and always pass lists
+    "S607",     # partial executable paths: tools are resolved explicitly (see core/tools.py)
+    "S310",     # urlopen: only fixed https URLs to GitHub releases (see core/links.py)
+    "SIM105",   # contextlib.suppress — explicit try/except reads clearer here
+    "RUF001", "RUF002", "RUF003",  # typographic characters (…, ’, ×) are intentional UI text
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S108", "B023"]
+"listo.spec" = ["F821"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["listo"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"

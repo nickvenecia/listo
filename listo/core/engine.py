@@ -1,12 +1,13 @@
 """One conversion, start to finish. Shared by the app and the command line."""
+
 from __future__ import annotations
 
 import os
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
 
 from . import naming, photo, video
 from .fileutil import copy_dates
@@ -14,7 +15,6 @@ from .presets import Settings
 from .probe import MediaInfo
 from .runner import Canceled, FFmpegFailed, FFmpegRun
 from .tools import Capabilities
-
 
 _plan_lock = threading.Lock()  # two conversions at once must not pick the same output name
 
@@ -153,7 +153,7 @@ class Conversion:
             return Result("failed", message=str(e), command=cmd)
         except FFmpegFailed as e:
             return Result("failed", message=str(e), log=e.log, command=cmd)
-        except Exception as e:  # noqa: BLE001 — surface anything else readably
+        except Exception as e:
             return Result("failed", message=f"{e.__class__.__name__}: {e}", command=cmd)
         finally:
             try:

@@ -1,4 +1,5 @@
 """Copy file dates (including 'Date Created' on macOS and Windows) and reveal files."""
+
 from __future__ import annotations
 
 import ctypes
@@ -7,7 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .log import get_logger
 from .tools import popen_kwargs
+
+log = get_logger(__name__)
 
 
 def copy_dates(src: str | Path, dst: str | Path) -> None:
@@ -29,8 +33,8 @@ def _set_creation_time(path: str, ts: float) -> None:
             _mac_set_crtime(path, ts)
         elif sys.platform == "win32":
             _win_set_crtime(path, ts)
-    except Exception:  # noqa: BLE001 — best effort only
-        pass
+    except Exception:
+        log.debug("couldn't set creation date on %s", path, exc_info=True)
 
 
 def _mac_set_crtime(path: str, ts: float) -> None:
@@ -38,9 +42,12 @@ def _mac_set_crtime(path: str, ts: float) -> None:
 
     class AttrList(ctypes.Structure):
         _fields_ = [
-            ("bitmapcount", ctypes.c_ushort), ("reserved", ctypes.c_uint16),
-            ("commonattr", ctypes.c_uint32), ("volattr", ctypes.c_uint32),
-            ("dirattr", ctypes.c_uint32), ("fileattr", ctypes.c_uint32),
+            ("bitmapcount", ctypes.c_ushort),
+            ("reserved", ctypes.c_uint16),
+            ("commonattr", ctypes.c_uint32),
+            ("volattr", ctypes.c_uint32),
+            ("dirattr", ctypes.c_uint32),
+            ("fileattr", ctypes.c_uint32),
             ("forkattr", ctypes.c_uint32),
         ]
 

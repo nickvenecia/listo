@@ -1,4 +1,5 @@
 """Figure out what a file is: video, audio, photo — and the details that matter."""
+
 from __future__ import annotations
 
 import json
@@ -11,21 +12,99 @@ from pathlib import Path
 from .tools import capabilities, run_quiet
 
 VIDEO_EXTS = {
-    "mov", "mp4", "m4v", "mts", "m2ts", "m2t", "ts", "mod", "tod", "mpg", "mpeg",
-    "vob", "avi", "mkv", "webm", "mxf", "dv", "flv", "wmv", "asf", "3gp", "3g2",
-    "ogv", "f4v", "y4m", "mjpeg", "hevc", "h264", "264", "265", "divx", "xvid",
+    "mov",
+    "mp4",
+    "m4v",
+    "mts",
+    "m2ts",
+    "m2t",
+    "ts",
+    "mod",
+    "tod",
+    "mpg",
+    "mpeg",
+    "vob",
+    "avi",
+    "mkv",
+    "webm",
+    "mxf",
+    "dv",
+    "flv",
+    "wmv",
+    "asf",
+    "3gp",
+    "3g2",
+    "ogv",
+    "f4v",
+    "y4m",
+    "mjpeg",
+    "hevc",
+    "h264",
+    "264",
+    "265",
+    "divx",
+    "xvid",
 }
 AUDIO_EXTS = {
-    "wav", "aif", "aiff", "aifc", "flac", "mp3", "m4a", "aac", "ogg", "opus", "wma",
-    "caf", "ac3", "bwf", "w64", "alac", "amr",
+    "wav",
+    "aif",
+    "aiff",
+    "aifc",
+    "flac",
+    "mp3",
+    "m4a",
+    "aac",
+    "ogg",
+    "opus",
+    "wma",
+    "caf",
+    "ac3",
+    "bwf",
+    "w64",
+    "alac",
+    "amr",
 }
 RAW_EXTS = {
-    "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "raf", "orf", "rw2",
-    "pef", "srw", "3fr", "iiq", "erf", "kdc", "mrw", "x3f", "rwl", "mos",
+    "cr2",
+    "cr3",
+    "crw",
+    "nef",
+    "nrw",
+    "arw",
+    "srf",
+    "sr2",
+    "dng",
+    "raf",
+    "orf",
+    "rw2",
+    "pef",
+    "srw",
+    "3fr",
+    "iiq",
+    "erf",
+    "kdc",
+    "mrw",
+    "x3f",
+    "rwl",
+    "mos",
 }
 IMAGE_EXTS = {
-    "jpg", "jpeg", "jpe", "png", "tif", "tiff", "webp", "heic", "heif", "hif", "avif",
-    "bmp", "gif", "tga", "jp2", "psd",
+    "jpg",
+    "jpeg",
+    "jpe",
+    "png",
+    "tif",
+    "tiff",
+    "webp",
+    "heic",
+    "heif",
+    "hif",
+    "avif",
+    "bmp",
+    "gif",
+    "tga",
+    "jp2",
+    "psd",
 } | RAW_EXTS
 
 # Formats people will try that we can't decode: say so instead of failing silently.
@@ -115,20 +194,43 @@ class MediaInfo:
             else:
                 n = len(self.audio)
                 ch = sum(a.channels for a in self.audio)
-                bits.append(f"{n} audio tracks" if n > 1 else ({1: "mono", 2: "stereo"}.get(ch, f"{ch}ch audio")))
+                bits.append(
+                    f"{n} audio tracks" if n > 1 else ({1: "mono", 2: "stereo"}.get(ch, f"{ch}ch audio"))
+                )
         if self.duration and self.kind != "photo":
             bits.append(fmt_duration(self.duration))
         return [b for b in bits if b]
 
 
 _PRETTY = {
-    "h264": "H.264", "hevc": "HEVC", "prores": "ProRes", "mpeg2video": "MPEG-2",
-    "mpeg4": "MPEG-4", "dvvideo": "DV", "dnxhd": "DNx", "av1": "AV1", "vp9": "VP9",
-    "vp8": "VP8", "mjpeg": "MJPEG", "aac": "AAC", "ac3": "AC-3", "mp3": "MP3",
-    "flac": "FLAC", "alac": "ALAC", "opus": "Opus", "vorbis": "Vorbis",
-    "pcm_s16le": "PCM 16", "pcm_s24le": "PCM 24", "pcm_s16be": "PCM 16",
-    "pcm_s24be": "PCM 24", "pcm_s32le": "PCM 32", "pcm_f32le": "PCM 32f",
-    "wmv3": "WMV", "vc1": "VC-1", "cfhd": "CineForm", "rawvideo": "Raw",
+    "h264": "H.264",
+    "hevc": "HEVC",
+    "prores": "ProRes",
+    "mpeg2video": "MPEG-2",
+    "mpeg4": "MPEG-4",
+    "dvvideo": "DV",
+    "dnxhd": "DNx",
+    "av1": "AV1",
+    "vp9": "VP9",
+    "vp8": "VP8",
+    "mjpeg": "MJPEG",
+    "aac": "AAC",
+    "ac3": "AC-3",
+    "mp3": "MP3",
+    "flac": "FLAC",
+    "alac": "ALAC",
+    "opus": "Opus",
+    "vorbis": "Vorbis",
+    "pcm_s16le": "PCM 16",
+    "pcm_s24le": "PCM 24",
+    "pcm_s16be": "PCM 16",
+    "pcm_s24be": "PCM 24",
+    "pcm_s32le": "PCM 32",
+    "pcm_f32le": "PCM 32f",
+    "wmv3": "WMV",
+    "vc1": "VC-1",
+    "cfhd": "CineForm",
+    "rawvideo": "Raw",
 }
 
 
@@ -137,7 +239,7 @@ def pretty_codec(c: str) -> str:
 
 
 def fmt_duration(sec: float) -> str:
-    s = int(round(sec))
+    s = round(sec)
     h, m, s = s // 3600, (s % 3600) // 60, s % 60
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
 
@@ -155,7 +257,7 @@ STANDARD_RATES = ("24000/1001", "24/1", "25/1", "30000/1001", "30/1", "48/1", "5
 def nominal_rate(*candidates: str) -> str:
     """Pick a sensible fixed frame rate (for timecode) from ffprobe's avg/r rates."""
     vals = [(c, _fps(c)) for c in candidates if c and _fps(c) > 0]
-    for c, f in vals:  # an exact standard rate wins
+    for _c, f in vals:  # an exact standard rate wins
         for std in STANDARD_RATES:
             if abs(_fps(std) - f) / _fps(std) < 0.0005:
                 return std
@@ -172,7 +274,7 @@ def tc_add(tc: str, seconds: float, rate: str) -> str:
         parts = [int(x) for x in tc.replace(";", ":").replace(".", ":").split(":")]
         h, m, s, f = parts if len(parts) == 4 else (*parts, 0)
         fps = _fps(rate)
-        nom = int(round(fps))
+        nom = round(fps)
         if nom <= 0:
             return tc
         drop = (nom // 30) * 2 if sep_df and nom in (30, 60) else 0
@@ -266,7 +368,7 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
         timeout=60,
     )
     try:
-        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+        data = json.loads(out[out.index("{") :]) if "{" in out else {}
     except ValueError:
         data = {}
     if rc != 0 and not data:
@@ -356,7 +458,7 @@ def probe_photo(path: str) -> MediaInfo:
 
         w, h, created = photo.peek(path)
         info.width, info.height, info.created = w, h, created
-    except Exception as e:  # noqa: BLE001 — any decoder error becomes a readable message
+    except Exception as e:
         info.error = f"Couldn't read this photo ({e.__class__.__name__}: {e})"
     return info
 

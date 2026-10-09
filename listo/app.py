@@ -1,9 +1,9 @@
 """App entry point."""
+
 from __future__ import annotations
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
@@ -11,7 +11,11 @@ from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import QApplication, QComboBox, QMenu, QWidget
 
 from . import APP_NAME, __version__
+from .core.log import get_logger, setup_logging
+from .core.paths import data_dir
 from .ui import theme
+
+log = get_logger(__name__)
 
 
 def _server_name() -> str:
@@ -19,7 +23,7 @@ def _server_name() -> str:
 
     try:
         user = getpass.getuser()
-    except Exception:  # noqa: BLE001
+    except Exception:
         user = "user"
     return f"listo-{user}"
 
@@ -41,6 +45,9 @@ def _hand_off(paths: list[str]) -> bool:
     return ok
 
 
+_MAX_HANDOFF = 4 * 1024 * 1024
+
+
 def _listen(window) -> object:
     """Accept files from 'Open With' / 'Send to' launches while we're running."""
     from PySide6.QtNetwork import QLocalServer
@@ -48,6 +55,8 @@ def _listen(window) -> object:
     name = _server_name()
     QLocalServer.removeServer(name)  # clear a stale socket from a crash
     server = QLocalServer(window)
+    # Only this user's account may send files to the open window.
+    server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
     if not server.listen(name):
         return None
 
@@ -57,6 +66,9 @@ def _listen(window) -> object:
 
         def read() -> None:
             buf.extend(bytes(sock.readAll()))
+            if len(buf) > _MAX_HANDOFF:  # a list of file paths is never this big
+                sock.abort()
+                return
             if buf.endswith(b"\x04"):
                 raw = bytes(buf[:-1]).split(b"\n")
                 paths = [os.fsdecode(p) for p in raw if p]
@@ -87,7 +99,7 @@ class _RoundPopups(QObject):
             win.setWindowFlag(Qt.WindowType.NoDropShadowWindowHint, True)
             win.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
-    def eventFilter(self, obj, ev):  # noqa: N802
+    def eventFilter(self, obj, ev):
         if ev.type() == QEvent.Type.Polish and isinstance(obj, QWidget):
             if isinstance(obj, QMenu) and obj.isWindow():
                 self._see_through(obj)
@@ -95,7 +107,9 @@ class _RoundPopups(QObject):
                 container = obj.view().window()
                 if container is not obj.window():
                     self._see_through(container)
-                    container.setStyleSheet("QComboBoxPrivateContainer { background: transparent; border: none; }")
+                    container.setStyleSheet(
+                        "QComboBoxPrivateContainer { background: transparent; border: none; }"
+                    )
         return False
 
 
@@ -109,7 +123,7 @@ class ListoApp(QApplication):
         self._round = _RoundPopups(self)
         self.installEventFilter(self._round)
 
-    def event(self, e):  # noqa: D401
+    def event(self, e):
         if e.type() == QEvent.Type.FileOpen:
             path = e.file()
             if self.window is not None:
@@ -126,11 +140,15 @@ def main() -> int:
             import ctypes
 
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Listo.Listo")
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("couldn't set the Windows app id", exc_info=True)
+    setup_logging()
+    log.info("Listo %s starting (%s)", __version__, sys.platform)
     app = ListoApp(sys.argv)
     smoke = "--smoke-test" in sys.argv
-    launch_files = [str(Path(a).resolve()) for a in sys.argv[1:] if not a.startswith("-") and Path(a).exists()]
+    launch_files = [
+        str(Path(a).resolve()) for a in sys.argv[1:] if not a.startswith("-") and Path(a).exists()
+    ]
     if not smoke and _hand_off(launch_files):
         return 0  # an open Listo window took the files
     app.setApplicationName(APP_NAME)
@@ -146,7 +164,7 @@ def main() -> int:
     f.setPointSizeF(13 if sys.platform == "darwin" else 10)
     f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(f)
-    app.setStyleSheet(theme.stylesheet(Path(tempfile.gettempdir()) / f"listo-ui-{os.getpid()}"))
+    app.setStyleSheet(theme.stylesheet(data_dir() / "ui"))
 
     from .ui.main_window import MainWindow
 
@@ -159,7 +177,7 @@ def main() -> int:
     w.raise_()
 
     if smoke:  # used by the build pipeline: launch, check, quit
-        from .tools import capabilities
+        from .core.tools import capabilities
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)

@@ -2,16 +2,18 @@
 
 Handy for scripting and for testing the engine without the window.
 """
+
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
 
-from .engine import Conversion
-from .presets import AUDIO_BY_KEY, PHOTO_BY_KEY, VIDEO_BY_KEY, Settings
-from .probe import KNOWN_EXTS, ext_of, probe
-from .tools import capabilities, detect_hardware
+from .core.engine import Conversion
+from .core.log import setup_logging
+from .core.presets import AUDIO_BY_KEY, PHOTO_BY_KEY, VIDEO_BY_KEY, Settings
+from .core.probe import KNOWN_EXTS, ext_of, probe
+from .core.tools import capabilities, detect_hardware
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,11 +31,18 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--collision", choices=["number", "skip", "replace"], default="number")
     ap.add_argument("--no-hardware", action="store_true")
     a = ap.parse_args(argv)
+    setup_logging()
 
     s = Settings(
-        video_preset=a.video, audio_format=a.audio, photo_format=a.photo,
-        video_resize=a.resize, photo_resize=a.photo_resize, deinterlace=a.deinterlace,
-        naming=a.naming, collision=a.collision, hardware=not a.no_hardware,
+        video_preset=a.video,
+        audio_format=a.audio,
+        photo_format=a.photo,
+        video_resize=a.resize,
+        photo_resize=a.photo_resize,
+        deinterlace=a.deinterlace,
+        naming=a.naming,
+        collision=a.collision,
+        hardware=not a.no_hardware,
     )
     if a.variant:
         s.video_variant[a.video] = a.variant
@@ -55,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             files.append(str(p))
 
-    from . import naming
+    from .core import naming
 
     reserved: set[str] = {naming.reserve_key(Path(f)) for f in files}  # never replace another original
     failed = 0

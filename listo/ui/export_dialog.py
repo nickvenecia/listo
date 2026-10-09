@@ -1,19 +1,30 @@
 """Export options: where converted files go and what they're called (opened from the bottom bar)."""
+
 from __future__ import annotations
 
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QDialog,
+    QFileDialog,
+    QFrame,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QWidget,
 )
 
-from .. import naming
-from ..presets import Settings
-from ..probe import MediaInfo
+from ..core import naming
+from ..core.log import get_logger
+from ..core.presets import Settings
+from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
-from .widgets import FlowLayout, OptionList, Segmented, hint, section_label
+from .tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_5
+from .widgets import FlowLayout, OptionList, Section, Segmented, hbox, hint, vbox
+
+log = get_logger(__name__)
 
 NAME_STYLES: tuple[tuple[str, str, str], ...] = (
     ("same", "Same as the original", "{name}"),
@@ -23,9 +34,16 @@ NAME_STYLES: tuple[tuple[str, str, str], ...] = (
     ("custom", "Your own pattern", ""),
 )
 FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
-    ("name", "Name"), ("preset", "Format"), ("date", "Date"), ("time", "Time"),
-    ("res", "Size"), ("height", "Height"), ("fps", "Frame rate"), ("n", "Counter"),
-    ("folder", "Folder"), ("ext", "Old extension"),
+    ("name", "Name"),
+    ("preset", "Format"),
+    ("date", "Date"),
+    ("time", "Time"),
+    ("res", "Size"),
+    ("height", "Height"),
+    ("fps", "Frame rate"),
+    ("n", "Counter"),
+    ("folder", "Folder"),
+    ("ext", "Old extension"),
 )
 WHERE = (("source", "Next to original"), ("subfolder", "In a subfolder"), ("folder", "Pick a folder"))
 
@@ -50,32 +68,28 @@ def summary(s: Settings) -> tuple[str, str]:
     return where, name
 
 
-class SaveDialog(QDialog):
+class ExportDialog(QDialog):
     changed = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Export options")
-        self.setFixedWidth(480)
+        self.setFixedWidth(DIALOG_W)
         self.s = settings
         self._sample: tuple[str, MediaInfo | None, str] | None = None
-        self._custom_text = settings.naming if style_for(settings.naming) == "custom" else "{name}_{preset}_{date}"
+        self._custom_text = (
+            settings.naming if style_for(settings.naming) == "custom" else "{name}_{preset}_{date}"
+        )
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 22, 24, 20)
-        lay.setSpacing(8)
-
+        lay = vbox(self, SPACE_5, SPACE_3)
         title = QLabel("Export options")
         title.setObjectName("DialogTitle")
         lay.addWidget(title)
-        lay.addSpacing(4)
 
         # ---- live example
         ex = QFrame()
         ex.setObjectName("Example")
-        el = QVBoxLayout(ex)
-        el.setContentsMargins(14, 12, 14, 12)
-        el.setSpacing(4)
+        el = vbox(ex, (SPACE_4, SPACE_3, SPACE_4, SPACE_3), SPACE_1)
         self.ex_from = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
         self.ex_from.setObjectName("ExFrom")
         self.ex_to = ElidedLabel("", Qt.TextElideMode.ElideLeft)
@@ -89,15 +103,13 @@ class SaveDialog(QDialog):
         lay.addWidget(ex)
 
         # ---- where
-        lay.addSpacing(12)
-        lay.addWidget(section_label("Where"))
+        where = Section("Where")
         self.where = Segmented(list(WHERE))
         self.where.set_value(self.s.destination)
         self.where.changed.connect(self._destination)
-        lay.addWidget(self.where)
+        where.add(self.where)
         self.d_sub_row = QWidget()
-        sr = QHBoxLayout(self.d_sub_row)
-        sr.setContentsMargins(0, 4, 0, 0)
+        sr = hbox(self.d_sub_row, (0, SPACE_1, 0, 0))
         lbl = QLabel("Folder name")
         lbl.setObjectName("Muted")
         self.d_sub = QLineEdit(self.s.subfolder_name)
@@ -105,10 +117,9 @@ class SaveDialog(QDialog):
         self.d_sub.textChanged.connect(lambda t: self._set("subfolder_name", t.strip() or "Listo"))
         sr.addWidget(lbl)
         sr.addWidget(self.d_sub, 1)
-        lay.addWidget(self.d_sub_row)
+        where.add(self.d_sub_row)
         self.d_folder_row = QWidget()
-        fr = QHBoxLayout(self.d_folder_row)
-        fr.setContentsMargins(0, 4, 0, 0)
+        fr = hbox(self.d_folder_row, (0, SPACE_1, 0, 0))
         self.d_path = ElidedLabel("", Qt.TextElideMode.ElideLeft)
         self.d_path.setObjectName("Muted")
         self.d_pick = QPushButton("Change…")
@@ -116,27 +127,25 @@ class SaveDialog(QDialog):
         self.d_pick.clicked.connect(self._choose_folder)
         fr.addWidget(self.d_path, 1)
         fr.addWidget(self.d_pick)
-        lay.addWidget(self.d_folder_row)
+        where.add(self.d_folder_row)
         self.d_proxy_hint = hint("Edit proxies go into a Proxy folder next to the original.")
-        lay.addWidget(self.d_proxy_hint)
+        where.add(self.d_proxy_hint)
+        lay.addWidget(where)
 
         # ---- name
-        lay.addSpacing(12)
-        lay.addWidget(section_label("Name"))
+        name = Section("Name")
         self.styles = OptionList([(k, t, "") for k, t, _ in NAME_STYLES])
         self.styles.set_value(style_for(self.s.naming))
         self.styles.changed.connect(self._style)
-        lay.addWidget(self.styles)
+        name.add(self.styles)
         self.custom_box = QWidget()
-        cb = QVBoxLayout(self.custom_box)
-        cb.setContentsMargins(0, 4, 0, 0)
-        cb.setSpacing(8)
+        cb = vbox(self.custom_box, (0, SPACE_1, 0, 0), SPACE_2)
         self.n_edit = QLineEdit(self._custom_text)
         self.n_edit.setPlaceholderText("{name}")
         self.n_edit.textChanged.connect(self._custom_changed)
         cb.addWidget(self.n_edit)
         tok_wrap = QWidget()
-        flow = FlowLayout(tok_wrap, 6)
+        flow = FlowLayout(tok_wrap)
         for key, label in FRIENDLY_TOKENS:
             b = QPushButton(f"+ {label}")
             b.setObjectName("Token")
@@ -145,29 +154,33 @@ class SaveDialog(QDialog):
             b.clicked.connect(lambda _=False, k=key: self._insert_token(k))
             flow.addWidget(b)
         cb.addWidget(tok_wrap)
-        lay.addWidget(self.custom_box)
+        name.add(self.custom_box)
+        lay.addWidget(name)
 
         # ---- collisions + dates
-        lay.addSpacing(12)
-        lay.addWidget(section_label("If that name is already taken"))
+        taken = Section("If that name is already taken")
         self.c_seg = Segmented([("number", "Add a number"), ("skip", "Skip it"), ("replace", "Replace it")])
         self.c_seg.set_value(self.s.collision)
         self.c_seg.setToolTip("Your original files are never touched, whatever you pick")
         self.c_seg.changed.connect(lambda k: self._set("collision", k))
-        lay.addWidget(self.c_seg)
-        lay.addSpacing(6)
+        taken.add(self.c_seg)
+        lay.addWidget(taken)
+
+        after = Section("After converting")
         self.k_dates = QCheckBox("Keep the original file dates")
         self.k_dates.setChecked(self.s.keep_dates)
         self.k_dates.toggled.connect(lambda v: self._set("keep_dates", v))
-        lay.addWidget(self.k_dates)
-        self.k_verify = QCheckBox("Double-check each file after converting")
-        self.k_verify.setToolTip("Re-reads every new video and audio file and flags it if the length doesn't match the original")
+        after.add(self.k_dates)
+        self.k_verify = QCheckBox("Double-check each file")
+        self.k_verify.setToolTip(
+            "Re-reads every new video and audio file and flags it if the length doesn't match the original"
+        )
         self.k_verify.setChecked(self.s.verify)
         self.k_verify.toggled.connect(lambda v: self._set("verify", v))
-        lay.addWidget(self.k_verify)
+        after.add(self.k_verify)
+        lay.addWidget(after)
 
-        lay.addSpacing(14)
-        done_row = QHBoxLayout()
+        done_row = hbox(margins=(0, SPACE_2, 0, 0))
         done_row.addStretch(1)
         done = QPushButton("Done")
         done.setObjectName("Primary")
@@ -185,10 +198,9 @@ class SaveDialog(QDialog):
         self.changed.emit()
 
     def _destination(self, key: str) -> None:
-        if key == "folder" and not self.s.dest_folder:
-            if not self._choose_folder():
-                self.where.set_value(self.s.destination)
-                return
+        if key == "folder" and not self.s.dest_folder and not self._choose_folder():
+            self.where.set_value(self.s.destination)
+            return
         self._set("destination", key)
         self._sync()
 
@@ -258,7 +270,7 @@ class SaveDialog(QDialog):
         try:
             self.s.naming = template
             return naming.planned_name(path, info, self.s, kind, 1)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return "?"
         finally:
             self.s.naming = saved
@@ -266,8 +278,11 @@ class SaveDialog(QDialog):
     def _sample_tuple(self):
         if self._sample:
             return self._sample
-        return (str(Path.home() / "Footage" / "A001_C003.MOV"),
-                MediaInfo(kind="video", width=3840, height=2160, fps=23.976), "video")
+        return (
+            str(Path.home() / "Footage" / "A001_C003.MOV"),
+            MediaInfo(kind="video", width=3840, height=2160, fps=23.976),
+            "video",
+        )
 
     def _update_example(self) -> None:
         path, info, kind = self._sample_tuple()
@@ -275,7 +290,7 @@ class SaveDialog(QDialog):
         try:
             out_dir = naming.output_dir(path, self.s, kind)
             name = naming.planned_name(path, info, self.s, kind, 1)
-        except Exception:  # noqa: BLE001
+        except Exception:
             out_dir, name = p.parent, "?"
         self.ex_from.setText(f"{p.parent.name}/{p.name}")
         note = ""
@@ -285,11 +300,14 @@ class SaveDialog(QDialog):
                 note = "A file with this name is already there, so this one would be skipped."
             elif target.name != name:
                 same = naming.reserve_key(out_dir / name) == naming.reserve_key(Path(path))
-                note = ("Same name as the original, so a number is added to keep the original safe."
-                        if same else "That name is taken, so a number is added.")
+                note = (
+                    "Same name as the original, so a number is added to keep the original safe."
+                    if same
+                    else "That name is taken, so a number is added."
+                )
                 name = target.name
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception:
+            log.debug("example name failed", exc_info=True)
         self.ex_to.setText(f"→  {out_dir.name}/{name}")
         self.ex_note.setText(note)
         self.ex_note.setVisible(bool(note))
@@ -301,6 +319,6 @@ class SaveDialog(QDialog):
                 opt.sub.setText("Build it from name, format, date…")
             opt.sub.setVisible(True)
 
-    def showEvent(self, e):  # noqa: N802
+    def showEvent(self, e):
         self._sync()
         super().showEvent(e)
