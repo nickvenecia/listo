@@ -42,7 +42,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 
 **Workflow:**
-- **Recipes**: one click sets format + folder + naming (built-ins like "Client review + burn-ins", or save your own).
+- **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
 - **Look for review copies**: apply a `.cube` LUT and burn in timecode and/or the file name.
 - **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.

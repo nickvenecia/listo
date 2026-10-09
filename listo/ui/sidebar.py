@@ -12,14 +12,14 @@ from PySide6.QtWidgets import (
 
 from ..presets import (
     AUDIO_FORMATS, BUILTIN_RECIPES, DEINTERLACE, PHOTO_FORMATS, RESIZE_PHOTO, RESIZE_VIDEO,
-    VIDEO_BY_KEY, VIDEO_GROUPS, VIDEO_PRESETS, Settings,
+    VIDEO_BY_KEY, VIDEO_PRESETS, Settings,
 )
 from ..tools import Capabilities
 from . import theme
 from .job_card import ElidedLabel
-from .widgets import OptionList, Segmented, hint, section_label
+from .widgets import OptionList, Segmented, section_label
 
-SIDEBAR_W = 300
+SIDEBAR_W = 310
 
 
 def _combo(choices, current: str) -> QComboBox:
@@ -99,8 +99,14 @@ class Sidebar(QFrame):
         self.recipe_menu.aboutToShow.connect(self._build_recipe_menu)
         self.recipe_more.setMenu(self.recipe_menu)
         self.recipe_more.setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }")
+        self.recipe_new = QPushButton("+ Save these settings as a recipe")
+        self.recipe_new.setObjectName("Ghost")
+        self.recipe_new.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.recipe_new.setToolTip("Recipes remember format, folder and naming so you can reuse them in one click")
+        self.recipe_new.clicked.connect(self._save_recipe)
         rrow.addWidget(self.recipe, 1)
         rrow.addWidget(self.recipe_more)
+        rrow.addWidget(self.recipe_new, 1)
         rwrap.addLayout(rrow)
         lay.addLayout(rwrap)
 
@@ -132,11 +138,11 @@ class Sidebar(QFrame):
 
     def _build_video(self) -> None:
         page, lay = _page()
-        items: list[tuple[str, str, str]] = []
-        for gkey, glabel in VIDEO_GROUPS:
-            items.append(("#" + gkey, glabel.upper(), ""))
-            items += [(p.key, p.title, p.subtitle) for p in VIDEO_PRESETS if p.group == gkey]
-        self.v_list = OptionList(items)
+        lay.addWidget(section_label("Format"))
+        self.v_list = OptionList([
+            (p.key, p.title, "", f".{p.ext}" if p.ext else "audio", p.subtitle.split(" · ")[0])
+            for p in VIDEO_PRESETS
+        ])
         self.v_list.set_value(self.s.video_preset)
         self.v_list.changed.connect(self._video_preset)
         lay.addWidget(self.v_list)
@@ -160,10 +166,9 @@ class Sidebar(QFrame):
         self.v_deint_label = section_label("Interlaced footage")
         lay.addWidget(self.v_deint_label)
         self.v_deint = _combo(DEINTERLACE, self.s.deinterlace)
+        self.v_deint.setToolTip("Only affects footage that's actually interlaced (old camcorders, broadcast, 1080i)")
         self.v_deint.currentIndexChanged.connect(lambda: self._set("deinterlace", self.v_deint.currentData()))
         lay.addWidget(self.v_deint)
-        self.v_deint_hint = hint("Only affects files that are actually interlaced (old camcorders, broadcast, 1080i).")
-        lay.addWidget(self.v_deint_hint)
 
         # ---- look: LUT + burn-ins
         self.look_box = QWidget()
@@ -195,25 +200,23 @@ class Sidebar(QFrame):
         self.burn_name = QCheckBox("Burn in file name")
         self.burn_name.setChecked(self.s.burn_filename)
         self.burn_name.toggled.connect(lambda v: self._set("burn_filename", v))
+        self.lut_pick.setToolTip("Apply a .cube LUT to every video — handy for review copies")
         lb.addWidget(self.burn_tc)
         lb.addWidget(self.burn_name)
-        lb.addWidget(hint("For review copies. A .cube LUT is applied to every video in the batch."))
         lay.addWidget(self.look_box)
 
         # ---- speed
         lay.addSpacing(6)
         lay.addWidget(section_label("Speed"))
-        self.v_hw = QCheckBox("Use the hardware encoder")
+        self.v_hw = QCheckBox("Hardware encoding (faster)")
         self.v_hw.setChecked(self.s.hardware)
         self.v_hw.toggled.connect(lambda v: self._set("hardware", v))
         lay.addWidget(self.v_hw)
-        self.v_hw_hint = hint("Checking this computer…")
-        lay.addWidget(self.v_hw_hint)
         self.v_par = QCheckBox("Convert two files at once")
+        self.v_par.setToolTip("Fastest with the hardware encoder or lots of small files")
         self.v_par.setChecked(self.s.parallel)
         self.v_par.toggled.connect(lambda v: self._set("parallel", v))
         lay.addWidget(self.v_par)
-        lay.addWidget(hint("Fastest with the hardware encoder or lots of small files."))
         lay.addSpacing(6)
         self.v_tracks = QCheckBox("Keep every audio track")
         self.v_tracks.setChecked(self.s.keep_all_audio)
@@ -225,7 +228,7 @@ class Sidebar(QFrame):
 
     def _build_photo(self) -> None:
         page, lay = _page()
-        lay.addWidget(section_label("Make"))
+        lay.addWidget(section_label("Format"))
         subs = {
             "jpeg": "Smallest, works everywhere",
             "png": "Lossless, keeps transparency",
@@ -233,7 +236,8 @@ class Sidebar(QFrame):
             "webp": "Small, for the web",
             "heic": "iPhone format, very small",
         }
-        self.p_list = OptionList([(f.key, f.title, subs.get(f.key, "")) for f in PHOTO_FORMATS])
+        self.p_list = OptionList([(f.key, f.title.split(" ·")[0], "", f".{f.ext}", subs.get(f.key, ""))
+                                  for f in PHOTO_FORMATS])
         self.p_list.set_value(self.s.photo_format)
         self.p_list.changed.connect(lambda k: (self._set("photo_format", k), self._sync_photo()))
         lay.addWidget(self.p_list)
@@ -253,30 +257,25 @@ class Sidebar(QFrame):
         self.p_size.currentIndexChanged.connect(lambda: self._set("photo_resize", self.p_size.currentData()))
         lay.addWidget(self.p_size)
         lay.addSpacing(6)
-        self.p_meta = QCheckBox("Keep camera info (EXIF) and color profile")
+        self.p_meta = QCheckBox("Keep camera info and color profile")
         self.p_meta.setChecked(self.s.photo_keep_metadata)
         self.p_meta.toggled.connect(lambda v: self._set("photo_keep_metadata", v))
         lay.addWidget(self.p_meta)
-        lay.addSpacing(4)
-        lay.addWidget(hint("Reads JPEG, PNG, TIFF, WebP, HEIC and camera RAW (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2…). "
-                           "RAW files are developed with the camera's white balance."))
         lay.addStretch(1)
         self.stack.addWidget(page)
 
     def _build_audio(self) -> None:
         page, lay = _page()
-        lay.addWidget(section_label("Make"))
+        lay.addWidget(section_label("Format"))
         subs = {
             "wav24": "Edit-ready, lossless", "wav16": "CD quality, lossless",
             "aiff": "Lossless, Mac-friendly", "flac": "Lossless, half the size",
             "mp3": "Plays everywhere", "aac": "Small, great quality",
         }
-        self.a_list = OptionList([(f.key, f.title, subs.get(f.key, "")) for f in AUDIO_FORMATS])
+        self.a_list = OptionList([(f.key, f.title, "", f".{f.ext}", subs.get(f.key, "")) for f in AUDIO_FORMATS])
         self.a_list.set_value(self.s.audio_format)
         self.a_list.changed.connect(lambda k: self._set("audio_format", k))
         lay.addWidget(self.a_list)
-        lay.addSpacing(4)
-        lay.addWidget(hint("Used for audio files, and for video when Video → Audio only is picked."))
         lay.addStretch(1)
         self.stack.addWidget(page)
 
@@ -322,7 +321,7 @@ class Sidebar(QFrame):
         self.v_size_label.setVisible(resizable)
         self.v_size.setVisible(resizable)
         deint = p.key not in ("rewrap", "audio")
-        for w in (self.v_deint_label, self.v_deint, self.v_deint_hint):
+        for w in (self.v_deint_label, self.v_deint):
             w.setVisible(deint)
         self.look_box.setVisible(p.key not in ("rewrap", "audio"))
         self.v_tracks.setVisible(p.edit_format)
@@ -368,9 +367,13 @@ class Sidebar(QFrame):
         self.recipe.blockSignals(True)
         self.recipe.clear()
         self.recipe.addItem("Custom settings", None)
-        for name, _, user in self._all_recipes():
-            self.recipe.addItem(("★ " if user else "") + name, name)
+        recipes = self._all_recipes()
+        for name, _, _ in recipes:
+            self.recipe.addItem(name, name)
         self.recipe.blockSignals(False)
+        self.recipe.setVisible(bool(recipes))
+        self.recipe_more.setVisible(bool(recipes))
+        self.recipe_new.setVisible(not recipes)
         self._match_recipe()
 
     def _match_recipe(self) -> None:
@@ -483,7 +486,7 @@ class Sidebar(QFrame):
         if hw:
             names = ", ".join(sorted({("Apple VideoToolbox" if "videotoolbox" in e else "NVIDIA NVENC") for e in hw.values()}))
             self.v_hw.setEnabled(True)
-            self.v_hw_hint.setText(f"Found {names} — much faster for H.264 and HEVC.")
+            self.v_hw.setToolTip(f"Uses {names} — much faster for H.264 and HEVC")
         else:
             self.v_hw.setEnabled(False)
-            self.v_hw_hint.setText("No hardware encoder on this computer — using the regular one.")
+            self.v_hw.setToolTip("No hardware encoder found on this computer")

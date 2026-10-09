@@ -166,10 +166,9 @@ def test_rewrap_vp9_explains(tmp_path: Path):
 
 
 def test_recipe_apply_and_match():
-    from listo.presets import BUILTIN_RECIPES
-
     s = Settings()
-    name, vals = next(r for r in BUILTIN_RECIPES if r[0].startswith("Client review"))
+    vals = {"video_preset": "h264", "video_variant": {"h264": "standard"}, "burn_timecode": True,
+            "destination": "subfolder", "subfolder_name": "Review", "naming": "{name}_review"}
     assert not s.matches(vals)
     s.apply(vals)
     assert s.matches(vals) and s.video_preset == "h264" and s.burn_timecode

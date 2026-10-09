@@ -36,7 +36,7 @@ def main() -> None:
     w = MainWindow()
     app.aboutToQuit.connect(w.shutdown)
     w.qs.clear()
-    w.resize(1000, 660)
+    w.resize(1120, 720)
     w.show()
     steps = []
 
@@ -65,9 +65,13 @@ def main() -> None:
         steps.append((100, save_shot))
         steps.append((800, lambda: None))
         def recipe():
-            i = w.sidebar.recipe.findData("Client review + burn-ins")
-            w.sidebar.recipe.setCurrentIndex(i)
-            w.sidebar._recipe_picked(i)
+            w.settings.apply({"video_preset": "h264", "video_resize": "1080", "burn_timecode": True,
+                              "burn_filename": True, "destination": "subfolder", "subfolder_name": "Review",
+                              "naming": "{name}_review"})
+            w.sidebar.reload()
+            w.save_dialog.reload()
+            w.sidebar._store_recipe("Client review")
+            w._settings_changed()
         steps.append((100, recipe))
         steps.append((400, shot("04-recipe")))
         steps.append((100, lambda: (setattr(w.settings, "parallel", True), w.start())))

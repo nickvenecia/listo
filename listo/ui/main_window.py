@@ -18,7 +18,7 @@ from .. import APP_NAME, __version__, naming
 from ..engine import Conversion, Result
 from ..fileutil import reveal
 from ..presets import (
-    AUDIO_FORMATS, OVERRIDE_KEYS, PHOTO_FORMATS, VIDEO_GROUPS, VIDEO_PRESETS, Settings, format_label,
+    AUDIO_FORMATS, OVERRIDE_KEYS, PHOTO_FORMATS, VIDEO_PRESETS, Settings, format_label,
 )
 from ..probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_duration, kind_from_ext
 from ..tools import capabilities
@@ -147,8 +147,8 @@ class MainWindow(QMainWindow):
         if geo is not None:
             self.restoreGeometry(geo)
         else:
-            self.resize(1000, 660)
-        self.setMinimumSize(QSize(780, 520))
+            self.resize(1120, 720)
+        self.setMinimumSize(QSize(880, 560))
 
         if not self.caps.ok:
             QTimer.singleShot(300, self._missing_ffmpeg)
@@ -162,24 +162,48 @@ class MainWindow(QMainWindow):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
 
-        header = QFrame()
-        header.setObjectName("Header")
-        h = QHBoxLayout(header)
-        h.setContentsMargins(18, 9, 16, 9)
-        word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
-        word.setObjectName("Wordmark")
-        word.setTextFormat(Qt.TextFormat.RichText)
-        tag = QLabel("Drop it in. Get it back edit-ready.")
-        tag.setObjectName("Tagline")
-        h.addWidget(word)
-        h.addSpacing(12)
-        h.addWidget(tag, 0, Qt.AlignmentFlag.AlignBottom)
-        h.addStretch(1)
-        v.addWidget(header)
-
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
+        left_col = QVBoxLayout()
+        left_col.setContentsMargins(0, 0, 0, 0)
+        left_col.setSpacing(0)
+        bar = QHBoxLayout()
+        bar.setContentsMargins(18, 10, 14, 4)
+        bar.setSpacing(4)
+        word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
+        word.setObjectName("Wordmark")
+        word.setTextFormat(Qt.TextFormat.RichText)
+        word.setToolTip("Drop it in. Get it back edit-ready.")
+        bar.addWidget(word)
+        bar.addSpacing(16)
+        self.btn_add = QPushButton(" Add files")
+        self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
+        self.btn_add.clicked.connect(self.pick_files)
+        self.btn_folder = QPushButton(" Add folder")
+        self.btn_folder.setIcon(theme.icon("folder", theme.MUTED))
+        self.btn_folder.clicked.connect(self.pick_folder)
+        for b in (self.btn_add, self.btn_folder):
+            b.setObjectName("Ghost")
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            bar.addWidget(b)
+        bar.addStretch(1)
+        self.q_count = QLabel()
+        self.q_count.setObjectName("SectionLabel")
+        bar.addWidget(self.q_count)
+        bar.addSpacing(8)
+        self.btn_rm_done = QPushButton("Remove finished")
+        self.btn_rm_done.setObjectName("Ghost")
+        self.btn_rm_done.setToolTip("Take converted, skipped and failed files off the list")
+        self.btn_rm_done.clicked.connect(self.clear_finished)
+        self.btn_clear_all = QPushButton("Clear list")
+        self.btn_clear_all.setObjectName("Ghost")
+        self.btn_clear_all.setToolTip("Empty the list (your files aren't touched)")
+        self.btn_clear_all.clicked.connect(self.clear_all)
+        for b in (self.btn_rm_done, self.btn_clear_all):
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            bar.addWidget(b)
+        left_col.addLayout(bar)
         self.queue_stack = QStackedWidget()
         empty_wrap = QWidget()
         ew = QVBoxLayout(empty_wrap)
@@ -192,35 +216,6 @@ class MainWindow(QMainWindow):
         qp = QVBoxLayout(queue_page)
         qp.setContentsMargins(0, 0, 0, 0)
         qp.setSpacing(0)
-        bar = QHBoxLayout()
-        bar.setContentsMargins(20, 10, 14, 0)
-        self.q_count = QLabel()
-        self.q_count.setObjectName("SectionLabel")
-        bar.addWidget(self.q_count)
-        bar.addSpacing(10)
-        self.btn_add = QPushButton(" Add files")
-        self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
-        self.btn_add.clicked.connect(self.pick_files)
-        self.btn_folder = QPushButton(" Add folder")
-        self.btn_folder.setIcon(theme.icon("folder", theme.MUTED))
-        self.btn_folder.clicked.connect(self.pick_folder)
-        for b in (self.btn_add, self.btn_folder):
-            b.setObjectName("Ghost")
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            bar.addWidget(b)
-        bar.addStretch(1)
-        self.btn_rm_done = QPushButton("Remove finished")
-        self.btn_rm_done.setObjectName("Ghost")
-        self.btn_rm_done.setToolTip("Take converted, skipped and failed files off the list")
-        self.btn_rm_done.clicked.connect(self.clear_finished)
-        self.btn_clear_all = QPushButton("Clear list")
-        self.btn_clear_all.setObjectName("Ghost")
-        self.btn_clear_all.setToolTip("Empty the list (your files aren't touched)")
-        self.btn_clear_all.clicked.connect(self.clear_all)
-        for b in (self.btn_rm_done, self.btn_clear_all):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            bar.addWidget(b)
-        qp.addLayout(bar)
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -232,7 +227,8 @@ class MainWindow(QMainWindow):
         self.scroll.setWidget(lst)
         qp.addWidget(self.scroll, 1)
         self.queue_stack.addWidget(queue_page)
-        body.addWidget(self.queue_stack, 1)
+        left_col.addWidget(self.queue_stack, 1)
+        body.addLayout(left_col, 1)
 
         self.sidebar = Sidebar(self.settings)
         self.sidebar.changed.connect(self._settings_changed)
@@ -487,18 +483,17 @@ class MainWindow(QMainWindow):
 
         add(m, "Same as the panel", {}, not it.override)
         if it.kind == "video":
-            for gkey, glabel in VIDEO_GROUPS:
-                m.addSection(glabel)
-                for p in VIDEO_PRESETS:
-                    if p.group != gkey or (p.needs and not all(self.caps.has_encoder(e) for e in p.needs)):
-                        continue
-                    if p.key in ("prores", "dnxhr"):
-                        sub = m.addMenu(p.title)
-                        for c in p.variants:
-                            add(sub, c.label, {"video_preset": p.key, "video_variant": {p.key: c.key}},
-                                bool(it.override) and s.video_preset == p.key and s.variant_for(p.key) == c.key)
-                    else:
-                        add(m, p.title, {"video_preset": p.key}, bool(it.override) and s.video_preset == p.key)
+            m.addSeparator()
+            for p in VIDEO_PRESETS:
+                if p.needs and not all(self.caps.has_encoder(e) for e in p.needs):
+                    continue
+                if p.key in ("prores", "dnxhr"):
+                    sub = m.addMenu(p.title)
+                    for c in p.variants:
+                        add(sub, c.label, {"video_preset": p.key, "video_variant": {p.key: c.key}},
+                            bool(it.override) and s.video_preset == p.key and s.variant_for(p.key) == c.key)
+                else:
+                    add(m, p.title, {"video_preset": p.key}, bool(it.override) and s.video_preset == p.key)
         elif it.kind == "photo":
             m.addSeparator()
             for f in PHOTO_FORMATS:
@@ -817,6 +812,7 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         self.q_count.setText(f"{n} FILE{'S' if n != 1 else ''}")
+        self.q_count.setVisible(n > 0)
         finished = sum(1 for it in items if it.state in ("done", "warning", "failed", "skipped", "canceled"))
         self.btn_rm_done.setVisible(0 < finished < n)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
@@ -880,7 +876,7 @@ class MainWindow(QMainWindow):
             return
         if n == 0:
             self.f_title.setText("Nothing here yet")
-            self.f_sub.setText("Add some files to get started.")
+            self.f_sub.setText("")
             self.btn_show.hide()
             return
         kinds = {"video": 0, "photo": 0, "audio": 0}
@@ -898,7 +894,7 @@ class MainWindow(QMainWindow):
         bad = sum(1 for it in items if it.state == "unsupported")
         if bad:
             sub.append(f"{bad} file{'s' if bad != 1 else ''} can't be converted")
-        self.f_sub.setText(" · ".join(sub) or "Pick your formats on the right, then hit Convert.")
+        self.f_sub.setText(" · ".join(sub))
 
     def _scroll_to(self, w: QWidget) -> None:
         QTimer.singleShot(50, lambda: self.scroll.ensureWidgetVisible(w, 0, 60))

@@ -153,9 +153,9 @@ class SaveDialog(QDialog):
         lay.addWidget(section_label("If that name is already taken"))
         self.c_seg = Segmented([("number", "Add a number"), ("skip", "Skip it"), ("replace", "Replace it")])
         self.c_seg.set_value(self.s.collision)
+        self.c_seg.setToolTip("Your original files are never touched, whatever you pick")
         self.c_seg.changed.connect(lambda k: self._set("collision", k))
         lay.addWidget(self.c_seg)
-        lay.addWidget(hint("Your original files are never touched, whatever you pick."))
         lay.addSpacing(6)
         self.k_dates = QCheckBox("Keep the original file dates")
         self.k_dates.setChecked(self.s.keep_dates)
@@ -299,7 +299,7 @@ class SaveDialog(QDialog):
             if tpl:
                 opt.sub.setText(self._example_for(tpl))
             else:
-                opt.sub.setText("Build it from parts like name, format and date")
+                opt.sub.setText("Build it from name, format, date…")
             opt.sub.setVisible(True)
 
     def showEvent(self, e):  # noqa: N802

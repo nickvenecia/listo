@@ -39,7 +39,7 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   `MainWindow.eff(item)` = base (or live panel) + the file's own `Item.override` (format only, see presets.OVERRIDE_KEYS).
 - Up to 2 conversions run at once (`Settings.parallel`); `MainWindow.active` maps item id -> ConvertThread.
   Output names are reserved under `engine._plan_lock`, and every queued source path is pre-reserved so "Replace" can't hit another original.
-- Recipes: built-ins in `presets.BUILTIN_RECIPES` (partial dicts); user recipes are full Settings dicts in QSettings "recipes".
+- Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
 

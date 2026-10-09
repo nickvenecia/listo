@@ -150,8 +150,8 @@ RESIZE_PHOTO = (
     Choice("1080", "1080 px"),
 )
 DEINTERLACE = (
-    Choice("smooth", "Smooth motion (doubles fps: 29.97i → 59.94p)"),
-    Choice("film", "Film look (keeps fps: 29.97i → 29.97p)"),
+    Choice("smooth", "Deinterlace — smooth (59.94p)"),
+    Choice("film", "Deinterlace — film look (29.97p)"),
     Choice("off", "Leave interlaced"),
 )
 DESTINATIONS = (
@@ -242,31 +242,8 @@ class Settings:
         return s
 
 
-# Recipes: a few useful starting points. Each only sets the fields it lists.
-BUILTIN_RECIPES: tuple[tuple[str, dict], ...] = (
-    ("ProRes 422 master", {
-        "video_preset": "prores", "video_variant": {"prores": "2"}, "video_resize": "orig",
-        "destination": "source", "naming": "{name}", "lut_path": "", "burn_timecode": False,
-        "burn_filename": False}),
-    ("Cards → ProRes LT, dated", {
-        "video_preset": "prores", "video_variant": {"prores": "1"}, "video_resize": "orig",
-        "destination": "subfolder", "subfolder_name": "ProRes", "naming": "{date}_{name}",
-        "lut_path": "", "burn_timecode": False, "burn_filename": False}),
-    ("Edit proxies", {
-        "video_preset": "proxy", "destination": "source", "naming": "{name}",
-        "lut_path": "", "burn_timecode": False, "burn_filename": False}),
-    ("Client review + burn-ins", {
-        "video_preset": "h264", "video_variant": {"h264": "standard"}, "video_resize": "1080",
-        "destination": "subfolder", "subfolder_name": "Review", "naming": "{name}_review",
-        "burn_timecode": True, "burn_filename": True}),
-    ("Web / social 1080p", {
-        "video_preset": "h264", "video_variant": {"h264": "standard"}, "video_resize": "1080",
-        "destination": "source", "naming": "{name}_web", "lut_path": "",
-        "burn_timecode": False, "burn_filename": False}),
-    ("Photos for the web", {
-        "photo_format": "jpeg", "photo_quality": 85, "photo_resize": "2048",
-        "destination": "subfolder", "subfolder_name": "Web", "naming": "{name}"}),
-)
+# Recipes are made by you (Save as recipe); none are built in.
+BUILTIN_RECIPES: tuple[tuple[str, dict], ...] = ()
 
 # What a per-file override may change (just the output format).
 OVERRIDE_KEYS = ("video_preset", "video_variant", "photo_format", "audio_format")

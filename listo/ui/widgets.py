@@ -66,13 +66,19 @@ class Segmented(QFrame):
 class Option(QFrame):
     clicked = Signal(str)
 
-    def __init__(self, key: str, title: str, subtitle: str = "", parent: QWidget | None = None):
+    def __init__(self, key: str, title: str, subtitle: str = "", parent: QWidget | None = None,
+                 right: str = "", tip: str = ""):
         super().__init__(parent)
         self.key = key
+        self._tip = tip
         self.setObjectName("Option")
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(11, 6, 11, 6)
+        self.setToolTip(tip)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(11, 7, 11, 7)
+        outer.setSpacing(8)
+        lay = QVBoxLayout()
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         self.title = QLabel(title)
         self.title.setObjectName("OptionTitle")
@@ -82,6 +88,11 @@ class Option(QFrame):
         self.sub.setWordWrap(True)
         self.sub.setVisible(bool(subtitle))
         lay.addWidget(self.sub)
+        outer.addLayout(lay, 1)
+        self.right = QLabel(right)
+        self.right.setObjectName("OptionSub")
+        self.right.setVisible(bool(right))
+        outer.addWidget(self.right, 0, Qt.AlignmentFlag.AlignVCenter)
         self._enabled = True
 
     def set_selected(self, on: bool) -> None:
@@ -93,7 +104,8 @@ class Option(QFrame):
         self.setProperty("enabled", "true" if on else "false")
         self.title.setStyleSheet("" if on else "color: #6E6A64;")
         self.sub.setStyleSheet("" if on else "color: #55524D;")
-        self.setToolTip("" if on else why)
+        self.right.setStyleSheet("" if on else "color: #55524D;")
+        self.setToolTip(self._tip if on else why)
         self.setCursor(Qt.CursorShape.PointingHandCursor if on else Qt.CursorShape.ArrowCursor)
         repolish(self)
 
@@ -107,20 +119,23 @@ class OptionList(QWidget):
 
     changed = Signal(str)
 
-    def __init__(self, items: list[tuple[str, str, str]], parent: QWidget | None = None):
+    def __init__(self, items: list[tuple], parent: QWidget | None = None):
         super().__init__(parent)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
         self.options: dict[str, Option] = {}
-        for key, title, sub in items:
+        for item in items:
+            key, title, sub = item[0], item[1], item[2]
+            right = item[3] if len(item) > 3 else ""
+            tip = item[4] if len(item) > 4 else ""
             if key.startswith("#"):  # group header
                 lbl = QLabel(title)
                 lbl.setObjectName("GroupLabel")
                 lay.addSpacing(4 if self.options else 0)
                 lay.addWidget(lbl)
                 continue
-            o = Option(key, title, sub)
+            o = Option(key, title, sub, right=right, tip=tip)
             o.clicked.connect(self._pick)
             lay.addWidget(o)
             self.options[key] = o

@@ -1,8 +1,10 @@
 # Changelog
 
 ## 2.1.0
-- Recipes: built-in starting points plus your own saved combos of format, folder and naming
-- Video formats grouped: For editing / For sharing / Pull out
+- Top bar merged into the list toolbar (logo, Add files, Add folder, Clear list in one row)
+- Less explanation text: one-line format rows with the file extension; details moved into hover tips
+- Formats are one flat list again; recipes are only the ones you save
+- Recipes: save your own combos of format, folder and naming
 - Per-file formats: click a file's format tag to change just that file
 - LUT (.cube) and burn-in timecode / file name for review copies
 - Every converted video/audio file is re-read and checked against the original's length
