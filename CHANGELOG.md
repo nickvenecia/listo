@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Export options: Where, Name and "Name taken" are dropdowns; all naming buttons show when building your own pattern
 - Every button, dropdown and text field is the same height; spacing, type and colors follow one set of rules ([DESIGN.md](DESIGN.md))
 - Linux download is now one double-clickable file (AppImage)
 - Safer setup: the link tools Listo downloads are checked against their published checksums before use

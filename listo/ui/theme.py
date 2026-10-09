@@ -209,13 +209,6 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #TrimPreview {{ border: 1px solid {BORDER}; }}
 
 /* ---------- option list (export dialog) */
-#Option {{ background: transparent; border: 1px solid transparent; border-radius: {RADIUS}px; }}
-#Option:hover {{ background: {CARD}; }}
-#Option[selected="true"] {{ background: {CARD}; border-color: {ACCENT}; }}
-#Option[enabled="false"] {{ background: transparent; }}
-#OptionTitle {{ font-weight: {WEIGHT_SEMIBOLD}; }}
-#OptionSub {{ color: {MUTED}; font-size: {TEXT_SM}px; }}
-#OptionTitle:disabled, #OptionSub:disabled {{ color: {FAINT}; }}
 
 /* ---------- drop zone + link box */
 #DropZone {{ border: 2px dashed {BORDER_STRONG}; border-radius: {RADIUS_XL}px; background: transparent; }}

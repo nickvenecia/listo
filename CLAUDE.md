@@ -31,7 +31,7 @@ listo/
   ui/
     tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
     theme.py       stylesheet built from tokens, SVG icons (icon(name, color))
-    widgets.py     shared building blocks: vbox/hbox, Section, Segmented, Option/OptionList, FlowLayout, repolish
+    widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), Segmented (tabs), FlowLayout, repolish
     main_window.py queue + batch controller, toolbar, drop zone, footer
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
     export_dialog.py  "Export options": where files go + naming + collisions (opened from the footer)

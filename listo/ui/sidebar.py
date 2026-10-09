@@ -34,7 +34,7 @@ from ..core.presets import (
 )
 from ..core.tools import Capabilities
 from .tokens import SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import Section, Segmented, hbox, vbox
+from .widgets import Section, Segmented, combo, disable_item, hbox, set_combo, vbox
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
@@ -55,32 +55,6 @@ AUDIO_TIPS = {
     "mp3": "Plays everywhere",
     "aac": "Small, great quality",
 }
-
-
-def _combo(items: list[tuple[str, str, str]], current: str) -> QComboBox:
-    """items: (key, label, tooltip)"""
-    c = QComboBox()
-    for key, label, tip in items:
-        c.addItem(label, key)
-        if tip:
-            c.setItemData(c.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
-    c.setCurrentIndex(max(0, c.findData(current)))
-    c.setCursor(Qt.CursorShape.PointingHandCursor)
-    return c
-
-
-def _set_combo(c: QComboBox, key: str) -> None:
-    c.blockSignals(True)
-    c.setCurrentIndex(max(0, c.findData(key)))
-    c.blockSignals(False)
-
-
-def _disable_item(c: QComboBox, key: str, why: str) -> None:
-    i = c.findData(key)
-    item = c.model().item(i) if i >= 0 and hasattr(c.model(), "item") else None
-    if item is not None:
-        item.setEnabled(False)
-        item.setToolTip(why)
 
 
 class _FitScroll(QScrollArea):
@@ -177,7 +151,7 @@ class Sidebar(QFrame):
     def _build_video(self) -> None:
         page, lay = _page()
         fmt = Section("Format")
-        self.v_fmt = _combo(
+        self.v_fmt = combo(
             [
                 (
                     p.key,
@@ -198,12 +172,12 @@ class Sidebar(QFrame):
         self.sec_variant.add(self.v_variant)
 
         self.sec_size = Section("Size")
-        self.v_size = _combo([(c.key, c.label, "") for c in RESIZE_VIDEO], self.s.video_resize)
+        self.v_size = combo([(c.key, c.label, "") for c in RESIZE_VIDEO], self.s.video_resize)
         self.v_size.currentIndexChanged.connect(lambda: self._set("video_resize", self.v_size.currentData()))
         self.sec_size.add(self.v_size)
 
         self.sec_deint = Section("Interlaced footage")
-        self.v_deint = _combo([(c.key, c.label, "") for c in DEINTERLACE], self.s.deinterlace)
+        self.v_deint = combo([(c.key, c.label, "") for c in DEINTERLACE], self.s.deinterlace)
         self.v_deint.setToolTip(
             "Only affects footage that's actually interlaced (old camcorders, broadcast, 1080i)"
         )
@@ -258,7 +232,7 @@ class Sidebar(QFrame):
     def _build_photo(self) -> None:
         page, lay = _page()
         fmt = Section("Format")
-        self.p_fmt = _combo(
+        self.p_fmt = combo(
             [
                 (f.key, f"{f.title.split(' ·')[0]}   ·   .{f.ext}", PHOTO_TIPS.get(f.key, ""))
                 for f in PHOTO_FORMATS
@@ -278,7 +252,7 @@ class Sidebar(QFrame):
         self.sec_quality.add(self.p_q)
 
         size = Section("Size")
-        self.p_size = _combo([(c.key, c.label, "") for c in RESIZE_PHOTO], self.s.photo_resize)
+        self.p_size = combo([(c.key, c.label, "") for c in RESIZE_PHOTO], self.s.photo_resize)
         self.p_size.currentIndexChanged.connect(lambda: self._set("photo_resize", self.p_size.currentData()))
         size.add(self.p_size)
 
@@ -297,7 +271,7 @@ class Sidebar(QFrame):
     def _build_audio(self) -> None:
         page, lay = _page()
         fmt = Section("Format")
-        self.a_fmt = _combo(
+        self.a_fmt = combo(
             [(f.key, f"{f.title}   ·   .{f.ext}", AUDIO_TIPS.get(f.key, "")) for f in AUDIO_FORMATS],
             self.s.audio_format,
         )
@@ -528,7 +502,7 @@ class Sidebar(QFrame):
         """Refresh every control from the settings (after a recipe is applied)."""
         self._loading = True
         try:
-            for combo, key in (
+            for box, key in (
                 (self.v_fmt, self.s.video_preset),
                 (self.v_size, self.s.video_resize),
                 (self.v_deint, self.s.deinterlace),
@@ -536,7 +510,7 @@ class Sidebar(QFrame):
                 (self.p_size, self.s.photo_resize),
                 (self.a_fmt, self.s.audio_format),
             ):
-                _set_combo(combo, key)
+                set_combo(box, key)
             for box, val in (
                 (self.v_hw, self.s.hardware),
                 (self.v_tracks, self.s.keep_all_audio),
@@ -567,11 +541,11 @@ class Sidebar(QFrame):
         for p in VIDEO_PRESETS:
             ok = preset_available(p.key, caps) if p.needs else caps.ok
             if not ok:
-                _disable_item(self.v_fmt, p.key, "This copy of ffmpeg can't make this format.")
+                disable_item(self.v_fmt, p.key, "This copy of ffmpeg can't make this format.")
         if not is_heic_encodable():
-            _disable_item(self.p_fmt, "heic", "HEIC support isn't installed.")
+            disable_item(self.p_fmt, "heic", "HEIC support isn't installed.")
         if "libmp3lame" not in caps.encoders:
-            _disable_item(self.a_fmt, "mp3", "This copy of ffmpeg can't make MP3.")
+            disable_item(self.a_fmt, "mp3", "This copy of ffmpeg can't make MP3.")
         if not caps.has_filter("lut3d"):
             self.lut.setEnabled(False)
             self.lut.setToolTip("This copy of ffmpeg can't apply LUTs")

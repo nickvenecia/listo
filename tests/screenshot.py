@@ -30,7 +30,7 @@ def main() -> None:
     f = QFont(fam)
     f.setPointSizeF(10)
     app.setFont(f)
-    app.setStyleSheet(theme.stylesheet(Path(tempfile.gettempdir()) / "listo-shot"))
+    app.setStyleSheet(theme.stylesheet(Path(tempfile.mkdtemp(prefix="listo-shot-"))))
     from listo.ui.main_window import MainWindow
 
     w = MainWindow()
@@ -62,7 +62,7 @@ def main() -> None:
 
         def save_shot():
             d = w.export_dialog
-            d.styles.options["custom"].clicked.emit("custom")
+            d.styles.setCurrentIndex(d.styles.findData("custom"))
             d.show()
             QTimer.singleShot(
                 400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide())

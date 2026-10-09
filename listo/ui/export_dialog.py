@@ -22,7 +22,7 @@ from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from .job_card import ElidedLabel
 from .tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_4, SPACE_5
-from .widgets import FlowLayout, OptionList, Section, Segmented, hbox, hint, vbox
+from .widgets import FlowLayout, Section, combo, hbox, hint, set_combo, vbox
 
 log = get_logger(__name__)
 
@@ -45,7 +45,11 @@ FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
     ("folder", "Folder"),
     ("ext", "Old extension"),
 )
-WHERE = (("source", "Next to original"), ("subfolder", "In a subfolder"), ("folder", "Pick a folder"))
+WHERE = (
+    ("source", "Next to the original"),
+    ("subfolder", "In a subfolder"),
+    ("folder", "In a folder I pick…"),
+)
 
 
 def style_for(template: str) -> str:
@@ -104,9 +108,8 @@ class ExportDialog(QDialog):
 
         # ---- where
         where = Section("Where")
-        self.where = Segmented(list(WHERE))
-        self.where.set_value(self.s.destination)
-        self.where.changed.connect(self._destination)
+        self.where = combo([(k, t, "") for k, t in WHERE], self.s.destination)
+        self.where.currentIndexChanged.connect(lambda _i: self._destination(self.where.currentData()))
         where.add(self.where)
         self.d_sub_row = QWidget()
         sr = hbox(self.d_sub_row, (0, SPACE_1, 0, 0))
@@ -134,9 +137,8 @@ class ExportDialog(QDialog):
 
         # ---- name
         name = Section("Name")
-        self.styles = OptionList([(k, t, "") for k, t, _ in NAME_STYLES])
-        self.styles.set_value(style_for(self.s.naming))
-        self.styles.changed.connect(self._style)
+        self.styles = combo([(k, t, "") for k, t, _ in NAME_STYLES], style_for(self.s.naming))
+        self.styles.currentIndexChanged.connect(lambda _i: self._style(self.styles.currentData()))
         name.add(self.styles)
         self.custom_box = QWidget()
         cb = vbox(self.custom_box, (0, SPACE_1, 0, 0), SPACE_2)
@@ -144,8 +146,8 @@ class ExportDialog(QDialog):
         self.n_edit.setPlaceholderText("{name}")
         self.n_edit.textChanged.connect(self._custom_changed)
         cb.addWidget(self.n_edit)
-        tok_wrap = QWidget()
-        flow = FlowLayout(tok_wrap)
+        self.tok_wrap = tok_wrap = QWidget()
+        self.tok_flow = flow = FlowLayout(tok_wrap)
         for key, label in FRIENDLY_TOKENS:
             b = QPushButton(f"+ {label}")
             b.setObjectName("Token")
@@ -158,12 +160,20 @@ class ExportDialog(QDialog):
         lay.addWidget(name)
 
         # ---- collisions + dates
-        taken = Section("If that name is already taken")
-        self.c_seg = Segmented([("number", "Add a number"), ("skip", "Skip it"), ("replace", "Replace it")])
-        self.c_seg.set_value(self.s.collision)
-        self.c_seg.setToolTip("Your original files are never touched, whatever you pick")
-        self.c_seg.changed.connect(lambda k: self._set("collision", k))
-        taken.add(self.c_seg)
+        taken = Section("Name taken")
+        self.collision = combo(
+            [
+                ("number", "Add a number", "photo.jpg becomes photo_2.jpg"),
+                ("skip", "Skip the file", "Leave the existing file alone and don't convert this one"),
+                ("replace", "Replace the old copy", "Overwrite the earlier converted file"),
+            ],
+            self.s.collision,
+        )
+        self.collision.setToolTip("Your original files are never touched, whatever you pick")
+        self.collision.currentIndexChanged.connect(
+            lambda _i: self._set("collision", self.collision.currentData())
+        )
+        taken.add(self.collision)
         lay.addWidget(taken)
 
         after = Section("After converting")
@@ -199,7 +209,7 @@ class ExportDialog(QDialog):
 
     def _destination(self, key: str) -> None:
         if key == "folder" and not self.s.dest_folder and not self._choose_folder():
-            self.where.set_value(self.s.destination)
+            set_combo(self.where, self.s.destination)
             return
         self._set("destination", key)
         self._sync()
@@ -209,7 +219,7 @@ class ExportDialog(QDialog):
         d = QFileDialog.getExistingDirectory(self, "Save converted files to…", start)
         if d:
             self.s.dest_folder = d
-            self.where.set_value("folder")
+            set_combo(self.where, "folder")
             self._set("destination", "folder")
             self._sync()
             return True
@@ -223,7 +233,7 @@ class ExportDialog(QDialog):
         self._sync()
 
     def _custom_changed(self, text: str) -> None:
-        if self.styles.value() == "custom":
+        if self.styles.currentData() == "custom":
             self._set("naming", text)
 
     def _insert_token(self, key: str) -> None:
@@ -236,23 +246,36 @@ class ExportDialog(QDialog):
         self.d_folder_row.setVisible(dest == "folder")
         self.d_path.setText(self.s.dest_folder or "No folder chosen")
         self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
-        self.custom_box.setVisible(self.styles.value() == "custom")
+        self.custom_box.setVisible(self.styles.currentData() == "custom")
+        # The dialog sizes itself before it knows its width; reserve room for every wrapped row.
+        self.tok_wrap.ensurePolished()
+        for i in range(self.tok_flow.count()):
+            self.tok_flow.itemAt(i).widget().ensurePolished()
+        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(DIALOG_W - 2 * SPACE_5))
         self._update_example()
         self.adjustSize()
 
     def reload(self) -> None:
         """Refresh controls from the settings (after a recipe is applied)."""
-        widgets = (self.where, self.d_sub, self.styles, self.n_edit, self.c_seg, self.k_dates, self.k_verify)
+        widgets = (
+            self.where,
+            self.d_sub,
+            self.styles,
+            self.n_edit,
+            self.collision,
+            self.k_dates,
+            self.k_verify,
+        )
         for w in widgets:
             w.blockSignals(True)
         try:
-            self.where.set_value(self.s.destination)
+            set_combo(self.where, self.s.destination)
             self.d_sub.setText(self.s.subfolder_name)
             style = style_for(self.s.naming)
-            self.styles.set_value(style)
+            set_combo(self.styles, style)
             if style == "custom":
                 self.n_edit.setText(self.s.naming)
-            self.c_seg.set_value(self.s.collision)
+            set_combo(self.collision, self.s.collision)
             self.k_dates.setChecked(self.s.keep_dates)
             self.k_verify.setChecked(self.s.verify)
         finally:
@@ -311,13 +334,9 @@ class ExportDialog(QDialog):
         self.ex_to.setText(f"→  {out_dir.name}/{name}")
         self.ex_note.setText(note)
         self.ex_note.setVisible(bool(note))
-        for key, _, tpl in NAME_STYLES:
-            opt = self.styles.options[key]
-            if tpl:
-                opt.sub.setText(self._example_for(tpl))
-            else:
-                opt.sub.setText("Build it from name, format, date…")
-            opt.sub.setVisible(True)
+        for i, (_key, _, tpl) in enumerate(NAME_STYLES):  # hover an item to see its result
+            tip = self._example_for(tpl) if tpl else "Build it from name, format, date…"
+            self.styles.setItemData(i, tip, Qt.ItemDataRole.ToolTipRole)
 
     def showEvent(self, e):
         self._sync()

@@ -58,7 +58,7 @@ Add new icons there; don't load image files for UI icons.
 
 - Build layouts with the helpers in `listo/ui/widgets.py`:
   `vbox(widget, margins, spacing)` / `hbox(...)` (spacing defaults to `SPACE_2`),
-  and `Section("Title")` for a labelled group (caps label + its controls, `SPACE_1` apart).
+  `combo(...)` for dropdowns, and `Section("Title")` for a labelled group (caps label + its controls, `SPACE_1` apart).
 - Margins are `SPACE_*` tokens or `0`. Nothing else.
 
 ---
@@ -136,15 +136,17 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Icon-only button | `IconBtn` (QToolButton) | Trash, scissors, info, close. **Must** have a tooltip |
 | Chip | `Chip` | The per-file format pill on a card |
 | Token button | `Token` | "+ Name" buttons in the naming pattern builder |
-| Segmented control | `widgets.Segmented` | 2–3 short, mutually exclusive choices (Video/Photo/Audio, Where) |
-| Dropdown | `QComboBox` | Any list of 4+ choices, or choices with long labels |
-| Option list | `widgets.OptionList` | Choices that need a live example under each (naming styles) |
+| Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio). Not for settings |
+| Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
 | Checkbox | `QCheckBox` | On/off settings. Label says what happens when it's **on** |
 | Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
 
 Choosing a control:
-- Pick from a list → **dropdown**, not tabs or a row of buttons. Format, quality, size, LUT and recipe are dropdowns.
-- 2–3 short options that you want visible at once → segmented control.
+- Pick one setting → **dropdown**, always, even with only 2–3 choices. Format, quality, size, LUT, recipe,
+  Where, Name and Name taken are all dropdowns. Build them with `widgets.combo` / `set_combo` / `disable_item`.
+- The result of a choice is shown once, in a live preview (e.g. the example box in Export options),
+  not repeated under every option.
+- Tabs (`Segmented`) only switch which page of settings you see.
 - Actions that belong to a dropdown (Save recipe…, Choose a LUT file…) go **inside** that dropdown, below a separator.
 - Menus open from buttons with an icon (`+ Add`); the menu arrow is hidden.
 
@@ -154,7 +156,7 @@ Choosing a control:
 
 Listo talks like a helpful person, not like software.
 
-- **Fewer words.** Labels are 1–4 words. If something needs explaining, put it in a tooltip, not on screen.
+- **Fewer words.** Labels and section titles are 1–4 words ("Name taken", not "If that name is already taken"). If something needs explaining, put it in a tooltip, not on screen.
 - Plain language: "Double-check each file", not "Verify output integrity". "Keep every audio track", not "Map all audio streams".
 - Sentence case everywhere ("Export options", not "Export Options"). Section labels are drawn in caps by the
   stylesheet; write them in sentence case in code.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -121,104 +122,6 @@ class Segmented(QFrame):
         return ""
 
 
-class Option(QFrame):
-    clicked = Signal(str)
-
-    def __init__(
-        self,
-        key: str,
-        title: str,
-        subtitle: str = "",
-        parent: QWidget | None = None,
-        right: str = "",
-        tip: str = "",
-    ):
-        super().__init__(parent)
-        self.key = key
-        self._tip = tip
-        self.setObjectName("Option")
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setToolTip(tip)
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(tokens.SPACE_3, tokens.SPACE_2, tokens.SPACE_3, tokens.SPACE_2)
-        outer.setSpacing(tokens.SPACE_2)
-        lay = QVBoxLayout()
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-        self.title = QLabel(title)
-        self.title.setObjectName("OptionTitle")
-        lay.addWidget(self.title)
-        self.sub = QLabel(subtitle)
-        self.sub.setObjectName("OptionSub")
-        self.sub.setWordWrap(True)
-        self.sub.setVisible(bool(subtitle))
-        lay.addWidget(self.sub)
-        outer.addLayout(lay, 1)
-        self.right = QLabel(right)
-        self.right.setObjectName("OptionSub")
-        self.right.setVisible(bool(right))
-        outer.addWidget(self.right, 0, Qt.AlignmentFlag.AlignVCenter)
-        self._enabled = True
-
-    def set_selected(self, on: bool) -> None:
-        self.setProperty("selected", "true" if on else "false")
-        repolish(self)
-
-    def set_available(self, on: bool, why: str = "") -> None:
-        self._enabled = on
-        self.setProperty("enabled", "true" if on else "false")
-        for lbl in (self.title, self.sub, self.right):
-            lbl.setEnabled(on)  # the stylesheet greys out disabled labels
-        self.setToolTip(self._tip if on else why)
-        self.setCursor(Qt.CursorShape.PointingHandCursor if on else Qt.CursorShape.ArrowCursor)
-        repolish(self)
-
-    def mousePressEvent(self, e):
-        if self._enabled and e.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.key)
-
-
-class OptionList(QWidget):
-    """Vertical list of selectable cards (title + subtitle)."""
-
-    changed = Signal(str)
-
-    def __init__(self, items: list[tuple], parent: QWidget | None = None):
-        super().__init__(parent)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(tokens.SPACE_1)
-        self.options: dict[str, Option] = {}
-        for item in items:
-            key, title, sub = item[0], item[1], item[2]
-            right = item[3] if len(item) > 3 else ""
-            tip = item[4] if len(item) > 4 else ""
-            if key.startswith("#"):  # group header
-                lbl = QLabel(title)
-                lbl.setObjectName("GroupLabel")
-                lay.addSpacing(tokens.SPACE_1 if self.options else 0)
-                lay.addWidget(lbl)
-                continue
-            o = Option(key, title, sub, right=right, tip=tip)
-            o.clicked.connect(self._pick)
-            lay.addWidget(o)
-            self.options[key] = o
-        self._value = ""
-
-    def _pick(self, key: str) -> None:
-        if key != self._value:
-            self.set_value(key)
-            self.changed.emit(key)
-
-    def set_value(self, key: str) -> None:
-        self._value = key
-        for k, o in self.options.items():
-            o.set_selected(k == key)
-
-    def value(self) -> str:
-        return self._value
-
-
 class FlowLayout(QLayout):
     """Wraps children onto new lines (used for naming tokens)."""
 
@@ -297,3 +200,32 @@ class Toast(QLabel):
         self.raise_()
         self.show()
         self._t.start(ms)
+
+
+# ------------------------------------------------------------------ dropdowns
+def combo(items: list[tuple[str, str, str]], current: str) -> QComboBox:
+    """The standard dropdown. items: (key, label, tooltip); the key is the item's data."""
+    c = QComboBox()
+    for key, label, tip in items:
+        c.addItem(label, key)
+        if tip:
+            c.setItemData(c.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
+    c.setCurrentIndex(max(0, c.findData(current)))
+    c.setCursor(Qt.CursorShape.PointingHandCursor)
+    return c
+
+
+def set_combo(c: QComboBox, key: str) -> None:
+    """Select the item with this key without firing change signals."""
+    c.blockSignals(True)
+    c.setCurrentIndex(max(0, c.findData(key)))
+    c.blockSignals(False)
+
+
+def disable_item(c: QComboBox, key: str, why: str) -> None:
+    """Grey out one item and say why in its tooltip."""
+    i = c.findData(key)
+    item = c.model().item(i) if i >= 0 and hasattr(c.model(), "item") else None
+    if item is not None:
+        item.setEnabled(False)
+        item.setToolTip(why)
