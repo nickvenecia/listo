@@ -42,7 +42,7 @@ listo = ["assets/*", "assets/fonts/*"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
-extend-exclude = ["legacy", "build", "dist", "vendor"]
+extend-exclude = ["build", "dist", "vendor"]
 
 [tool.ruff.lint]
 select = [

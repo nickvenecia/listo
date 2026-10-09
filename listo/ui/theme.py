@@ -236,6 +236,8 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 /* ---------- export dialog */
 #Example, #Preview {{ background: {WELL}; border: 1px solid {BORDER}; border-radius: {RADIUS}px; }}
+QTextBrowser#Notes {{ background: {WELL}; color: {TEXT}; border: 1px solid {BORDER}; border-radius: {RADIUS}px;
+    padding: {SPACE_2}px; }}
 #ExFrom {{ color: {MUTED}; font-size: {TEXT_SM}px; }}
 #ExTo {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 

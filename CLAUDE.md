@@ -49,6 +49,10 @@ listo/
     storage.py     Storage & Cache: kinds of data in data_dir() with sizes, clear(key) (logs are emptied, not deleted)
     console.py     Debug console: opens the system terminal following the log files live (Mac .command file,
                    Windows PowerShell, Linux terminal); turns on DEBUG logging for the session
+    update.py      Updates: check() GitHub's latest release of REPO, install_kind() (mac-app / windows-installed /
+                   windows-portable / appimage / linux-folder / source), download() (size + SHA-256 from GitHub's
+                   digest), prepare() writes a helper script that waits for Listo to quit, swaps the new version in
+                   and reopens it; run() starts it detached
     sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
   ui/
     tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
@@ -66,6 +70,9 @@ listo/
     preview_dialog.py  "Preview": ClipPlayer at full size, converted vs original; double-clicking a clip opens it playing
     export_panel.py  the right panel: live preview (a small ClipPlayer; MainWindow._render_live / _live_settled), Saves As example, Where, Name,
                    Advanced (Name taken / After converting), and the Convert button (MainWindow adds it to .bottom)
+    update_dialog.py  Update window (what's new, Update Now -> download -> Restart Listo); CheckThread. MainWindow:
+                   _auto_check_updates (8 s after launch, at most daily, never when running from the code),
+                   btn_update in the bottom bar, ⋯ → Check for Updates…
     trim_dialog.py start/end sliders with ffmpeg frame-grab previews
     job_card.py    one file in the list
     workers.py     threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads)
@@ -76,7 +83,6 @@ scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor
 listo.spec                PyInstaller recipe
 packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh + build_appimage.sh
 .github/workflows/build.yml  lint, then build + test + smoke-test on 4 runners; tags v* publish a Release
-legacy/                   the original SimpleConverter (Swift + first Python port), for reference only
 ```
 
 ## Rules that matter
@@ -170,9 +176,13 @@ pyinstaller listo.spec --noconfirm     # build the app into dist/
 ```
 
 ## Releasing
-Bump `__version__` in `listo/__init__.py`, commit, `git tag vX.Y.Z && git push --tags`.
+Bump `__version__` in `listo/__init__.py`, turn CHANGELOG's top heading into that version, commit, then tag
+`vX.Y.Z` (GitHub Desktop: History → right-click the commit → Create Tag…, then Push origin) or
+`git tag vX.Y.Z && git push --tags`. CI builds every platform and publishes the Release (about 20-30 min).
 CI attaches: Listo-mac-apple-silicon.dmg, Listo-mac-intel.dmg, Listo-windows-setup.exe, Listo-windows-portable.zip,
-Listo-linux-x64.AppImage, Listo-linux-x64.tar.gz.
+Listo-linux-x64.AppImage, Listo-linux-x64.tar.gz. **These names are a contract**: the README's download links
+(releases/latest/download/<name>) and the in-app updater (update.asset_name) both depend on them, and the repo
+must stay public (private releases need a sign-in). update.REPO = "nickvenecia/listo".
 
 ## Ideas not done yet
 - Watch folder ("anything dropped in here gets converted")

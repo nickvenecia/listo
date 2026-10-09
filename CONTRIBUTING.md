@@ -19,7 +19,6 @@ listo/
 tests/         One test file per core module (test_<module>.py)
 scripts/       Build helpers (fetch_ffmpeg.py)
 packaging/     Installer files per OS
-legacy/        The old app. Reference only: don't import from it, don't lint it.
 ```
 
 - `core/` must work headless. If you need to report progress, take a callback or emit through a

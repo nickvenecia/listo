@@ -8,19 +8,25 @@ A batch converter for video, photos and audio, with nothing else to install. Run
 
 ## Download
 
-Grab the latest build from the **[Releases page](../../releases/latest)**:
+Click the one for your computer. These links always give you the newest version.
 
 | Your computer | Download |
 |---|---|
-| Mac with Apple Silicon (M1 and newer) | `Listo-mac-apple-silicon.dmg` |
-| Intel Mac | `Listo-mac-intel.dmg` |
-| Windows | `Listo-windows-setup.exe` (or the portable `.zip`) |
-| Linux | `Listo-linux-x64.AppImage` → double-click (allow it to run the first time) |
+| Mac with Apple Silicon (M1 and newer) | **[Listo for Mac (Apple Silicon)](https://github.com/nickvenecia/listo/releases/latest/download/Listo-mac-apple-silicon.dmg)** |
+| Intel Mac | **[Listo for Mac (Intel)](https://github.com/nickvenecia/listo/releases/latest/download/Listo-mac-intel.dmg)** |
+| Windows | **[Listo for Windows (installer)](https://github.com/nickvenecia/listo/releases/latest/download/Listo-windows-setup.exe)** · [portable .zip](https://github.com/nickvenecia/listo/releases/latest/download/Listo-windows-portable.zip) |
+| Linux | **[Listo for Linux (AppImage)](https://github.com/nickvenecia/listo/releases/latest/download/Listo-linux-x64.AppImage)** · [.tar.gz](https://github.com/nickvenecia/listo/releases/latest/download/Listo-linux-x64.tar.gz) |
+
+Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…" means Apple Silicon. Every version is on the **[Releases page](https://github.com/nickvenecia/listo/releases)**.
+
+**Installing:**
+- **Mac:** open the .dmg and drag Listo into Applications. The app isn't signed with a paid Apple developer account yet, so the first time macOS says it can't check it: open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. Only once.
+- **Windows:** run the installer (no admin needed). If SmartScreen pops up, click **More info → Run anyway**.
+- **Linux:** make the AppImage runnable (right-click → Properties → Allow executing, or `chmod +x`) and double-click it.
 
 ffmpeg and everything else comes bundled. There's no Homebrew, Python or terminal needed.
 
-**First launch on a Mac:** the app isn't signed with a paid Apple developer account yet, so macOS may say it can't check it. Open **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. You only have to do this once.
-**First launch on Windows:** if SmartScreen pops up, click **More info → Run anyway**.
+**Updates:** Listo checks for a new version once a day. When there is one, an **Update to …** button appears in the bottom bar: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo. You can also use **⋯ → Check for Updates…** (or turn the daily check off there).
 
 ## What it does
 

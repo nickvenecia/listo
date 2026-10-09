@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import APP_NAME, __version__
-from ..core import captions, console, join, naming, tape
+from ..core import captions, console, join, naming, tape, update
 from ..core.captions import sample_cues
 from ..core.engine import Conversion, Result
 from ..core.fileutil import reveal
@@ -70,6 +70,7 @@ from .preview_dialog import PreviewDialog
 from .sidebar import Sidebar
 from .storage_dialog import StorageDialog
 from .trim_dialog import TrimDialog, fmt_time
+from .update_dialog import CheckThread, UpdateDialog, restart_into
 from .widgets import FitScroll, StepHeader, Toast, repolish
 from .workers import (
     ConvertThread,
@@ -318,6 +319,9 @@ class MainWindow(QMainWindow):
 
         if not self.caps.ok:
             QTimer.singleShot(300, self._missing_ffmpeg)
+        self.latest: update.Release | None = None
+        self._upd_thread = None
+        QTimer.singleShot(8000, self._auto_check_updates)
 
     # ------------------------------------------------------------------ layout
     def _build(self) -> None:
@@ -432,6 +436,14 @@ class MainWindow(QMainWindow):
         for b in (self.btn_show, self.btn_pause, self.btn_cancel):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
+        self.btn_update = QPushButton()
+        self.btn_update.setObjectName("Ghost")
+        self.btn_update.setIcon(theme.icon("drop", tokens.ACCENT))
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.setToolTip("A newer Listo is out. See what's new and update")
+        self.btn_update.clicked.connect(self.open_update)
+        self.btn_update.hide()
+        f.addWidget(self.btn_update)
         # Tools that every system can reach (the menu bar only shows on a Mac)
         self.btn_more = QToolButton()
         self.btn_more.setObjectName("IconBtn")
@@ -444,6 +456,11 @@ class MainWindow(QMainWindow):
         more.addAction(theme.menu_icon("terminal"), "Open Debug Console", self.open_console)
         more.addAction(theme.menu_icon("file"), "Show the Log File", self._show_log)
         more.addSeparator()
+        more.addAction(theme.menu_icon("drop"), "Check for Updates…", self.check_updates)
+        self.act_auto_update = more.addAction("Check for Updates Automatically")
+        self.act_auto_update.setCheckable(True)
+        self.act_auto_update.setChecked(self.qs.value("updates/auto", True, bool))
+        self.act_auto_update.toggled.connect(lambda v: self.qs.setValue("updates/auto", v))
         more.addAction(theme.menu_icon("info"), f"About {APP_NAME}", self._about)
         self.btn_more.setMenu(more)
         self.btn_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -509,9 +526,75 @@ class MainWindow(QMainWindow):
         act(h, "Storage && Cache…", self.open_storage)
         act(h, "Open Debug Console", self.open_console, "Ctrl+Alt+D")
         act(h, "Show the Log File", self._show_log)
+        act(h, "Check for Updates…", self.check_updates)
         act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
         if sys.platform != "darwin":
             bar.hide()
+
+    # ------------------------------------------------------------------ updates (core/update.py)
+    def _auto_check_updates(self) -> None:
+        """Once a day at most, quietly: a button appears in the bottom bar if there's a newer Listo.
+        Not when running from the code (that's updated with git) or when switched off."""
+        if self._shut_down() or update.install_kind() == "source" or os.environ.get("LISTO_NO_UPDATE_CHECK"):
+            return
+        if not self.qs.value("updates/auto", True, bool):
+            return
+        known = str(self.qs.value("updates/latest", "") or "")
+        if known and update.is_newer(known, __version__):
+            self._show_update_button(known)  # found earlier; the window knows without asking again
+        if time.time() - float(self.qs.value("updates/last", 0) or 0) < update.CHECK_EVERY_S:
+            return
+        self.qs.setValue("updates/last", time.time())
+        self.check_updates(quiet=True)
+
+    def check_updates(self, quiet: bool = False) -> None:
+        if self._upd_thread is not None and self._upd_thread.isRunning():
+            return
+        th = CheckThread(self)
+        th.found.connect(lambda rel: self._update_found(rel, quiet))
+        th.failed.connect(lambda msg: self._update_failed(quiet))
+        self._upd_thread = th
+        th.start()
+
+    def _update_found(self, rel: update.Release, quiet: bool) -> None:
+        self.latest = rel
+        self.qs.setValue("updates/latest", rel.version)
+        if rel.newer:
+            self._show_update_button(rel.version)
+            if not quiet:
+                self.open_update()
+        else:
+            self.btn_update.hide()
+            if not quiet:
+                QMessageBox.information(self, "Up to Date", f"You have the newest Listo ({__version__}).")
+
+    def _update_failed(self, quiet: bool) -> None:
+        if not quiet:
+            QMessageBox.information(
+                self,
+                "Couldn't Check",
+                "Listo couldn't reach GitHub. Check the internet connection and try again.",
+            )
+
+    def _show_update_button(self, version: str) -> None:
+        self.btn_update.setText(f" Update to {version}")
+        self.btn_update.show()
+
+    def open_update(self) -> None:
+        if self.latest is None:  # known from an earlier day: fetch the details first
+            self.check_updates()
+            return
+        dlg = UpdateDialog(self.latest, self._update_busy, self)
+        if dlg.exec() and dlg.plan is not None:
+            restart_into(dlg.plan)
+
+    def _update_busy(self) -> str:
+        if self.running:
+            return "Finish or stop converting first, then restart."
+        return ""
+
+    def _shut_down(self) -> bool:
+        return getattr(self, "_shut", False)
 
     def open_storage(self) -> None:
         """What Listo keeps on this computer, and deleting it (ui/storage_dialog.py)."""
@@ -2109,6 +2192,8 @@ class MainWindow(QMainWindow):
         for th in list(self.active.values()) + list(self.downloads.values()):
             if not th.wait(15000):
                 _ORPHANS.append(th)  # never destroy a running QThread (that crashes on quit)
+        if self._upd_thread is not None and not self._upd_thread.wait(3000):
+            _ORPHANS.append(self._upd_thread)
         self.export_panel.player.release()
         self.pool.clear()
         self.pool.waitForDone(3000)

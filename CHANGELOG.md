@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 2.3.0
+- **Updates inside Listo**: once a day Listo checks GitHub for a newer version; an **Update to …** button appears in the bottom bar, shows what's new, downloads the right file for your computer (checked against GitHub's fingerprint), swaps it in and reopens Listo. Also in ⋯ → Check for Updates…, where the daily check can be turned off
+- **Download links that always give the newest version** at the top of the README (Mac Apple Silicon / Intel, Windows, Linux)
+- The old SimpleConverter code (legacy/) is gone from the project; it stays in the history
 - Tape glitches tear what's on the tape (picture, date, timecode, REC) but never PLAY / STOP or captions, which the VCR draws on top, like a real VCR
 - **STOP ■ at the End** is its own switch under the PLAY badge (VHS look): STOP comes up for the last moment of the video like pressing stop on a VCR, carrying on to the end screen if there is one
 - **Tape glitches look like real lost tracking** now, modelled on ntsc-rs (the open-source VHS emulator used as an After Effects / Resolve plugin): the lines wave sideways, a band of torn lines and snow rolls up the picture, the bottom bends (head switching), the picture hops, color slips and drops out, and the sound flutters, goes dull and crunches. It hits at once and settles, about a third of a second at each cut
