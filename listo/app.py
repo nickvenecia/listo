@@ -14,6 +14,7 @@ from . import APP_NAME, __version__
 from .core.log import get_logger, setup_logging
 from .core.paths import data_dir
 from .ui import theme
+from .ui.widgets import ComboItemDelegate
 
 log = get_logger(__name__)
 
@@ -104,6 +105,10 @@ class _RoundPopups(QObject):
             if isinstance(obj, QMenu) and obj.isWindow():
                 self._see_through(obj)
             elif isinstance(obj, QComboBox):
+                # The default menu-style painter ignores the stylesheet's rounded, padded
+                # items (square highlight on macOS); the standard one follows it.
+                if not isinstance(obj.itemDelegate(), ComboItemDelegate):
+                    obj.setItemDelegate(ComboItemDelegate(obj))
                 container = obj.view().window()
                 if container is not obj.window():
                     self._see_through(container)

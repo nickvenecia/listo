@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Dropdown lists have a rounded highlight and proper row spacing on every computer (was square on Mac)
+- Add is now a + icon next to the trash
+- README: the Listo name and icon belong to Nick; forks should use their own
 - Export options: Where, Name and "Name taken" are dropdowns; all naming buttons show when building your own pattern
 - Every button, dropdown and text field is the same height; spacing, type and colors follow one set of rules ([DESIGN.md](DESIGN.md))
 - Linux download is now one double-clickable file (AppImage)

@@ -136,7 +136,7 @@ QPushButton#Secondary {{ background: transparent; color: {MUTED}; }}
 QPushButton#Secondary:hover {{ background: {CARD_HOVER}; color: {TEXT}; }}
 QPushButton#Danger {{ background: transparent; color: {BAD}; }}
 QPushButton#Danger:hover {{ background: {BAD_TINT}; }}
-QPushButton::menu-indicator {{ image: none; width: 0; }}
+QPushButton::menu-indicator, QToolButton::menu-indicator {{ image: none; width: 0; }}
 
 /* ---------- small controls: all SMALL_H tall */
 QToolButton#IconBtn {{ background: transparent; border: none; border-radius: {RADIUS_SM}px;

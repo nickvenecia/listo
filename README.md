@@ -102,4 +102,13 @@ To get rid of the "can't check this app" warning you need an Apple Developer acc
 Replace `listo/assets/icon.png` with a 1024×1024 PNG (transparent corners). The Mac and Windows icons are generated from it at build time.
 
 ## License
-Listo is GPL-3.0. It bundles [FFmpeg](https://ffmpeg.org) (GPL) and other open-source components; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Copyright © Nick Venecia.
+
+Listo's code is open source under GPL-3.0: you're welcome to read it, learn from it, change it and share it,
+as long as what you share stays open source under the same license. It bundles [FFmpeg](https://ffmpeg.org) (GPL)
+and other open-source components; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### Name and icon
+The name **Listo**, the "listo." wordmark and the app icon are **not** covered by the GPL. They belong to
+Nick Venecia and identify the official app. If you publish a modified version, please give it a different
+name and icon so people don't mistake it for Listo. Saying that it's "based on Listo" is welcome.

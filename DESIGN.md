@@ -91,8 +91,10 @@ Weights: `WEIGHT_REGULAR` 400 for text, `WEIGHT_MEDIUM` 500 for controls,
 | `RADIUS_LG` | 12 | File cards, popups and menus, boxes inside dialogs |
 | `RADIUS_XL` | 16 | The drop zone |
 
-Menus and dropdown lists are **always rounded**, with transparent corners. `app._RoundPopups`
-handles this for every `QMenu` and dropdown automatically. Don't create popups that bypass it.
+Menus and dropdown lists are **always rounded**, with transparent corners, and so is the highlighted
+row inside them. `app._RoundPopups` handles this for every `QMenu` and dropdown automatically: it makes
+the popup window see-through and gives every dropdown `widgets.ComboItemDelegate` (rounded highlight,
+`CONTROL_H - SPACE_2` rows, thin separator lines). Don't create popups that bypass it.
 
 ---
 
@@ -131,9 +133,9 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Primary button | `Primary` | The single main action in a view (Convert, Done) |
 | Normal button | *(none)* | Everything else in dialogs (Change…, Cancel) |
 | Secondary button | `Secondary` | Footer buttons beside the primary one (Export options) |
-| Quiet button | `Ghost` | Toolbar actions (+ Add), Show files, Pause, Stop |
+| Quiet button | `Ghost` | Show files, Pause, Stop |
 | Danger button | `Danger` | Destructive confirmations only |
-| Icon-only button | `IconBtn` (QToolButton) | Trash, scissors, info, close. **Must** have a tooltip |
+| Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, trash), scissors, info, close. **Must** have a tooltip |
 | Chip | `Chip` | The per-file format pill on a card |
 | Token button | `Token` | "+ Name" buttons in the naming pattern builder |
 | Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio). Not for settings |
@@ -148,7 +150,8 @@ Choosing a control:
   not repeated under every option.
 - Tabs (`Segmented`) only switch which page of settings you see.
 - Actions that belong to a dropdown (Save recipe…, Choose a LUT file…) go **inside** that dropdown, below a separator.
-- Menus open from buttons with an icon (`+ Add`); the menu arrow is hidden.
+- Menus open from icon buttons (the toolbar `+`) with `InstantPopup`; the menu arrow is hidden.
+- The toolbar holds only the wordmark on the left and icon buttons on the right. No text buttons up there.
 
 ---
 
@@ -170,7 +173,7 @@ Listo talks like a helpful person, not like software.
 ## 8. Layout of the main window
 
 ```
-┌ toolbar: wordmark · + Add ·············· N FILES · 🗑 ┬ sidebar (SIDEBAR_W) ─┐
+┌ toolbar: wordmark ················ N FILES · + · 🗑 ┬ sidebar (SIDEBAR_W) ─┐
 │ file list (cards, SPACE_2 apart)  — or drop zone     │ RECIPE dropdown      │
 │                                                      │ Video | Photo | Audio│
 │                                                      │ sections…            │

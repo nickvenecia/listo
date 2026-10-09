@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
@@ -12,6 +13,7 @@ from PySide6.QtWidgets import (
     QLayout,
     QPushButton,
     QSizePolicy,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -229,3 +231,30 @@ def disable_item(c: QComboBox, key: str, why: str) -> None:
     if item is not None:
         item.setEnabled(False)
         item.setToolTip(why)
+
+
+class ComboItemDelegate(QStyledItemDelegate):
+    """Draws dropdown rows: rounded highlight from the stylesheet, standard row height,
+    and a thin line for separators (Qt's default painter ignores the stylesheet on macOS)."""
+
+    ROW_H = tokens.CONTROL_H - tokens.SPACE_2
+    SEP_H = tokens.SPACE_2 + 1
+
+    @staticmethod
+    def _is_separator(index) -> bool:
+        return index.data(Qt.ItemDataRole.AccessibleDescriptionRole) == "separator"
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        size.setHeight(self.SEP_H if self._is_separator(index) else max(size.height(), self.ROW_H))
+        return size
+
+    def paint(self, painter, option, index):
+        if self._is_separator(index):
+            y = option.rect.center().y()
+            painter.save()
+            painter.setPen(QColor(tokens.BORDER_STRONG))
+            painter.drawLine(option.rect.left() + tokens.SPACE_2, y, option.rect.right() - tokens.SPACE_2, y)
+            painter.restore()
+            return
+        super().paint(painter, option, index)
