@@ -463,7 +463,7 @@ def build(
                 pix = vargs[vargs.index("-pix_fmt") + 1] if "-pix_fmt" in vargs else ""
 
                 def between(i: str, o: str) -> str:
-                    return tape.video_graph(windows, out_size, i, o, pix)
+                    return tape.video_graph(windows, out_size, i, o, pix, tape.glitch_seed(src, trim))
 
             graph = f"[0:{info.video_index}]{pre}[bin];" + burn.graph(
                 1, "bin", "bout" if post else "vout", between
@@ -477,7 +477,7 @@ def build(
             graph = graph[:cut_at] + "[gin]" + graph[cut_at + len("[vout]") :]
             size = (conform.width, conform.height) if conform and conform.width else out_size
             pix = vargs[vargs.index("-pix_fmt") + 1] if "-pix_fmt" in vargs else ""
-            graph += ";" + tape.video_graph(windows, size, "gin", "vout", pix)
+            graph += ";" + tape.video_graph(windows, size, "gin", "vout", pix, tape.glitch_seed(src, trim))
         args += ["-filter_complex", graph]
         args[args.index(f"0:{info.video_index}")] = "[vout]"
     elif vf:

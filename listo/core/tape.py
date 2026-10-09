@@ -76,73 +76,109 @@ def _hash(x: str) -> str:
     return f"mod(abs(sin({x}))*43758.5453,1)"
 
 
-def _glitch_geq(a: float, b: float, n: int, top: int) -> str:
-    """One tracking glitch from a to b, the way ntsc-rs (an open-source VHS emulator) models a tape
-    losing its tracking: the picture's lines wave sideways, a band of torn lines and white streaks
-    rolls up the picture, the bottom lines bend (head switching), the picture hops a few lines,
-    some lines lose their color and the color slips right of the picture. It hits at once and
-    settles (env). Every number comes from the frame (N), the row and this glitch's seed, so the
-    preview and the file glitch identically."""
-    rng = random.Random(n * 7919 + round(a * 1000))  # noqa: S311 — looks, not security
-    seed = rng.uniform(0, 1000)
-    band_at, band_speed, band_h = rng.uniform(0.35, 1.0), rng.uniform(-1.6, -0.5), rng.uniform(0.07, 0.16)
+def _glitch_geq(a: float, b: float, n: int, top: int, seed: int = 0) -> str:
+    """One tracking glitch from a to b, after ntsc-rs (an open-source VHS emulator) and real tape:
+    the lines drift sideways in an uneven wave and jitter one by one; a band of lost tracking rolls
+    through the picture, its lines torn sideways and washed with streaky analog noise (every line
+    different, ragged edges); a few lines carry a bright streak of snow that fades along the line;
+    the bottom lines bend (head switching); sometimes the picture hops; color slips right and drops
+    out on some lines. It hits at once and settles (env). Every glitch is different (its own
+    shape, speed, band and strength from `seed` + which glitch it is); the same file always glitches
+    the same way, so the preview matches the result."""
+    rng = random.Random(seed * 7919 + n * 104729 + round(a * 1000))  # noqa: S311 — looks, not security
+    r = rng.uniform
+    s = r(0, 1000)
+    strength = r(0.7, 1.0)
+    wave = r(0.002, 0.0045)
+    f1, f2, f3 = r(18, 45), r(60, 120), r(150, 260)
+    v1, v2, v3 = r(8, 25), r(15, 40), r(30, 60)
+    p1, p2 = r(0, 6.3), r(0, 6.3)
+    band_at, band_h = r(0.3, 1.0), r(0.05, 0.14)
+    band_speed = r(0.4, 1.8) * (-1 if rng.random() < 0.7 else 1)  # mostly rolls up
+    tear = r(0.025, 0.06)
+    bend = r(0.02, 0.045)
+    hop = r(0.008, 0.02) if rng.random() < 0.6 else 0.0
     mid = (top + 1) // 2
     d = max(b - a, 0.01)
     common = (
         f"st(0,clip((T-{a:.3f})/{d:.3f},0,1));"
-        "st(0,min(1,ld(0)*6)*pow(1-ld(0),0.6));"  # strength: hits at once, then settles
+        f"st(0,{strength:.2f}*min(1,ld(0)*6)*pow(1-ld(0),0.6));"  # strength: hits at once, then settles
         "st(1,Y/H);"  # how far down the picture (0 top, 1 bottom; W and H are this plane's size)
         "st(2,floor(Y/SH));"  # the picture line
-        f"st(3,{_hash(f'ld(2)*12.9898+N*78.233+{seed:.2f}')});"  # this line's random number
-        f"st(4,mod({band_at:.3f}+(T-{a:.3f})*{band_speed:.3f},1.3)-0.15);"  # the rolling band
-        f"st(5,between(ld(1),ld(4),ld(4)+{band_h:.3f}));"
-        "st(6,ld(0)*W*(0.007*(sin(ld(1)*37+T*23)+0.7*sin(ld(1)*91-T*41))"  # lines wave sideways
-        "+0.07*ld(5)*(ld(3)-0.35)"  # torn lines in the band
-        "+0.06*pow(max(0,ld(1)-0.93)/0.07,1.5)"  # head switching at the bottom
-        "+0.003*(ld(3)-0.5)));"  # every line a little unsteady
-        f"st(7,H*0.03*ld(0)*gt({_hash(f'N*91.7+{seed:.2f}')},0.72));"  # the picture hops
+        f"st(3,{_hash(f'ld(2)*12.9898+N*78.233+{s:.2f}')});"  # this line's random number
+        f"st(4,mod({band_at:.3f}+(T-{a:.3f})*{band_speed:.3f},1.3)-0.15);"  # where the band is
+        f"st(4,between(ld(1),ld(4)-0.012*ld(3),ld(4)+{band_h:.3f}"
+        f"+0.012*{_hash(f'ld(2)*3.71+N*1.3+{s:.2f}')}));"  # inside it (ragged edges)?
+        f"st(6,ld(0)*W*({wave:.4f}*(0.6*sin(ld(1)*{f1:.1f}+T*{v1:.1f}+{p1:.2f})"  # uneven sideways drift
+        f"+0.3*sin(ld(1)*{f2:.1f}-T*{v2:.1f}+{p2:.2f})+0.1*sin(ld(1)*{f3:.1f}+T*{v3:.1f}))"
+        "+0.0025*(ld(3)-0.5)"  # every line a little unsteady
+        f"+ld(4)*{tear:.3f}*(ld(3)-0.3)*(0.4+ld(3))"  # torn lines in the band
+        f"+{bend:.3f}*pow(max(0,ld(1)-0.955)/0.045,1.5)*(0.7+0.6*ld(3))));"  # head switching
+        f"st(7,H*{hop:.3f}*ld(0)*gt({_hash(f'N*91.7+{s:.2f}')},0.8));"  # the picture hops
+        # a streak of snow on this line? (more in the band and at the bottom): length 8, start 5
+        f"st(5,{_hash(f'ld(2)*7.77+N*1.913+{s:.2f}')});"
+        "st(8,gt(ld(0)*(0.03+0.45*ld(4)+0.2*gt(ld(1),0.95)),ld(5))*W*(0.004+0.035*ld(3)*ld(3)));"
+        f"st(5,W*{_hash(f'ld(2)*3.33+N*7.1+{s:.2f}')})"
     )
     # The per-line numbers are worked out once per line, not for every pixel (vars 0-8 keep them;
     # 9 remembers which line of which frame they belong to): about 4x faster.
-    once = "if(not(eq(ld(9),Y+N*65536+1)),st(9,Y+N*65536+1);" + common.rstrip(";")
+    once = "if(not(eq(ld(9),Y+N*65536+1)),st(9,Y+N*65536+1);" + common
+    # How much of a band line is noise: lines differ a lot (some clean but torn, some all noise).
+    wash = "min(0.9,ld(4)*ld(0)*1.2*pow(ld(3),1.3))"
+    # The band's noise: value noise along the line (random every 4 pixels, blended), so it streaks
+    # like analog noise instead of making a pattern; every line, every frame its own.
+    g = f"floor(X/4)*17.13+ld(2)*311.7+N*3.1+{s:.2f}"
+    g1 = f"(floor(X/4)+1)*17.13+ld(2)*311.7+N*3.1+{s:.2f}"
+    fr = "(X/4-floor(X/4))"
+    noise = f"({_hash(g)}*(1-{fr})+{_hash(g1)}*{fr})"
     luma = (
         once
         + ");"
-        # snow / streak numbers per short stretch of a line (var 4 is free once the line is worked out)
-        + "if(not(eq(ld(4),floor(X/(W*0.015))+2)),st(4,floor(X/(W*0.015))+2);"
-        + f"st(8,{_hash(f'ld(4)*7.13+ld(2)*311.7+N*3.1+{seed:.2f}')}));"
-        + f"clip(lum(X-ld(6),Y+ld(7))*(1-0.18*ld(0))+{top}*ld(0)*(0.05"
-        + "+ld(5)*0.6*(ld(8)-0.45)*gt(ld(8),0.45)"  # streaks in the band
-        + "+0.75*gt(ld(8),1-0.006*ld(0))),"  # snow
-        + f"0,{top})"
+        # a shifted line leaves the blanking (black) behind at the left edge, like a real VCR
+        + f"clip(if(lt(X-ld(6),0),{round(16 * top / 255)},lum(X-ld(6),Y+ld(7)))*(1-{wash})"
+        + f"+if(ld(4),{wash}*{top}*(0.15+0.85*{noise}*(0.65+0.35*sin(X/W*(9+15*ld(3))+N*0.7))),0)"
+        # snow streak: bright where it starts, fading along the line
+        + f"+if(ld(8)*between(X,ld(5),ld(5)+ld(8)),{top}*0.8*pow(1-(X-ld(5))/(ld(8)+1),2),0)"
+        + f",0,{top})"
     )
 
     def chroma(plane: str) -> str:
         return (
             once
-            + f";st(8,gt(0.12*ld(0),{_hash(f'ld(2)*57.31+N*1.37+{seed:.2f}')})));"  # lines that lose color
-            + f"{mid}+({plane}(X-ld(6)-W*0.008*ld(0),Y+ld(7))-{mid})*(1-ld(8))*(1-0.3*ld(5)*ld(0))"
+            + f";st(8,gt(0.12*ld(0),{_hash(f'ld(2)*57.31+N*1.37+{s:.2f}')})));"  # lines that lose color
+            + f"{mid}+({plane}(X-ld(6)-W*0.006*ld(0),Y+ld(7))-{mid})*(1-ld(8))*(1-0.8*ld(4)*ld(0))"
         )
 
     return f"geq=lum='{luma}':cb='{chroma('cb')}':cr='{chroma('cr')}':enable='between(t,{a:.3f},{b:.3f})'"
 
 
 def video_graph(
-    windows: list[tuple[float, float]], size: tuple[int, int], src: str, out: str, pix_fmt: str = ""
+    windows: list[tuple[float, float]],
+    size: tuple[int, int],
+    src: str,
+    out: str,
+    pix_fmt: str = "",
+    seed: int = 0,
 ) -> str:
     """Filter-graph text that glitches [src] into [out] during the windows (the picture's clock
     must start at 0, as it does on the burn-in path). The picture is put in the encoder's own pixel
-    format first (no extra conversion), so the glitch knows its brightness range."""
+    format first (no extra conversion), so the glitch knows its brightness range. `seed` makes each
+    clip's glitches its own (glitch_seed)."""
     W, _H = size
     deep = "10" in pix_fmt or pix_fmt == "p010le"
     top = 1023 if deep else 255
     fmt = pix_fmt if pix_fmt.startswith("yuv") else ("yuv420p10le" if deep else "yuv420p")
     chain = [f"format={fmt}"]
-    chain += [_glitch_geq(a, b, n, top) for n, (a, b) in enumerate(windows)]
+    chain += [_glitch_geq(a, b, n, top, seed) for n, (a, b) in enumerate(windows)]
     chain.append(
         f"avgblur=sizeX={max(2, W // 160)}:sizeY=1:planes=6:enable='{_when(windows)}'"
     )  # color bleeds
     return f"[{src}]" + ",".join(chain) + f"[{out}]"
+
+
+def glitch_seed(src: str, trim: tuple[float, float] | None) -> int:
+    """Each clip (and each trim of it) glitches its own way; the same clip always the same way."""
+    return zlib.crc32(f"{Path(src).name}:{trim[0] if trim else 0:.3f}".encode())
 
 
 def audio_filters(windows: list[tuple[float, float]]) -> list[str]:

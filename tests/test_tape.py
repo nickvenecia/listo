@@ -90,7 +90,7 @@ def test_glitch_filters_go_on_picture_and_sound(tmp_path: Path):
     plain = Conversion(str(src), probe(src), _vhs(video_preset="h264"), capabilities(), set()).run()
     hit = _diff(r.output, plain.output, 0.12, tmp_path)
     after = _diff(r.output, plain.output, 1.2, tmp_path)
-    assert hit > 8 and after < 2, (hit, after)
+    assert hit > 3 and hit > 3 * after and after < 2, (hit, after)
 
 
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")

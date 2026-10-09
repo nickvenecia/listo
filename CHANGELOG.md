@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2.3.0
+- **Glitches look like real tape, and no two are the same**: no more confetti of identical white dashes or a blocky band. Now the lines drift unevenly and jitter one by one, a band of lost tracking rolls through with streaky analog noise (every line different, ragged edges, torn lines leaving black at the left edge like a real VCR), a few lines get a fading streak of snow, the bottom bends and the picture sometimes hops. Every glitch gets its own shape, speed, position and strength, different for every clip
 - **Burn-In is tidier**: with the VHS look, a **VHS Tape** section right under Clip Info holds four dropdowns that read top to bottom: what shows at the start (PLAY ► / ● REC / nothing), at the end (STOP ■ / nothing), the start & end screen (none / VCR blue / black / color bars & tone / custom color) and glitches (none / at each cut / now and then / often; the random ones also glitch the cuts). Old recipes keep their cut glitch
 - **Updates inside Listo**: once a day Listo checks GitHub for a newer version; an **Update to …** button appears in the bottom bar, shows what's new, downloads the right file for your computer (checked against GitHub's fingerprint), swaps it in and reopens Listo. Also in ⋯ → Check for Updates…, where the daily check can be turned off
 - **Download links that always give the newest version** at the top of the README (Mac Apple Silicon / Intel, Windows, Linux)
