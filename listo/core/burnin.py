@@ -185,7 +185,7 @@ def _look(style: str, size: int) -> Look:
         # Like a VCR / camcorder on-screen display: solid, outlined, a touch soft, slightly mis-registered.
         return Look(
             ImageFont.truetype(str(VHS_FONT), size), (242, 242, 236, 255), max(4, size // 5),
-            outline=max(1, round(size / 18)), soften=max(0.5, size / 70), fringe=max(1, round(size / 36)),
+            outline=max(1, round(size / 18)), soften=max(0.5, size / 70), fringe=max(1, round(size / 90)),
         )  # fmt: skip
     return Look(
         ImageFont.truetype(str(CLEAN_FONT), size), (255, 255, 255, 255), max(4, size // 3), box=(0, 0, 0, 140)
@@ -198,8 +198,10 @@ def _finish(text_layer: Image.Image, look: Look) -> Image.Image:
     if look.box:
         out.paste(Image.new("RGBA", text_layer.size, look.box), (0, 0))
     if look.fringe:
-        alpha = text_layer.getchannel("A").point(lambda a: a * 0.55)
-        for color, dx in (((255, 40, 60), look.fringe), ((40, 140, 255), -look.fringe)):
+        alpha = text_layer.getchannel("A").point(
+            lambda a: a * 0.3
+        )  # a hint, like slightly mis-registered tape
+        for color, dx in (((255, 70, 70), look.fringe), ((70, 150, 255), -look.fringe)):
             ghost = Image.new("RGBA", text_layer.size, (*color, 0))
             ghost.putalpha(alpha)
             out.alpha_composite(ghost, (max(0, dx), 0), (max(0, -dx), 0))
@@ -398,7 +400,7 @@ def _caption_look(s: Settings, size: int) -> Look:
     if s.caption_style == "vhs":
         look = _look("vhs", size)
         if s.caption_box:  # closed-caption look: solid black behind each line, crisp letters
-            look.outline, look.fringe = 0, max(1, look.fringe // 2)
+            look.outline = 0
         return look
     font = ImageFont.truetype(str(CLEAN_FONT), size)
     return Look(

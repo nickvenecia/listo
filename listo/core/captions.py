@@ -283,7 +283,11 @@ def _model(name: str, on_status: Callable[[str], None]):
             on_status(f"Downloading the speech model (one time{', ' + size if size else ''})…")
             try:
                 model = WhisperModel(
-                    name, device="auto", compute_type="int8", download_root=str(models_dir())
+                    name,
+                    device="auto",
+                    compute_type="int8",
+                    download_root=str(models_dir()),
+                    cpu_threads=_threads(),
                 )
             except Exception as e:
                 log.warning("speech model download failed", exc_info=True)

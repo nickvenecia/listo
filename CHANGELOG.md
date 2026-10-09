@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- Fix: Preview window crashed when opened with clips in the list
+- VHS look: much subtler colour fringing (1 px at 1080, a third of the strength)
+- Captions use half the processor on the first run too (while the model downloads)
 - **New layout**: settings on the left, your files in the middle, and an export panel on the right with a **live preview** of the selected (or first) clip — or a test pattern when the list is empty — plus where files go, their names and the Convert button. Click the preview for a bigger one you can scrub
 - **Captions are made in the background** as soon as they're on (low priority, half the processor), with progress on each clip's CC icon; Convert opens the check once they're ready. Previews show sample text until the real words exist
 - Groups renamed: Image, Burn-In, Encoding. Labels are in Title Case; no more all-caps section labels

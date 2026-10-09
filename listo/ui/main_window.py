@@ -939,7 +939,12 @@ class MainWindow(QMainWindow):
             return
         start = next((n for n, it in enumerate(clips) if it.id in self.selected), 0)
         PreviewDialog(
-            [(Path(it.path).name, it.path, it.info, self.eff(it)) for it in clips], start, self
+            [
+                (Path(it.path).name, it.path, it.info, self.eff(it), self._clip_cues(it, self.eff(it)))
+                for it in clips
+            ],
+            start,
+            self,
         ).exec()
 
     def eff(self, it: Item) -> Settings:

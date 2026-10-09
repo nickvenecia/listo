@@ -185,3 +185,40 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     ]
     w.close()
     app.processEvents()
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_preview_window_opens_for_clips_and_for_an_empty_list(tmp_path: Path, monkeypatch):
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.main_window as mw
+    import listo.ui.preview_dialog as pd
+    import listo.ui.sidebar as sb
+    from listo.core import sample
+
+    ini = str(tmp_path / "t.ini")
+    for mod in (mw, sb):
+        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
+    monkeypatch.setattr(sample, "data_dir", lambda: tmp_path / "data")
+    shown = []
+    monkeypatch.setattr(pd.PreviewDialog, "exec", lambda self: shown.append([c[0] for c in self.clips]) or 0)
+    app = QApplication.instance() or QApplication([])
+    w = mw.MainWindow()
+    w.settings.captions = True  # sample captions in the preview
+    w.open_preview()  # empty list: the sample picture
+    clip = tmp_path / "a.mov"
+    ff("-f", "lavfi", "-i", "testsrc2=s=320x240:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip))
+    w.add_paths([str(clip)])
+    end = time.monotonic() + 30
+    while not all(it.state == "ready" for it in w.items.values()) and time.monotonic() < end:
+        app.processEvents()
+        time.sleep(0.02)
+    w.open_preview()
+    assert shown == [["Sample picture"], ["a.mov"]]
+    w.close()
+    app.processEvents()
