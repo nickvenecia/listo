@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLineEdit, QMessageBox,
+    QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QMessageBox,
     QScrollArea, QSlider, QStackedWidget, QVBoxLayout, QWidget,
 )
 
@@ -15,11 +15,12 @@ from ..presets import (
     VIDEO_BY_KEY, VIDEO_PRESETS, Settings,
 )
 from ..tools import Capabilities
-from . import theme
 from .widgets import Segmented, section_label
 
 SIDEBAR_W = 310
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
+LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
+LUT_EXTS = {".cube", ".3dl", ".dat", ".m3d", ".csp"}
 
 PHOTO_TIPS = {
     "jpeg": "Smallest, works everywhere", "png": "Lossless, keeps transparency",
@@ -76,35 +77,6 @@ def _page() -> tuple[QScrollArea, QVBoxLayout]:
     lay.setSpacing(6)
     area.setWidget(inner)
     return area, lay
-
-
-class PathField(QLineEdit):
-    """A read-only field that shows a file name; click it to choose, × to clear."""
-
-    clicked = Signal()
-    cleared = Signal()
-
-    def __init__(self, placeholder: str):
-        super().__init__()
-        self.setObjectName("PathField")
-        self.setReadOnly(True)
-        self.setPlaceholderText(placeholder)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.addAction(theme.icon("file", theme.MUTED, 14), QLineEdit.ActionPosition.LeadingPosition)
-        self._clear = self.addAction(theme.icon("x", theme.MUTED, 14), QLineEdit.ActionPosition.TrailingPosition)
-        self._clear.setToolTip("Remove")
-        self._clear.triggered.connect(self.cleared.emit)
-        self._clear.setVisible(False)
-
-    def set_path(self, path: str) -> None:
-        self.setText(Path(path).name if path else "")
-        self.setToolTip(path)
-        self._clear.setVisible(bool(path))
-
-    def mousePressEvent(self, e):  # noqa: N802
-        if e.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(e)
 
 
 class Sidebar(QFrame):
@@ -205,10 +177,10 @@ class Sidebar(QFrame):
         lb.setContentsMargins(0, 6, 0, 0)
         lb.setSpacing(6)
         lb.addWidget(section_label("LUT"))
-        self.lut = PathField("Choose a LUT (.cube)…")
+        self.lut = QComboBox()
+        self.lut.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lut.setToolTip("Apply a LUT to every video — handy for review copies")
-        self.lut.clicked.connect(self._choose_lut)
-        self.lut.cleared.connect(lambda: (self._set("lut_path", ""), self._sync_lut()))
+        self.lut.activated.connect(self._lut_picked)
         lb.addWidget(self.lut)
         lb.addSpacing(4)
         lb.addWidget(section_label("Burn in"))
@@ -300,7 +272,7 @@ class Sidebar(QFrame):
         self.changed.emit()
 
     def notify_external_change(self) -> None:
-        """Settings changed elsewhere (e.g. Save options) — keep the recipe picker honest."""
+        """Settings changed elsewhere (e.g. Export options) — keep the recipe picker honest."""
         self._match_recipe()
 
     def _video_preset(self, key: str) -> None:
@@ -344,16 +316,71 @@ class Sidebar(QFrame):
         self.p_q_label.setText(f"QUALITY · {v}")
         self._set("photo_quality", v)
 
-    def _choose_lut(self) -> None:
-        start = str(Path(self.s.lut_path).parent) if self.s.lut_path else str(Path.home())
-        f, _ = QFileDialog.getOpenFileName(
-            self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)")
-        if f:
-            self._set("lut_path", f)
-            self._sync_lut()
+    # ---- LUTs: a dropdown of your LUT folder + recently used LUTs
+    def _recent_luts(self) -> list[str]:
+        try:
+            data = json.loads(self.qs.value("recent_luts", "[]") or "[]")
+        except (ValueError, TypeError):
+            data = []
+        return [p for p in data if isinstance(p, str) and Path(p).is_file()]
+
+    def _folder_luts(self) -> list[str]:
+        folder = str(self.qs.value("lut_folder", "") or "")
+        if not folder or not Path(folder).is_dir():
+            return []
+        try:
+            return sorted((str(p) for p in Path(folder).rglob("*") if p.suffix.lower() in LUT_EXTS and p.is_file()),
+                          key=lambda p: Path(p).name.lower())[:300]
+        except OSError:
+            return []
+
+    def _remember_lut(self, path: str) -> None:
+        recent = [path] + [p for p in self._recent_luts() if p != path]
+        self.qs.setValue("recent_luts", json.dumps(recent[:10]))
 
     def _sync_lut(self) -> None:
-        self.lut.set_path(self.s.lut_path)
+        c = self.lut
+        c.blockSignals(True)
+        c.clear()
+        c.addItem("No LUT", "")
+        folder = self._folder_luts()
+        recent = [p for p in self._recent_luts() if p not in folder]
+        current = self.s.lut_path
+        if current and current not in folder and current not in recent:
+            recent.insert(0, current)
+        for group in (recent, folder):
+            if group:
+                c.insertSeparator(c.count())
+                for p in group:
+                    c.addItem(Path(p).stem, p)
+                    c.setItemData(c.count() - 1, p, Qt.ItemDataRole.ToolTipRole)
+        c.insertSeparator(c.count())
+        c.addItem("Choose a LUT file…", LUT_FILE)
+        lut_folder = str(self.qs.value("lut_folder", "") or "")
+        c.addItem(f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT folder…", LUT_FOLDER)
+        c.setCurrentIndex(max(0, c.findData(current)))
+        c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
+        c.blockSignals(False)
+
+    def _lut_picked(self, index: int) -> None:
+        data = self.lut.itemData(index)
+        if data == LUT_FILE:
+            start = str(Path(self.s.lut_path).parent) if self.s.lut_path else str(Path.home())
+            f, _ = QFileDialog.getOpenFileName(
+                self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)")
+            if f:
+                self._remember_lut(f)
+                self._set("lut_path", f)
+        elif data == LUT_FOLDER:
+            start = str(self.qs.value("lut_folder", "") or Path.home())
+            d = QFileDialog.getExistingDirectory(self, "Choose your LUT folder", start)
+            if d:
+                self.qs.setValue("lut_folder", d)
+        elif data is not None:
+            if data:
+                self._remember_lut(data)
+            self._set("lut_path", data)
+        self._sync_lut()
 
     # ------------------------------------------------------------------ recipes
     def _user_recipes(self) -> list[dict]:
@@ -484,6 +511,7 @@ class Sidebar(QFrame):
             _disable_item(self.a_fmt, "mp3", "This copy of ffmpeg can't make MP3.")
         if not caps.has_filter("lut3d"):
             self.lut.setEnabled(False)
+            self.lut.setToolTip("This copy of ffmpeg can't apply LUTs")
         if not caps.has_filter("drawtext"):
             self.burn_tc.setEnabled(False)
             self.burn_name.setEnabled(False)

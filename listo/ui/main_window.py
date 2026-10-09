@@ -294,10 +294,9 @@ class MainWindow(QMainWindow):
         left.addWidget(self.f_sub)
         left.addWidget(self.f_bar)
         f.addLayout(left, 1)
-        self.btn_save = QPushButton()
+        self.btn_save = QPushButton("  Export options")
         self.btn_save.setObjectName("SaveBtn")
-        self.btn_save.setIcon(theme.icon("folder", theme.MUTED))
-        self.btn_save.setToolTip("Where converted files go and how they're named")
+        self.btn_save.setIcon(theme.icon("export", theme.MUTED))
         self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.clicked.connect(self.open_save_options)
         f.addWidget(self.btn_save)
@@ -666,7 +665,7 @@ class MainWindow(QMainWindow):
 
     def _update_save_button(self) -> None:
         where, name = save_summary(self.settings)
-        self.btn_save.setText(f"  Save: {where}  ·  {name}")
+        self.btn_save.setToolTip(f"Where files go and how they're named\n{where} · {name}")
 
     def _settings_changed(self) -> None:
         import json

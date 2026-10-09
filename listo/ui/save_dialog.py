@@ -1,4 +1,4 @@
-"""Save options: where converted files go and what they're called (opened from the bottom bar)."""
+"""Export options: where converted files go and what they're called (opened from the bottom bar)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 from .. import naming
 from ..presets import Settings
 from ..probe import MediaInfo
-from . import theme
 from .job_card import ElidedLabel
 from .widgets import FlowLayout, OptionList, Segmented, hint, section_label
 
@@ -56,7 +55,7 @@ class SaveDialog(QDialog):
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Save options")
+        self.setWindowTitle("Export options")
         self.setFixedWidth(480)
         self.s = settings
         self._sample: tuple[str, MediaInfo | None, str] | None = None
@@ -66,7 +65,7 @@ class SaveDialog(QDialog):
         lay.setContentsMargins(24, 22, 24, 20)
         lay.setSpacing(8)
 
-        title = QLabel("Save options")
+        title = QLabel("Export options")
         title.setObjectName("DialogTitle")
         lay.addWidget(title)
         lay.addSpacing(4)

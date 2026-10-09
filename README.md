@@ -48,7 +48,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Workflow:**
 - **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
-- **Look for review copies**: apply a `.cube` LUT and burn in timecode and/or the file name.
+- **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode and/or the file name.
 - **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.
 - **Two at once**: optionally convert two files side by side.
 - **Right-click**: on Mac, *Open With → Listo* (or drop on the Dock icon); on Windows, *Send to → Listo*. Files go into the open window.

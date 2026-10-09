@@ -6,7 +6,9 @@
 - **Trim** any video or audio file: pick start and end with frame previews; timecode follows the cut
 - Paste a link right in the drop area
 - Recipe is always a dropdown (save / update / delete live inside it)
-- Format, flavor and quality are dropdowns; the LUT shows as a file field you click to choose
+- Format, flavor and quality are dropdowns
+- LUT dropdown: your LUT folder + recently used LUTs, one click to apply
+- "Save options" renamed "Export options" (short button in the bottom bar)
 - Menus and dropdowns have truly rounded corners; menu icons stay readable when highlighted
 - One **+ Add** button (files, a folder or a link) and a trash icon to clear the list
 - Adding new files after a batch clears the ones that converted fine (failed / flagged ones stay)
