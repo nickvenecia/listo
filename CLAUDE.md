@@ -47,6 +47,8 @@ listo/
     widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), Segmented (tabs), FlowLayout, repolish
     main_window.py queue + batch controller, toolbar, drop zone, footer
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
+    titlebar.py    Mac only: Listo's own title bar (Qt ExpandedClientAreaHint, dark, "listo." centred; the Mac's
+                   title text hidden via one AppKit call). Windows/Linux keep the system bar, dark via styleHints
     player.py      ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
                    result frame while paused (owners render it on `settled`); still-frame fallback without Qt's player
     caption_editor.py  "Check the Captions" (its own button over Convert): plays the clip, lights up the current line,
@@ -59,6 +61,7 @@ listo/
     workers.py     threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads)
   cli.py           `python -m listo cli ...`: same engine, no UI (great for testing)
   app.py           QApplication, fonts, stylesheet, rounded popups, single-instance hand-off, --smoke-test
+scripts/make_icon.py      draws listo/assets/icon.png (the "listo." wordmark tile) from the tokens and Inter
 scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor/ffmpeg (gitignored)
 listo.spec                PyInstaller recipe
 packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh + build_appimage.sh

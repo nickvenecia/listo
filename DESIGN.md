@@ -214,6 +214,9 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
   Tips and menus have rounded corners (`app._RoundPopups` makes their windows see-through).
 - **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
+- **One identity everywhere.** The app icon is the "listo." wordmark on the dark tile (`scripts/make_icon.py`);
+  on the Mac the title bar is ours (`ui/titlebar.py`): `BG`, a `BORDER` hairline, the wordmark centred.
+  Nothing is said twice: counts live in the bottom bar, not also in a header.
 - **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)
   run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
   Heavy Python work (loading the speech model, listening) runs in its **own process**, not a thread: Python runs

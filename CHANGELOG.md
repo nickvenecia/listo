@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- New app icon: the "listo." wordmark
+- Mac: the title bar is dark like the rest of the app, with the "listo." logo in the middle (Windows and Linux get a dark title bar too)
+- The file count left the top of the Files panel (the bottom bar already shows it)
+- After joining, the bottom bar says how many clips were joined into one video
 - Fix: a preview frame at the very end of a camcorder clip (with burn-ins on) could keep ffmpeg busy at full speed for a minute; previews stay just before the end, and burn-in layers always stop with the clip
 - Fix: a crash when playing some camcorder clips (.MOD) on a Mac. Playback inside Listo no longer uses the Mac's hardware video decoder, and a clip only opens in the player once you press Play. Any hard crash is now written to crash.log next to the log file
 - Changing caption accuracy (Fast / Balanced / Most Accurate) or picking a language now redoes the captions in the background; clips you fixed by hand ask first

@@ -60,6 +60,7 @@ from .tokens import (
     TEXT_LG,
     TEXT_MD,
     TEXT_SM,
+    TEXT_TITLEBAR,
     TEXT_XL,
     TEXT_XS,
     TRACK_H,
@@ -101,6 +102,8 @@ QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRON
 
 /* ---------- text styles */
 #Wordmark {{ font-size: {TEXT_BRAND}px; font-weight: {WEIGHT_BOLD}; letter-spacing: -0.5px; }}
+#TitleBar {{ background: {BG}; border-bottom: 1px solid {BORDER}; }}
+#TitleWordmark {{ font-size: {TEXT_TITLEBAR}px; font-weight: {WEIGHT_BOLD}; letter-spacing: -0.3px; }}
 #DialogTitle {{ font-size: {TEXT_XL}px; font-weight: {WEIGHT_BOLD}; }}
 #SectionLabel {{ color: {MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #Hint {{ color: {FAINT}; font-size: {TEXT_SM}px; }}

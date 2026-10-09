@@ -59,7 +59,7 @@ from ..core.probe import (
 )
 from ..core.sample import sample_clip, sample_clip_if_made
 from ..core.tools import capabilities
-from . import theme, tokens
+from . import theme, titlebar, tokens
 from .caption_editor import CaptionEditor
 from .export_panel import ExportPanel
 from .job_card import JobCard
@@ -309,6 +309,9 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(root)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
+        self.titlebar = titlebar.install(self)  # Mac: Listo's own dark title bar, wordmark centred
+        if self.titlebar is not None:
+            v.addWidget(self.titlebar)
 
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
@@ -318,9 +321,6 @@ class MainWindow(QMainWindow):
         left_col.setSpacing(0)
         step1 = StepHeader(1, "Files")
         bar = step1.actions
-        self.q_count = QLabel()
-        self.q_count.setObjectName("SectionLabel")
-        bar.addWidget(self.q_count)
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("IconBtn")
         self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
@@ -1417,6 +1417,7 @@ class MainWindow(QMainWindow):
                 )
             return
         self.join_job = None
+        self._last_joined = 0
         if self.export_panel.joining():
             if any(it.state in ("probing", "downloading") for it in self.items.values()):
                 self.toast.show_message(
@@ -1655,6 +1656,7 @@ class MainWindow(QMainWindow):
                 it.card.set_state(it.state if it.state in ("failed", "skipped") else "canceled")
                 it.card.set_output(r.message)
         self.join_job = None
+        self._last_joined = len(ids) if r.status == "done" else 0
         if r.status == "failed":
             log.warning("join failed: %s", r.message)
         self._finish()
@@ -1749,8 +1751,6 @@ class MainWindow(QMainWindow):
     def _refresh_queue_bar(self) -> None:
         items = [self.items[i] for i in self.order]
         n = len(items)
-        self.q_count.setText(f"{n} File{'s' if n != 1 else ''}")
-        self.q_count.setVisible(n > 0)
         self.btn_clear_all.setVisible(n > 0 and not self.running)
 
     def _list_changed(self) -> None:
@@ -1856,7 +1856,8 @@ class MainWindow(QMainWindow):
         )
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary
-            parts = [f"{d} converted"]
+            joined = getattr(self, "_last_joined", 0)
+            parts = [f"{joined} clips joined into one video" if joined else f"{d} converted"]
             if w:
                 parts.append(f"{w} to check")
             if f:
@@ -1865,7 +1866,8 @@ class MainWindow(QMainWindow):
                 parts.append(f"{sk} skipped")
             ok = not f and not w
             self.f_title.setText(("Listo! " if ok else "Finished — ") + " · ".join(parts))
-            self.f_sub.setText("Your files are ready." if ok else "Click ⓘ on a file for details.")
+            ready = "Your video is ready." if joined else "Your files are ready."
+            self.f_sub.setText(ready if ok else "Click ⓘ on a file for details.")
             return
         if n == 0:
             self.f_title.setText("Nothing here yet")
@@ -1944,6 +1946,15 @@ class MainWindow(QMainWindow):
             self.add_links(links)
         if paths or links:
             e.acceptProposedAction()
+
+    def showEvent(self, e) -> None:
+        super().showEvent(e)
+        if self.titlebar is not None and not getattr(self, "_titlebar_fitted", False):
+            self._titlebar_fitted = True
+            self.titlebar.fit()
+            handle = self.windowHandle()
+            if handle is not None and hasattr(handle, "safeAreaMarginsChanged"):
+                handle.safeAreaMarginsChanged.connect(lambda *_a: self.titlebar.fit())
 
     def closeEvent(self, e) -> None:
         if self.running:

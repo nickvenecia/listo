@@ -199,6 +199,9 @@ def main() -> int:
     app.setOrganizationName("Listo")
     app.setApplicationVersion(__version__)
     app.setStyle("Fusion")
+    hints = app.styleHints()
+    if hasattr(hints, "setColorScheme"):  # Qt 6.8+: dark system title bars (Windows 11, Linux, Mac fallback)
+        hints.setColorScheme(Qt.ColorScheme.Dark)
     icon_path = theme.ASSETS / "icon.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))

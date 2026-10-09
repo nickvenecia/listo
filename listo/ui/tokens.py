@@ -45,6 +45,7 @@ TEXT_MD = 13  # body text and every control (the default)
 TEXT_LG = 14  # emphasized text: file names in the list, footer title
 TEXT_XL = 18  # dialog titles, empty-state headline
 TEXT_BRAND = 21  # the "listo." wordmark only
+TEXT_TITLEBAR = 15  # the wordmark in the Mac title bar
 
 WEIGHT_REGULAR = 400
 WEIGHT_MEDIUM = 500  # controls
@@ -55,6 +56,7 @@ WEIGHT_BOLD = 700  # wordmark, dialog titles
 SIDEBAR_W = 330  # step 2 panel (Convert To) — same width as the export panel
 EXPORT_W = 330  # step 3 panel (Export): live preview, where, name, Convert
 HEADER_H = 52  # the numbered step header on top of every panel
+TITLEBAR_H = 32  # Listo's own Mac title bar (fitted to the real one once the window shows)
 STEP_BADGE = 22  # the round step number
 SEG_INSET = 2  # gap between a segmented control's frame and its buttons
 THUMB_W, THUMB_H = 112, 63  # 16:9 file thumbnails
