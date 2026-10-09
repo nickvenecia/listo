@@ -147,6 +147,12 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #FooterTitle {{ font-weight: 600; font-size: 13px; }}
 #Banner {{ background: rgba(76,195,138,0.10); border: 1px solid rgba(76,195,138,0.35); border-radius: 10px; }}
 #BannerBad {{ background: rgba(240,97,109,0.10); border: 1px solid rgba(240,97,109,0.35); border-radius: 10px; }}
+#DialogTitle {{ font-size: 18px; font-weight: 700; }}
+#Example {{ background: #0C0C0E; border: 1px solid {BORDER}; border-radius: 10px; }}
+#ExFrom {{ color: {MUTED}; font-size: 12px; }}
+#ExTo {{ color: {TEXT}; font-size: 14px; font-weight: 600; }}
+QPushButton#SaveBtn {{ background: transparent; border: 1px solid {BORDER_STRONG}; color: {MUTED}; font-weight: 500; padding: 8px 14px; }}
+QPushButton#SaveBtn:hover {{ background: {CARD_HOVER}; color: {TEXT}; }}
 #Toast {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: 10px; padding: 9px 14px; }}
 
 QDialog {{ background: {PANEL}; }}

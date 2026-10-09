@@ -51,8 +51,13 @@ def main() -> None:
         files = sorted(str(p) for p in samples.iterdir() if p.is_file())
         steps.append((100, lambda: w.add_paths(files)))
         steps.append((2500, shot("02-queue")))
-        steps.append((100, lambda: (w.sidebar.show_tab("save"))))
-        steps.append((300, shot("03-save-tab")))
+        def save_shot():
+            d = w.save_dialog
+            d.styles.options["custom"].clicked.emit("custom")
+            d.show()
+            QTimer.singleShot(400, lambda: (d.grab().save(str(out / "03-save-dialog.png")), print("saved 03"), d.hide()))
+        steps.append((100, save_shot))
+        steps.append((800, lambda: None))
         steps.append((100, lambda: (w.sidebar.show_tab("photo"))))
         steps.append((300, shot("04-photo-tab")))
         steps.append((100, lambda: (w.sidebar.show_tab("video"), w.start())))

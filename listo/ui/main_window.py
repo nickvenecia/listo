@@ -22,6 +22,7 @@ from ..probe import KNOWN_EXTS, UNSUPPORTED_HINTS, MediaInfo, ext_of, fmt_durati
 from ..tools import capabilities
 from . import theme
 from .job_card import JobCard
+from .save_dialog import SaveDialog, summary as save_summary
 from .sidebar import Sidebar
 from .widgets import Toast, repolish
 from .workers import ConvertThread, HardwareSignals, HardwareTask, ProbeSignals, ProbeTask
@@ -134,6 +135,7 @@ class MainWindow(QMainWindow):
         self._menus()
         self.sidebar.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
+        self._update_save_button()
         self._refresh_footer()
 
         geo = self.qs.value("geometry")
@@ -168,15 +170,6 @@ class MainWindow(QMainWindow):
         h.addSpacing(12)
         h.addWidget(tag, 0, Qt.AlignmentFlag.AlignBottom)
         h.addStretch(1)
-        self.btn_add = QPushButton(" Add files")
-        self.btn_add.setIcon(theme.icon("plus"))
-        self.btn_add.clicked.connect(self.pick_files)
-        self.btn_folder = QPushButton(" Add folder")
-        self.btn_folder.setIcon(theme.icon("folder"))
-        self.btn_folder.clicked.connect(self.pick_folder)
-        for b in (self.btn_add, self.btn_folder):
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            h.addWidget(b)
         v.addWidget(header)
 
         body = QHBoxLayout()
@@ -199,6 +192,17 @@ class MainWindow(QMainWindow):
         self.q_count = QLabel()
         self.q_count.setObjectName("SectionLabel")
         bar.addWidget(self.q_count)
+        bar.addSpacing(10)
+        self.btn_add = QPushButton(" Add files")
+        self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
+        self.btn_add.clicked.connect(self.pick_files)
+        self.btn_folder = QPushButton(" Add folder")
+        self.btn_folder.setIcon(theme.icon("folder", theme.MUTED))
+        self.btn_folder.clicked.connect(self.pick_folder)
+        for b in (self.btn_add, self.btn_folder):
+            b.setObjectName("Ghost")
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            bar.addWidget(b)
         bar.addStretch(1)
         self.btn_rm_done = QPushButton("Remove finished")
         self.btn_rm_done.setObjectName("Ghost")
@@ -227,6 +231,8 @@ class MainWindow(QMainWindow):
 
         self.sidebar = Sidebar(self.settings)
         self.sidebar.changed.connect(self._settings_changed)
+        self.save_dialog = SaveDialog(self.settings, self)
+        self.save_dialog.changed.connect(self._settings_changed)
         body.addWidget(self.sidebar)
         v.addLayout(body, 1)
 
@@ -249,6 +255,13 @@ class MainWindow(QMainWindow):
         left.addWidget(self.f_sub)
         left.addWidget(self.f_bar)
         f.addLayout(left, 1)
+        self.btn_save = QPushButton()
+        self.btn_save.setObjectName("SaveBtn")
+        self.btn_save.setIcon(theme.icon("folder", theme.MUTED))
+        self.btn_save.setToolTip("Where converted files go and how they're named")
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_save.clicked.connect(self.open_save_options)
+        f.addWidget(self.btn_save)
         self.btn_show = QPushButton("Show files")
         self.btn_show.setObjectName("Ghost")
         self.btn_show.clicked.connect(self._show_outputs)
@@ -422,13 +435,22 @@ class MainWindow(QMainWindow):
         for iid in self.order:
             it = self.items[iid]
             if it.info and it.state not in ("unsupported",):
-                self.sidebar.set_sample(it.path, it.info, it.kind)
+                self.save_dialog.set_sample(it.path, it.info, it.kind)
                 return
-        self.sidebar.set_sample(None, None, "video")
+        self.save_dialog.set_sample(None, None, "video")
+
+    def open_save_options(self) -> None:
+        self.save_dialog.exec()
+        self._settings_changed()
+
+    def _update_save_button(self) -> None:
+        where, name = save_summary(self.settings)
+        self.btn_save.setText(f"  Save: {where}  ·  {name}")
 
     def _settings_changed(self) -> None:
         import json
 
+        self._update_save_button()
         self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
@@ -741,11 +763,13 @@ class MainWindow(QMainWindow):
             else:
                 self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
             self.btn_start.hide()
+            self.btn_save.hide()
             self.btn_pause.show()
             self.btn_cancel.show()
             self.btn_add.setEnabled(True)
             return
         self.btn_start.show()
+        self.btn_save.show()
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()

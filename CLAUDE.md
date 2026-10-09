@@ -19,7 +19,9 @@ listo/
   fileutil.py    copy file dates (incl. creation time on mac/win), reveal in Finder/Explorer
   cli.py         `python -m listo cli ...`: same engine, no UI (great for testing)
   app.py         QApplication, fonts, stylesheet, Dock-icon file opens, --smoke-test
-  ui/            main_window (queue + batch controller), sidebar (settings), job_card, theme (colors/QSS/icons), widgets, workers (threads)
+  ui/            main_window (queue + batch controller), sidebar (Video/Photo/Audio format settings),
+                 save_dialog (where + naming, opened from the bottom bar), job_card, theme (colors/QSS/icons),
+                 widgets, workers (threads)
 scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor/ffmpeg (gitignored)
 listo.spec                PyInstaller recipe
 packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh
