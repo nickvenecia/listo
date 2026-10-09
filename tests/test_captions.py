@@ -352,3 +352,62 @@ def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path,
     d.edits[2].setPlainText("Added.")
     d._accept()
     assert [c.text for c in captions.load(clip).cues] == ["Second one.", "Added."]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
+    """Fast / Balanced / Most Accurate actually matter: switching redoes captions made the other way.
+    Hand-edited ones are only redone if you say so."""
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    import listo.ui.main_window as mw
+    import listo.ui.sidebar as sb
+    import listo.ui.workers as wk
+    from tests import speech_standin
+
+    ini = str(tmp_path / "t.ini")
+    for mod in (mw, sb):
+        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
+    monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
+    answers = []
+    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a, **k: answers.pop(0))
+    app = QApplication.instance() or QApplication([])
+    a, b = tmp_path / "a.mov", tmp_path / "b.mov"
+    for c in (a, b):
+        ff("-f", "lavfi", "-i", "color=c=gray:s=320x240:d=2", "-f", "lavfi", "-i", "sine=d=2", "-shortest",
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(c))  # fmt: skip
+    w = mw.MainWindow()
+    w.settings.captions = True
+
+    def wait(cond, timeout=60):
+        end = time.monotonic() + timeout
+        while not cond() and time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.02)
+        return cond()
+
+    w.add_paths([str(a), str(b)])
+    its = lambda: sorted(w.items.values(), key=lambda it: it.path)  # noqa: E731
+    assert wait(lambda: all(it.transcript is not None for it in w.items.values()))
+    assert {it.transcript.model for it in w.items.values()} == {"small"}  # Balanced
+    first, second = its()
+    first.transcript.edited = True  # you fixed this one by hand
+    answers.append(QMessageBox.StandardButton.No)
+    w.settings.caption_model = "fast"
+    w._settings_changed()
+    assert wait(lambda: second.transcript.model == "base")  # redone with Fast
+    assert first.transcript.model == "small" and not answers  # asked, kept your fixes
+    answers.append(QMessageBox.StandardButton.Yes)
+    w.settings.caption_model = "best"
+    w._settings_changed()
+    assert wait(
+        lambda: first.transcript.model == "large-v3-turbo" and second.transcript.model == "large-v3-turbo"
+    )
+    w.close()
+    app.processEvents()

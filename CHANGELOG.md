@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Changing caption accuracy (Fast / Balanced / Most Accurate) or picking a language now redoes the captions in the background; clips you fixed by hand ask first
 - **Play videos inside Listo**: double-click a clip to play it with sound; the Export preview and the Preview window play too. Paused shows the exact result (LUT, frame, burn-ins, captions); playing shows the clip with its captions
 - **Check Captions is its own button** (above Convert, with how many are new). Convert no longer stops to open it
 - Caption check: click any line to jump there; **Add Caption** writes a new one where the clip is paused

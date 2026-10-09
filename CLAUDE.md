@@ -96,6 +96,8 @@ legacy/                   the original SimpleConverter (Swift + first Python por
   the exact result frame (owners render on `settled`, set_still(pm, at)); playing = the clip as shot + captions.
   No player or a file it can't open -> still frames only (`fallback`). No sound output in headless runs
   (offscreen): asking Qt for an audio device there can crash. Call release() when a dialog closes.
+- Changing caption_model / caption_language redoes captions made another way (MainWindow._needs_redo: Transcript.model
+  / .language differ). Hand-edited ones only after a Yes (MainWindow._redo_edited); the old captions stay until the new arrive.
 - Joined videos are named with {name} = "FIRST-LAST" (join.joined_name), every naming style still applies.
 - Join: Settings.join + 2+ videos (not GIF). MainWindow.start() makes a JoinJob; each clip converts as a "part"
   (Conversion(target=hidden parts folder, conform=first clip's size/rate/48 kHz stereo; silent clips get a silent

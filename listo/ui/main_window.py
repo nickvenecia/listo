@@ -237,6 +237,7 @@ class MainWindow(QMainWindow):
             self.settings = Settings.from_dict(json.loads(self.qs.value("settings", "{}") or "{}"))
         except Exception:
             self.settings = Settings()
+        self._caption_choice = (self.settings.caption_model, self.settings.caption_language)
 
         self.items: dict[int, Item] = {}
         self.order: list[int] = []
@@ -262,6 +263,9 @@ class MainWindow(QMainWindow):
         self._tx_failed: dict[int, str] = {}
         self._tx_retry = False
         self._convert_after_captions = False  # Convert was pressed while captions were still being made
+        self._redo_edited: set[int] = (
+            set()
+        )  # hand-edited clips you said to redo with a new accuracy / language
         self.join_job: JoinJob | None = None
         self._live_seq = 0
         self._live_note = ""
@@ -818,13 +822,67 @@ class MainWindow(QMainWindow):
             and it.state in ("ready", "waiting", "done", "warning")
         )  # fmt: skip
 
+    def _made_differently(self, it: Item) -> bool:
+        """These captions came from another accuracy setting or language than the one chosen now."""
+        t, s = it.transcript, self.eff(it)
+        if t is None:
+            return False
+        model = captions.MODELS.get(s.caption_model, captions.MODELS["balanced"])[0]
+        wrong_model = bool(t.model) and t.model != model
+        wrong_language = (
+            s.caption_language != "auto" and bool(t.language) and t.language != s.caption_language
+        )
+        return wrong_model or wrong_language
+
+    def _needs_redo(self, it: Item) -> bool:
+        """Redo in the background: made differently, not hand-edited (unless you said to), not failed."""
+        return (
+            self._made_differently(it)
+            and (not it.transcript.edited or it.id in self._redo_edited)
+            and it.id not in self._tx_failed
+        )
+
+    def _caption_choice_changed(self) -> None:
+        """Accuracy or language changed: redo captions made the other way. Hand-edited ones ask first."""
+        key = (self.settings.caption_model, self.settings.caption_language)
+        if key == self._caption_choice:
+            return
+        self._caption_choice = key
+        if self.tx is not None:  # clips queued with the old choice: start over with the new one
+            self._tx_retry = True
+            self.tx.cancel()
+        edited = [
+            it for it in self.items.values()
+            if self._wants_captions(it) and it.transcript is not None and it.transcript.edited
+            and self._made_differently(it) and it.id not in self._redo_edited
+        ]  # fmt: skip
+        if edited:
+            n = len(edited)
+            ans = QMessageBox.question(
+                self,
+                "Redo Edited Captions?",
+                f"You fixed the captions of {n} clip{'s' if n != 1 else ''} by hand. Redo "
+                f"{'them' if n != 1 else 'it'} with the new setting too? Your fixes would be replaced.",
+            )
+            if ans == QMessageBox.StandardButton.Yes:
+                self._redo_edited.update(it.id for it in edited)
+
     def _sync_captions(self) -> None:
-        """CC icon on each clip, and quietly start making any captions that are missing."""
+        """CC icon on each clip, and quietly start making any captions that are missing (or redo
+        ones made with another accuracy / language)."""
         queued = self.tx.queued() if self.tx is not None else set()
         missing = []
         for it in self.items.values():
             if not self._wants_captions(it):
                 it.card.set_captions("")
+            elif self._needs_redo(it):
+                pct = self._tx_pct.get(it.id)
+                it.card.set_captions(
+                    "working",
+                    "Redoing captions with the new setting…" + (f" {int(pct * 100)}%" if pct else ""),
+                )
+                if it.id not in queued:
+                    missing.append(it)
             elif it.transcript is not None:
                 silent = not any(c.text.strip() for c in it.transcript.cues)
                 it.card.set_captions(
@@ -863,12 +921,13 @@ class MainWindow(QMainWindow):
     def _tx_progress(self, iid: int, frac: float) -> None:
         self._tx_pct[iid] = frac
         it = self.items.get(iid)
-        if it and it.transcript is None:
-            it.card.set_captions("working", f"Making captions in the background… {int(frac * 100)}%")
+        if it and (it.transcript is None or self._needs_redo(it)):
+            verb = "Making" if it.transcript is None else "Redoing"
+            it.card.set_captions("working", f"{verb} captions in the background… {int(frac * 100)}%")
 
     def _tx_status(self, iid: int, msg: str) -> None:
         it = self.items.get(iid)
-        if it and it.transcript is None:
+        if it and (it.transcript is None or self._needs_redo(it)):
             it.card.set_captions("working", msg)
 
     def _tx_done(self, iid: int, transcript, error: str) -> None:
@@ -878,6 +937,7 @@ class MainWindow(QMainWindow):
             return
         if transcript is not None:
             it.transcript = transcript
+            self._redo_edited.discard(iid)
             if it is self._live_clip():
                 self._schedule_live()
         elif error and error != "Canceled":
@@ -1120,6 +1180,7 @@ class MainWindow(QMainWindow):
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
                 self._update_output_name(it)
+        self._caption_choice_changed()
         self._sync_captions()
         self._refresh_footer()  # "Convert & Join" on the button
 
