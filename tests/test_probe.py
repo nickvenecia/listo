@@ -12,7 +12,7 @@ import pytest
 
 from listo.core.probe import probe
 
-from .helpers import HAS_FFMPEG, ff
+from .helpers import HAS_FFMPEG, ff, write_moi
 
 
 def test_nominal_rate():
@@ -31,21 +31,10 @@ def test_tc_add():
     assert tc_add("00:09:59;29", 1 / 29.97, "30000/1001") == "00:10:00;00"
 
 
-def _moi(path: Path, when: tuple[int, int, int, int, int, int], aspect_byte: int) -> None:
-    y, mo, d, h, mi, sec = when
-    data = bytearray(0x100)
-    data[0:2] = b"V6"
-    data[6:8] = y.to_bytes(2, "big")
-    data[8:12] = bytes([mo, d, h, mi])
-    data[12:14] = (sec * 1000 + 250).to_bytes(2, "big")
-    data[0x80] = aspect_byte
-    path.write_bytes(bytes(data))
-
-
 def test_read_jvc_moi(tmp_path: Path):
     from listo.core.probe import read_moi
 
-    _moi(tmp_path / "MOV01A.MOI", (2007, 7, 14, 19, 22, 5), 0x44)
+    write_moi(tmp_path / "MOV01A.MOI", (2007, 7, 14, 19, 22, 5), 0x44)
     m = read_moi(tmp_path / "MOV01A.MOI")
     assert m.recorded == datetime(2007, 7, 14, 19, 22, 5, 250000)
     assert m.widescreen is True and m.pal is False
@@ -61,8 +50,67 @@ def test_mod_clip_uses_its_moi_for_date_and_widescreen(tmp_path: Path):
     ff("-f", "lavfi", "-i", "testsrc2=s=720x480:r=30000/1001:d=0.5", "-vf", "setsar=8/9", "-c:v", "mpeg2video",
        "-f", "vob", str(clip))  # fmt: skip
     assert probe(clip).created is None
-    _moi(tmp_path / "mov01a.moi", (2007, 7, 14, 19, 22, 5), 0x45)  # 16:9, lower-case name on purpose
+    write_moi(tmp_path / "mov01a.moi", (2007, 7, 14, 19, 22, 5), 0x45)  # 16:9, lower-case name on purpose
     info = probe(clip)
     assert info.created == datetime(2007, 7, 14, 19, 22, 5, 250000)
     _, w, h = frame_filters(info.width, info.height, info.sar, Settings(video_resize="1080"))
     assert abs(w / h - 16 / 9) < 0.01  # flagged 4:3 in the MPEG header, really widescreen
+
+
+@pytest.fixture
+def in_new_york(monkeypatch):
+    """This computer's clock set to New York: -05:00 in winter, -04:00 in summer (daylight saving)."""
+    import time
+
+    if not hasattr(time, "tzset"):
+        pytest.skip("the time zone can't be switched here (Windows)")
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_camera_clock_gets_this_computers_offset_for_that_date(in_new_york):
+    """A .MOI time has no zone: it gets this computer's offset on that date, daylight saving included.
+    Whole seconds, like the Date & Time burn-in; a trim moves it to the new first frame."""
+    from listo.core.probe import MediaInfo, recorded
+
+    summer = recorded("MOV01A.MOD", MediaInfo(created=datetime(2007, 7, 14, 19, 22, 5, 250000)))
+    assert summer.local.isoformat() == "2007-07-14T19:22:05-04:00"
+    assert summer.utc.isoformat() == "2007-07-14T23:22:05+00:00"
+    winter = recorded("MOV01A.MOD", MediaInfo(created=datetime(2007, 1, 14, 19, 22, 5, 250000)), start_s=2.5)
+    assert winter.local.isoformat() == "2007-01-14T19:22:07-05:00"
+    assert winter.utc.isoformat() == "2007-01-15T00:22:07+00:00"
+
+
+def test_recording_time_keeps_the_clips_own_tags():
+    """A phone clip: Apple's local time and its own creation_time are both kept (a trim shifts both)."""
+    from datetime import UTC, timedelta, timezone
+
+    from listo.core.probe import MediaInfo, recorded
+    from listo.core.video import date_tags
+
+    phone = MediaInfo(
+        created=datetime(2019, 8, 11, 19, 13, 57, tzinfo=timezone(timedelta(hours=2))),
+        creation_time=datetime(2019, 8, 11, 17, 14, 12, tzinfo=UTC),  # cameras often stamp the end
+    )
+    assert date_tags(recorded("IMG_0001.MOV", phone)) == {
+        "creation_time": "2019-08-11T17:14:12Z",
+        "com.apple.quicktime.creationdate": "2019-08-11T19:13:57+0200",
+    }
+    assert date_tags(recorded("IMG_0001.MOV", phone, start_s=10.0)) == {
+        "creation_time": "2019-08-11T17:14:22Z",
+        "com.apple.quicktime.creationdate": "2019-08-11T19:14:07+0200",
+    }
+
+
+def test_recording_time_falls_back_to_the_files_date(tmp_path: Path):
+    from listo.core.probe import MediaInfo, file_date, recorded
+
+    f = tmp_path / "screen.mp4"
+    f.write_bytes(b"x")
+    shot = recorded(f, MediaInfo())
+    assert shot.local.replace(tzinfo=None) == file_date(f, MediaInfo()).replace(microsecond=0)
+    assert shot.local.utcoffset() is not None and shot.utc == shot.local
+    assert recorded(tmp_path / "gone.mp4", MediaInfo()) is None

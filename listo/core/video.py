@@ -10,7 +10,7 @@ from . import burnin, tape
 from .burnin import BurnPlan
 from .frame import Area, frame_plan, resized
 from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
-from .probe import MediaInfo, tc_add, tc_double_frames
+from .probe import MediaInfo, Shot, recorded, tc_add, tc_double_frames
 from .tools import Capabilities
 
 
@@ -24,6 +24,7 @@ class Plan:
     muxer: str
     notes: list[str] = field(default_factory=list)
     burn: BurnPlan | None = None  # images for burn-ins; call cleanup() when ffmpeg is done
+    shot: Shot | None = None  # when the first frame was shot, as written into the file
 
     def cleanup(self) -> None:
         if self.burn:
@@ -129,6 +130,33 @@ class Conform:
     channels: int = 2
 
 
+def date_tags(shot: Shot) -> dict[str, str]:
+    """The tags that say when a video was shot: creation_time (UTC; also the movie header's date
+    in .mov / .mp4) and Apple's creationdate (local time with its offset), read by Photos, Finder,
+    Resolve, Premiere and Listo itself (probe._shot_time)."""
+    return {
+        "creation_time": f"{shot.utc:%Y-%m-%dT%H:%M:%SZ}",
+        "com.apple.quicktime.creationdate": f"{shot.local:%Y-%m-%dT%H:%M:%S%z}",
+    }
+
+
+def mux_args(muxer: str, shot: Shot | None) -> list[str]:
+    """-movflags and -metadata for a video file: when it was shot (date_tags), and faststart for .mp4.
+    Goes after -map_metadata (these win over what's copied from the original)."""
+    args: list[str] = []
+    if muxer in ("mov", "mp4"):
+        # use_metadata_tags: tags are written as Apple's keyed list, the only place creationdate fits
+        args += ["-movflags", "+faststart+use_metadata_tags" if muxer == "mp4" else "+use_metadata_tags"]
+    if shot is None or muxer not in ("mov", "mp4", "webm"):
+        return args
+    for key, value in date_tags(shot).items():
+        args += ["-metadata", f"{key}={value}"]
+    if muxer in ("mov", "mp4"):  # every copied tag becomes a key: leave out an .mp4 original's file brands
+        for key in ("major_brand", "minor_version", "compatible_brands"):
+            args += ["-metadata", f"{key}="]
+    return args
+
+
 def preset_available(key: str, caps: Capabilities) -> bool:
     return all(caps.has_encoder(e) for e in VIDEO_BY_KEY[key].needs)
 
@@ -217,6 +245,7 @@ def build(
     variant = s.variant_for(p.key)
     notes: list[str] = []
     args = [*_input_args(src, trim), "-map", f"0:{info.video_index}"]
+    shot = recorded(src, info, trim[0] if trim else 0.0) if p.key != "gif" else None
     # Timecode of the first frame we keep (so trimmed clips still line up in the edit)
     start_tc = info.timecode
     if trim and info.timecode and info.rate:
@@ -257,8 +286,8 @@ def build(
             notes.append("Rewrap trims on the nearest keyframe, so the start may be a little early.")
         if start_tc:
             args += ["-timecode", start_tc]
-        args += ["-map_metadata", "0", "-f", "mov", out]
-        return Plan(args, "mov", notes)
+        args += ["-map_metadata", "0", *mux_args("mov", shot), "-f", "mov", out]
+        return Plan(args, "mov", notes, shot=shot)
 
     # ---- picture filters
     from .naming import output_size
@@ -523,10 +552,8 @@ def build(
     muxer = {"mov": "mov", "mp4": "mp4", "webm": "webm", "gif": "gif"}[p.ext]
     if muxer in ("mov", "mp4") and start_tc:
         args += ["-timecode", start_tc]
-    if muxer == "mp4":
-        args += ["-movflags", "+faststart"]
-    args += ["-map_metadata", "0", "-f", muxer, out]
-    return Plan(args, muxer, notes, burn)
+    args += ["-map_metadata", "0", *mux_args(muxer, shot), "-f", muxer, out]
+    return Plan(args, muxer, notes, burn, shot)
 
 
 def _hw_rate(enc: str, info: MediaInfo, variant: str, size: tuple[int, int]) -> list[str]:

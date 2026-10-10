@@ -6,8 +6,9 @@ import json
 import math
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 from .log import get_logger
 from .tools import capabilities, run_quiet
@@ -223,6 +224,7 @@ class MediaInfo:
     audio: list[AudioTrack] = field(default_factory=list)
     timecode: str = ""
     created: datetime | None = None
+    creation_time: datetime | None = None  # the file's own UTC creation_time tag (kept in what Listo makes)
     sar: float = 1.0  # pixel shape: 1 = square; DV / HDV store wider or narrower pixels
     error: str = ""
 
@@ -436,6 +438,15 @@ def _shot_time(fmt_tags: dict, stream_tags: list[dict]) -> datetime | None:
     return None
 
 
+def _creation_time(fmt_tags: dict, stream_tags: list[dict]) -> datetime | None:
+    """The plain creation_time tag, only when it says its zone (it's UTC in practice)."""
+    for tags in (fmt_tags, *stream_tags):
+        t = _parse_time(tags.get("creation_time", ""))
+        if t and t.tzinfo is not None:
+            return t
+    return None
+
+
 def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
     path = str(path)
     kind = kind_from_ext(path)
@@ -473,9 +484,11 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
     except ValueError:
         info.duration = 0.0
     info.timecode = tags.get("timecode", "")
-    info.created = _shot_time(
-        tags, [{k.lower(): v for k, v in (st.get("tags") or {}).items()} for st in data.get("streams", [])]
-    )
+    stream_tags = [
+        {k.lower(): v for k, v in (st.get("tags") or {}).items()} for st in data.get("streams", [])
+    ]
+    info.created = _shot_time(tags, stream_tags)
+    info.creation_time = _creation_time(tags, stream_tags)
 
     video = None
     for s in data.get("streams", []):
@@ -560,19 +573,49 @@ def probe_photo(path: str) -> MediaInfo:
     return info
 
 
+def shot_moment(path: str | Path, info: MediaInfo | None = None) -> datetime:
+    """When the clip was shot, with its time zone: the same moment file_date gives as wall time.
+
+    Apple's tag keeps its own zone. A UTC tag is put in this computer's zone (the best guess).
+    A camera clock with no zone (.MOI) or the file's own date gets this computer's offset for
+    that date, so daylight saving is right."""
+    t = info.created if info else None
+    if t is None:
+        st = os.stat(path)
+        t = datetime.fromtimestamp(getattr(st, "st_birthtime", None) or st.st_mtime)
+    try:
+        if t.tzinfo is None or t.utcoffset() == timedelta(0):
+            return t.astimezone()
+    except (ValueError, OSError, OverflowError):
+        pass
+    return t if t.tzinfo is not None else t.replace(tzinfo=UTC)
+
+
 def file_date(path: str | Path, info: MediaInfo | None = None) -> datetime:
     """Best 'when was this shot' date, as the time on the wall where it was shot (no time zone).
 
     Embedded creation time first: Apple's tag already carries the local zone; a plain UTC tag is
     shown in this computer's zone (the best guess). Otherwise the file's own dates."""
-    if info and info.created:
-        t = info.created
-        try:
-            if t.tzinfo is not None and t.utcoffset() == timedelta(0):
-                t = t.astimezone()  # UTC only: assume it was shot in this computer's zone
-        except (ValueError, OSError):
-            pass
-        return t.replace(tzinfo=None)
-    st = os.stat(path)
-    ts = getattr(st, "st_birthtime", None) or st.st_mtime
-    return datetime.fromtimestamp(ts)
+    if info and info.created and info.created.tzinfo is None:
+        return info.created  # a camera clock (.MOI): already the time on the wall
+    return shot_moment(path, info).replace(tzinfo=None)
+
+
+class Shot(NamedTuple):
+    """When the first frame of a video Listo makes was shot, as written into the file."""
+
+    utc: datetime  # creation_time
+    local: datetime  # the same moment in the zone where it was shot (Apple's creationdate)
+
+
+def recorded(path: str | Path, info: MediaInfo, start_s: float = 0.0) -> Shot | None:
+    """When the first frame we keep (start_s into the clip) was shot, to whole seconds: the time
+    the Date & Time burn-in shows. A clip's own creation_time is kept (only shifted by a trim).
+    None if there's no date at all (the file can't be read)."""
+    shift = timedelta(seconds=start_s)
+    try:
+        local = (shot_moment(path, info) + shift).replace(microsecond=0)
+    except (OSError, ValueError, OverflowError):
+        return None
+    utc = (info.creation_time + shift).replace(microsecond=0) if info.creation_time else local
+    return Shot(utc.astimezone(UTC), local)

@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.3.2
+- **The recording date and time travel inside the file**: every video Listo makes (MP4, MOV, WebM) now stores when it was shot, in the places Apple Photos, Finder, DaVinci Resolve, Premiere and Listo read: the standard creation time and Apple's creation date with your time zone. Camcorder .MOD clips get the date from their .MOI (with this computer's time zone for that day, daylight saving included), so you can upload, email or copy the new file, delete the .MOD and .MOI, and the real date stays. It's the same time the Date & Time burn-in shows: a trimmed clip gets the time of its new first frame, a joined video its first clip's time, and a clip that already had a creation time keeps it. File dates (Finder's "Created") are still copied as before
+
 ## 2.3.1
 - **Glitches look like real tape, and no two are the same**: no more confetti of identical white dashes or a blocky band. Now the lines drift unevenly and jitter one by one, a band of lost tracking rolls through with streaky analog noise (every line different, ragged edges, torn lines leaving black at the left edge like a real VCR), a few lines get a fading streak of snow, the bottom bends and the picture sometimes hops. Every glitch gets its own shape, speed, position and strength, different for every clip
 - **Burn-In is tidier**: with the VHS look, a **VHS Tape** section right under Clip Info holds four dropdowns that read top to bottom: what shows at the start (PLAY ► / ● REC / nothing), at the end (STOP ■ / nothing), the start & end screen (none / VCR blue / black / color bars & tone / custom color) and glitches (none / at each cut / now and then / often; the random ones also glitch the cuts). Old recipes keep their cut glitch

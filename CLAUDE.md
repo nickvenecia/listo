@@ -32,7 +32,8 @@ listo/
     photo.py       photo decode (incl. RAW/HEIC) + save
     presets.py     preset/format definitions + Settings dataclass (persisted as JSON in QSettings)
     naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
-    probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension; timecode math
+    probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension; timecode math; file_date /
+                   shot_moment / recorded(): when a clip was shot (wall time / with its zone / what files store)
     runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
     tools.py       find bundled/system ffmpeg; encoder/filter detection; hardware encoder test; popen_kwargs()
     links.py       "Add a link": yt-dlp (+ Deno for YouTube) downloaded on first use into paths.tools_dir(),
@@ -121,6 +122,15 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
 - Changing caption_model / caption_language redoes captions made another way (MainWindow._needs_redo: Transcript.model
   / .language differ). Hand-edited ones only after a Yes (MainWindow._redo_edited); the old captions stay until the new arrive.
 - Joined videos are named with {name} = "FIRST-LAST" (join.joined_name), every naming style still applies.
+- Every video Listo makes (.mp4 / .mov / .webm; not GIF or audio) stores when it was shot: probe.recorded(src, info,
+  trim start) -> Shot(utc, local), the same moment the Date & Time burn-in uses (MediaInfo.created: Apple's tag, else
+  creation_time, else the .MOI; else the file's date). A zone-less time (.MOI, file date) gets this computer's offset
+  for that date (DST aware); a clip's own creation_time (MediaInfo.creation_time) is kept, only shifted by a trim.
+  video.mux_args writes creation_time (UTC) + com.apple.quicktime.creationdate (local, +HHMM) after -map_metadata,
+  with ONE -movflags (+faststart+use_metadata_tags for .mp4, +use_metadata_tags for .mov; a second -movflags would
+  replace the first). Used by video.build (Plan.shot), the blue-screen wrap and join.concat_args; a joined video
+  takes the first clip's time from its converted part (trim included). Logged at INFO ("recording time stored").
+  Finder dates are still copied too (keep_dates).
 - Join: Settings.join + 2+ videos (not GIF). MainWindow.start() makes a JoinJob; each clip converts as a "part"
   (Conversion(target=hidden parts folder, conform=first clip's size/rate/48 kHz stereo; silent clips get a silent
   track; per-file format overrides don't apply), then _start_join() runs JoinThread (core/join.Join: concat demuxer,

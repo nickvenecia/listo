@@ -41,7 +41,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - **Your originals are never overwritten.** If a new file would land on top of the source (even `IMG_0001.MOV` → `IMG_0001.mov` on a Mac), it gets a number instead.
 - Interlaced footage is detected and deinterlaced, with a choice of smooth 59.94p or film-look 29.97p.
 - ProRes/DNxHR/Rewrap keep **every audio track** as uncompressed PCM at the source bit depth.
-- **Timecode** and creation dates are carried over, and so are file dates, including "Date Created" on Mac and Windows.
+- **Timecode** and the **recording date and time** are carried over: every video Listo makes stores when it was shot (camcorder .MOI dates included, with your time zone), so it travels with the file when you upload, email or copy it. File dates are kept too, including "Date Created" on Mac and Windows.
 - iPhone **HDR** (HLG/PQ) is tone-mapped for H.264, WebM and GIF so it doesn't look washed out, and kept as HDR for ProRes, HEVC and AV1.
 - Odd-sized video (screen recordings, crops) just works.
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.

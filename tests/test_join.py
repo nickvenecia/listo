@@ -13,7 +13,7 @@ from listo.core.presets import Settings
 from listo.core.probe import probe
 from listo.core.tools import capabilities
 
-from .helpers import HAS_FFMPEG, ff
+from .helpers import HAS_FFMPEG, camcorder_clip, ff
 
 pytestmark = pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 
@@ -73,6 +73,21 @@ def test_clips_of_different_shapes_join_into_one_video(tmp_path: Path, preset: s
     srt = r.output.with_suffix(".srt").read_text()
     assert "First clip." in srt and "Third clip." in srt
     assert "00:00:04,5" in srt  # shifted past the first two clips (each ends on a whole frame)
+
+
+def test_joined_video_carries_the_first_clips_recording_time(tmp_path: Path):
+    from datetime import datetime
+
+    a = camcorder_clip(tmp_path, "MOV001", (2007, 7, 14, 19, 22, 5))
+    b = camcorder_clip(tmp_path, "MOV002", (2007, 7, 15, 9, 0, 0))
+    s = Settings(video_preset="h264", join=True)
+    folder = join.parts_folder(str(a), s)
+    parts = _convert_parts([a, b], s, folder, trims={1: (1.0, 2.0)})
+    r = join.Join(parts, str(a), probe(a), s, capabilities(), set(), last_src=str(b)).run()
+    assert r.status == "done", (r.message, r.log)
+    got = probe(r.output)
+    assert got.created.replace(tzinfo=None) == datetime(2007, 7, 14, 19, 22, 6)  # first clip, from its trim
+    assert got.creation_time == got.created
 
 
 def test_rewrap_only_joins_clips_that_already_match(tmp_path: Path):

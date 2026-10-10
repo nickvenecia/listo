@@ -13,7 +13,7 @@ from listo.core import join, tape
 from listo.core.captions import Cue
 from listo.core.engine import Conversion
 from listo.core.presets import Settings
-from listo.core.probe import MediaInfo, probe
+from listo.core.probe import MediaInfo, probe, recorded
 from listo.core.tools import capabilities
 
 from .helpers import HAS_FFMPEG, ff
@@ -74,6 +74,7 @@ def test_single_video_gets_blue_screen_and_glitches(tmp_path: Path):
     assert blue > 180 and red < 80 and green < 100  # VCR blue at the start
     assert _frame(r.output, got.duration - 0.5, tmp_path / "f1.png")[2] > 180  # and at the end
     assert "00:00:02,500" in r.output.with_suffix(".srt").read_text()  # captions moved past the blue
+    assert got.creation_time == recorded(src, probe(src)).utc  # still says when the clip was shot
     assert not any(p.name.startswith(".listo-blue-") for p in r.output.parent.iterdir())
 
 
@@ -132,6 +133,7 @@ def test_joined_video_gets_one_blue_screen_around_it(tmp_path: Path):
     r = join.Join(parts, str(a), probe(a), s, capabilities(), set(), last_src=str(b), conform=conform).run()
     assert r.status == "done", (r.message, r.log)
     assert abs(probe(r.output).duration - (4 + 2 * tape.BLUE_SECONDS)) < 0.3  # blue once, not per clip
+    assert probe(r.output).creation_time == recorded(a, probe(a)).utc  # the first clip's time
     assert _frame(r.output, 0.5, tmp_path / "f.png")[2] > 180
     assert not folder.exists()
     out = subprocess.run([capabilities().ffprobe, "-v", "error", "-show_entries", "stream=codec_type",

@@ -23,7 +23,7 @@ from .engine import Result, _plan_lock
 from .fileutil import copy_dates
 from .log import get_logger
 from .presets import AUDIO_BY_KEY, Settings
-from .probe import MediaInfo, fmt_duration, probe
+from .probe import MediaInfo, Shot, fmt_duration, probe, recorded
 from .runner import Canceled, FFmpegFailed, FFmpegRun
 from .tools import Capabilities
 
@@ -75,9 +75,12 @@ def running_timecodes(clips: list[tuple[MediaInfo, float]]) -> list[str]:
     return out
 
 
-def concat_args(parts: list[Path], lst: Path, out: Path, muxer: str, timecode: str = "") -> list[str]:
+def concat_args(
+    parts: list[Path], lst: Path, out: Path, muxer: str, timecode: str = "", shot: Shot | None = None
+) -> list[str]:
     """ffmpeg args that glue parts (same size, frame rate, sound, encoder) into out without
-    re-encoding. Writes the list file `lst`. Used for joined videos and the tape blue screen."""
+    re-encoding. Writes the list file `lst`. Used for joined videos and the tape blue screen.
+    shot: when the video was shot (stored in the file, see video.mux_args)."""
     lines = ["ffconcat version 1.0"]
     for p in parts:
         lines.append("file '" + str(p).replace("'", "'\\''") + "'")
@@ -89,9 +92,7 @@ def concat_args(parts: list[Path], lst: Path, out: Path, muxer: str, timecode: s
     ]  # fmt: skip
     if muxer in ("mov", "mp4") and timecode:
         args += ["-timecode", timecode]
-    if muxer == "mp4":
-        args += ["-movflags", "+faststart"]
-    return [*args, "-f", muxer, str(out)]
+    return [*args, *video.mux_args(muxer, shot), "-f", muxer, str(out)]
 
 
 def parts_folder(first_src: str, s: Settings) -> Path:
@@ -225,6 +226,7 @@ class Join:
                 return Result("failed", message="Nothing to join: none of the clips converted.")
             if not self.caps.ffmpeg:
                 return Result("failed", message="ffmpeg is missing.")
+            first_part = self.parts[0]
             if tape.wants_blue(self.s) and self.conform is not None:
                 self._add_blue()
             infos = [probe(p, as_media=True) for p in self.parts]
@@ -257,9 +259,12 @@ class Join:
             tmp = target.with_name(f".{target.stem}.listo-{uuid.uuid4().hex[:6]}{target.suffix}")
 
             muxer = MUXERS.get(target.suffix.lstrip(".").lower(), "mov")
+            # When it was shot: the first clip's time, as its part already carries it (trim included)
+            first = infos[self.parts.index(first_part)]
+            shot = recorded(first_part, first) if first.created else recorded(self.first_src, self.first_info)
             # (the edit starts at the first clip's timecode)
             args = concat_args(
-                self.parts, self.parts[0].parent / "join.ffconcat", tmp, muxer, infos[0].timecode
+                self.parts, self.parts[0].parent / "join.ffconcat", tmp, muxer, infos[0].timecode, shot
             )
             if self._canceled:
                 raise Canceled()
@@ -270,6 +275,8 @@ class Join:
             if not tmp.exists() or tmp.stat().st_size == 0:
                 raise FFmpegFailed("The joined video came out empty.", "")
             os.replace(tmp, target)
+            if shot and muxer in ("mov", "mp4", "webm"):
+                log.info("recording time stored in %s: %s", target.name, video.date_tags(shot))
             if self.s.keep_dates:
                 copy_dates(self.first_src, target)
             if self.s.captions and self.s.caption_srt:

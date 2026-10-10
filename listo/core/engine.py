@@ -15,7 +15,7 @@ from . import naming, photo, tape, video
 from .fileutil import copy_dates
 from .log import get_logger
 from .presets import Settings
-from .probe import MediaInfo
+from .probe import MediaInfo, Shot
 from .runner import Canceled, FFmpegFailed, FFmpegRun
 from .tools import Capabilities
 
@@ -97,7 +97,7 @@ class Conversion:
     def _length(self) -> float:
         return (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
 
-    def _wrap_blue(self, tmp: Path, conform, muxer: str, notes: list[str]) -> None:
+    def _wrap_blue(self, tmp: Path, conform, muxer: str, notes: list[str], shot: Shot | None = None) -> None:
         """Tape effect: a screen (VCR blue, black, bars, a color) before and after the video, joined on
         without re-encoding."""
         import shutil
@@ -120,7 +120,7 @@ class Conversion:
             wrapped = folder / f"wrapped{tmp.suffix}"
             self._ff = FFmpegRun(
                 self.caps.ffmpeg,
-                concat_args([pieces[0], tmp, pieces[1]], folder / "list.ffconcat", wrapped, muxer),
+                concat_args([pieces[0], tmp, pieces[1]], folder / "list.ffconcat", wrapped, muxer, shot=shot),
             )
             self._ff.run(None)
             os.replace(wrapped, tmp)
@@ -238,8 +238,10 @@ class Conversion:
             if not tmp.exists() or tmp.stat().st_size == 0:
                 raise FFmpegFailed("The output came out empty.", "")
             if self.blue and kind == "video":
-                self._wrap_blue(tmp, conform, plan.muxer, notes)
+                self._wrap_blue(tmp, conform, plan.muxer, notes, plan.shot)
             os.replace(tmp, target)
+            if plan is not None and plan.shot and plan.muxer in ("mov", "mp4", "webm"):
+                log.info("recording time stored in %s: %s", target.name, video.date_tags(plan.shot))
             if self.s.keep_dates:
                 copy_dates(self.src, target)
             if self.s.captions and self.s.caption_srt and self.captions and kind == "video":
