@@ -48,6 +48,7 @@ from ..core.presets import (
     VIDEO_PRESETS,
     Settings,
     format_label,
+    timecode_mode,
 )
 from ..core.probe import (
     KNOWN_EXTS,
@@ -127,6 +128,7 @@ class Item:
     url: str = ""  # set for things added from a link
     trim: tuple[float, float] | None = None
     transcript: object | None = None  # captions.Transcript once speech has been turned into text
+    clock: str | None = None  # Continuous Timecode: its place on the tape (None = not given yet)
 
     @property
     def length(self) -> float:
@@ -263,6 +265,7 @@ class MainWindow(QMainWindow):
         self.batch: list[int] = []
         self.reserved: set[str] = set()
         self.counter = 0
+        self._tape_s = 0.0  # Continuous Timecode: how much of this Convert's "tape" is used
         self.active: dict[int, ConvertThread] = {}
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
@@ -1222,7 +1225,15 @@ class MainWindow(QMainWindow):
             self._live_note = f"{Path(it.path).name} · {fmt_duration(at)}{heard}"
         self.pool.start(
             PreviewTask(
-                self._live_seq, path, info, s, at, False, self._live_signals, captions=self._clip_cues(it, s)
+                self._live_seq,
+                path,
+                info,
+                s,
+                at,
+                False,
+                self._live_signals,
+                captions=self._clip_cues(it, s),
+                clock=self._clocks().get(it.id) if it is not None else None,
             )
         )
 
@@ -1265,9 +1276,17 @@ class MainWindow(QMainWindow):
             return
         self.export_panel.player.pause()
         clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        clocks = self._clocks()
         PreviewDialog(
             [
-                (Path(c.path).name, c.path, c.info, self.eff(c), self._clip_cues(c, self.eff(c)))
+                (
+                    Path(c.path).name,
+                    c.path,
+                    c.info,
+                    self.eff(c),
+                    self._clip_cues(c, self.eff(c)),
+                    clocks.get(c.id),
+                )
                 for c in clips
             ],
             clips.index(it),
@@ -1283,13 +1302,21 @@ class MainWindow(QMainWindow):
             if sample:
                 s = self.settings
                 PreviewDialog(
-                    [("Sample picture", sample, probe(sample), s, self._clip_cues(None, s))], 0, self
+                    [("Sample picture", sample, probe(sample), s, self._clip_cues(None, s), None)], 0, self
                 ).exec()
             return
         start = next((n for n, it in enumerate(clips) if it.id in self.selected), 0)
+        clocks = self._clocks()
         PreviewDialog(
             [
-                (Path(it.path).name, it.path, it.info, self.eff(it), self._clip_cues(it, self.eff(it)))
+                (
+                    Path(it.path).name,
+                    it.path,
+                    it.info,
+                    self.eff(it),
+                    self._clip_cues(it, self.eff(it)),
+                    clocks.get(it.id),
+                )
                 for it in clips
             ],
             start,
@@ -1437,7 +1464,7 @@ class MainWindow(QMainWindow):
             return
         if not it or not it.info:
             return
-        it.result, it.processed, it.message, it.base = None, 0.0, "", None
+        it.result, it.processed, it.message, it.base, it.clock = None, 0.0, "", None, None
         it.state = "waiting" if self.running else "ready"
         if self.running and iid not in self.batch:
             self.batch.append(iid)
@@ -1589,6 +1616,9 @@ class MainWindow(QMainWindow):
             return
         self.join_job = None
         self._last_joined = 0
+        self._tape_s = 0.0  # one Convert = one tape
+        for iid in todo:
+            self.items[iid].clock = None
         if self.export_panel.joining():
             if any(it.state in ("probing", "downloading") for it in self.items.values()):
                 self.toast.show_message(
@@ -1606,8 +1636,12 @@ class MainWindow(QMainWindow):
                     ids=[it.id for it in vids], settings=s, conform=join.conform_for(vids[0].info, s),
                     folder=join.parts_folder(vids[0].path, s),
                 )  # fmt: skip
-                tcs = join.running_timecodes([(it.info, it.length) for it in vids])
-                self.join_job.timecodes = {it.id: tc for it, tc in zip(vids, tcs, strict=True) if tc}
+                if timecode_mode(s, joining=True) == "continuous":
+                    tcs = join.running_timecodes([(it.info, it.length) for it in vids])
+                    self.join_job.timecodes = {it.id: tc for it, tc in zip(vids, tcs, strict=True) if tc}
+                    for it, tc in zip(vids, tcs, strict=True):
+                        it.clock = tc
+                    self._tape_s = sum(it.length for it in vids)
         self.batch = []
         self.running, self.paused = True, False
         # Every file in the list counts as "taken": Replace can never overwrite another original.
@@ -1700,8 +1734,9 @@ class MainWindow(QMainWindow):
             )  # fmt: skip
         else:
             conv = Conversion(
-                it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues
-            )
+                it.path, it.info, s, self.caps, self.reserved, self.counter, trim=it.trim, captions=cues,
+                timecode=self._tape_clock(it, s),
+            )  # fmt: skip
         it.state, it.processed, it.speed = "converting", 0.0, 0.0
         it.started = time.monotonic()
         it.card.set_state("converting", "Starting…")
@@ -1716,6 +1751,43 @@ class MainWindow(QMainWindow):
         self.btn_pause.setIcon(theme.icon("pause"))
         if len(self.active) == 1:
             self._scroll_to(it.card)
+
+    def _tape_clock(self, it: Item, s: Settings) -> str:
+        """Continuous Timecode for a separate file: its place on this Convert's tape, given once, as it
+        starts (clips added mid-batch carry on from the end). "" = the clip keeps its own timecode."""
+        if it.kind != "video" or timecode_mode(s) != "continuous":
+            it.clock = None
+            return ""
+        if it.clock is None:
+            it.clock = join.running_timecodes([(it.info, it.length)], self._tape_s)[0]
+            self._tape_s += it.length
+        return it.clock
+
+    def _clocks(self) -> dict[int, tuple[float, str]]:
+        """Continuous Timecode as Convert gives it, for previews: {item id: (clip time, timecode there)}.
+        Clips with a place on a tape keep it; the rest follow in list order (after the running tape)."""
+        out: dict[int, tuple[float, str]] = {}
+        pending: list[Item] = []
+        for iid in self.order:
+            it = self.items[iid]
+            if it.kind != "video" or it.info is None:
+                continue
+            b = self._base(it)
+            if (
+                timecode_mode(b, self.export_panel.joining(), it.override.get("video_preset", ""))
+                != "continuous"
+            ):
+                continue
+            if it.clock is not None:
+                out[iid] = (it.trim[0] if it.trim else 0.0, it.clock)
+            elif it.state in ("ready", "waiting", "probing", "downloading"):
+                pending.append(it)
+        tcs = join.running_timecodes(
+            [(it.info, it.length) for it in pending], self._tape_s if self.running else 0.0
+        )
+        for it, tc in zip(pending, tcs, strict=True):
+            out[it.id] = (it.trim[0] if it.trim else 0.0, tc)
+        return out
 
     def _total_speed(self) -> float:
         return sum(self.items[i].speed for i in self.active if i in self.items)

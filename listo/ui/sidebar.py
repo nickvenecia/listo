@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
@@ -43,6 +42,7 @@ from .tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
 from .widgets import (
     Disclosure,
     FitScroll,
+    PathCombo,
     Section,
     Segmented,
     StepHeader,
@@ -55,8 +55,7 @@ from .widgets import (
 )
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
-LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
-LUT_EXTS = {".cube", ".3dl", ".dat", ".m3d", ".csp"}
+LUT_TIP = "Apply a LUT to every video — handy for review copies"
 
 PHOTO_TIPS = {
     "jpeg": "Smallest, works everywhere",
@@ -108,6 +107,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "picture": ("desqueeze", "aspect", "deinterlace", "lut_path"),
     "text": (
         "burn_timecode",
+        "timecode_mode",
         "burn_filename",
         "burn_datetime",
         "burn_stop",
@@ -253,10 +253,10 @@ class Sidebar(QFrame):
         self.sec_deint.add(self.v_deint)
 
         self.sec_lut = Section("LUT")
-        self.lut = QComboBox()
-        self.lut.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.lut.setToolTip("Apply a LUT to every video — handy for review copies")
-        self.lut.activated.connect(self._lut_picked)
+        self.lut = PathCombo(
+            self.qs, "recent_luts", [("", "No LUT", "")], "Choose a LUT File…", self._ask_lut
+        )
+        self.lut.picked.connect(self._lut_picked)
         self.sec_lut.add(self.lut)
 
         self.sec_burn = Section("Clip Info")
@@ -271,6 +271,33 @@ class Sidebar(QFrame):
             "When the clip was shot, read from the clip itself, with a clock that runs as it plays",
         )
         self.sec_burn.add(_checks(self.burn_tc, self.burn_name, self.burn_dt))
+        # Clips without their own timecode: burned in AND stored in the file, so it shows even when
+        # the Timecode burn-in is off.
+        self.tc_mode = combo(
+            [
+                (
+                    "continuous",
+                    "Continuous Timecode",
+                    "One Convert is one tape: each clip carries on where the last one ended, "
+                    "as separate files or joined into one video",
+                ),
+                ("restart", "Restart Timecode Each Clip", "Every clip starts at 00:00:00:00"),
+                (
+                    "record",
+                    "Match Record Time",
+                    "Each clip's timecode is the time of day it was shot, like a camera's time-of-day timecode",
+                ),
+            ],
+            self.s.timecode_mode,
+        )
+        self.tc_mode.setToolTip(
+            "For clips without their own timecode (camcorders, phones); clips with real timecode keep it. "
+            "Burned in and stored in the file for editing apps"
+        )
+        self.tc_mode.currentIndexChanged.connect(
+            lambda: self._set("timecode_mode", self.tc_mode.currentData())
+        )
+        self.sec_burn.add(self.tc_mode)
         self.burn_style = combo(
             [
                 ("clean", "Clean Look", "Small labels on dark boxes in the corners"),
@@ -632,55 +659,20 @@ class Sidebar(QFrame):
         self.sec_quality.set_title(f"Quality · {v}")
         self._set("photo_quality", v)
 
-    # ---- LUTs: a dropdown of your LUT folder + recently used LUTs
-    def _recent_luts(self) -> list[str]:
-        try:
-            data = json.loads(self.qs.value("recent_luts", "[]") or "[]")
-        except (ValueError, TypeError):
-            data = []
-        return [p for p in data if isinstance(p, str) and Path(p).is_file()]
-
-    def _folder_luts(self) -> list[str]:
-        folder = str(self.qs.value("lut_folder", "") or "")
-        if not folder or not Path(folder).is_dir():
-            return []
-        try:
-            return sorted(
-                (str(p) for p in Path(folder).rglob("*") if p.suffix.lower() in LUT_EXTS and p.is_file()),
-                key=lambda p: Path(p).name.lower(),
-            )[:300]
-        except OSError:
-            return []
-
-    def _remember_lut(self, path: str) -> None:
-        recent = [path] + [p for p in self._recent_luts() if p != path]
-        self.qs.setValue("recent_luts", json.dumps(recent[:10]))
-
+    # ---- LUTs: a PathCombo of the LUTs picked before
     def _sync_lut(self) -> None:
-        c = self.lut
-        c.blockSignals(True)
-        c.clear()
-        c.addItem("No LUT", "")
-        folder = self._folder_luts()
-        recent = [p for p in self._recent_luts() if p not in folder]
-        current = self.s.lut_path
-        if current and current not in folder and current not in recent:
-            recent.insert(0, current)
-        for group in (recent, folder):
-            if group:
-                c.insertSeparator(c.count())
-                for p in group:
-                    c.addItem(Path(p).stem, p)
-                    c.setItemData(c.count() - 1, p, Qt.ItemDataRole.ToolTipRole)
-        c.insertSeparator(c.count())
-        c.addItem("Choose a LUT File…", LUT_FILE)
-        lut_folder = str(self.qs.value("lut_folder", "") or "")
-        c.addItem(
-            f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT Folder…", LUT_FOLDER
+        self.lut.set_value(self.s.lut_path)
+        self.lut.setToolTip(self.s.lut_path or LUT_TIP)
+
+    def _ask_lut(self, start: str) -> str:
+        f, _ = QFileDialog.getOpenFileName(
+            self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)"
         )
-        c.setCurrentIndex(max(0, c.findData(current)))
-        c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
-        c.blockSignals(False)
+        return f
+
+    def _lut_picked(self, path: str) -> None:
+        self._set("lut_path", path)
+        self._sync_lut()
 
     def _screen_key(self) -> str:
         return self.s.tape_screen if self.s.tape_blue else "none"
@@ -710,27 +702,6 @@ class Sidebar(QFrame):
             self.tape_screen.setItemIcon(i, QIcon(pm))
         else:
             self.tape_screen.setItemIcon(i, QIcon())
-
-    def _lut_picked(self, index: int) -> None:
-        data = self.lut.itemData(index)
-        if data == LUT_FILE:
-            start = str(Path(self.s.lut_path).parent) if self.s.lut_path else str(Path.home())
-            f, _ = QFileDialog.getOpenFileName(
-                self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)"
-            )
-            if f:
-                self._remember_lut(f)
-                self._set("lut_path", f)
-        elif data == LUT_FOLDER:
-            start = str(self.qs.value("lut_folder", "") or Path.home())
-            d = QFileDialog.getExistingDirectory(self, "Choose Your LUT Folder", start)
-            if d:
-                self.qs.setValue("lut_folder", d)
-        elif data is not None:
-            if data:
-                self._remember_lut(data)
-            self._set("lut_path", data)
-        self._sync_lut()
 
     # ------------------------------------------------------------------ recipes
     def _user_recipes(self) -> list[dict]:
@@ -838,6 +809,7 @@ class Sidebar(QFrame):
                 (self.v_aspect, self.s.aspect),
                 (self.v_fit, self.s.aspect_fit),
                 (self.burn_style, self.s.burn_style),
+                (self.tc_mode, self.s.timecode_mode),
                 (self.burn_badge, self.s.burn_badge),
                 (self.tape_glitches, self.s.tape_glitches),
                 (self.tape_screen, self._screen_key()),

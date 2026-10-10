@@ -223,10 +223,10 @@ DEINTERLACE = (
     Choice("film", "Deinterlace — Film Look (29.97p)"),
     Choice("off", "Leave Interlaced"),
 )
-DESTINATIONS = (
-    Choice("source", "Next to the Original"),
-    Choice("subfolder", "In a Subfolder Next to the Original"),
-    Choice("folder", "In One Folder…"),
+DESTINATIONS = (  # the Where dropdown (ui/export_panel.WHERE + the folders picked before)
+    Choice("source", "In Source Folder"),
+    Choice("subfolder", "Create Subfolder"),
+    Choice("folder", "Choose a Destination…"),
 )
 DESQUEEZE = (
     Choice("1", "No Desqueeze"),
@@ -260,6 +260,13 @@ BURN_STYLES = (
     Choice("clean", "Clean"),
     Choice("vhs", "VHS Camcorder"),
 )
+# How clips WITHOUT their own timecode (camcorders, phones) are counted, burned in and stored.
+# Clips with real timecode always keep theirs.
+TIMECODE_MODES = (
+    Choice("continuous", "Continuous Timecode"),  # one Convert = one tape: runs on from clip to clip
+    Choice("restart", "Restart Timecode Each Clip"),  # every clip from 00:00:00:00
+    Choice("record", "Match Record Time"),  # the time of day it was shot (time-of-day timecode)
+)
 COLLISIONS = (
     Choice("number", "Add a Number"),
     Choice("skip", "Skip That File"),
@@ -289,6 +296,7 @@ class Settings:
     keep_dates: bool = True
     lut_path: str = ""
     burn_timecode: bool = False
+    timecode_mode: str = "continuous"  # see TIMECODE_MODES (burned in and stored in the file)
     burn_filename: bool = False
     burn_datetime: bool = False  # the clip's own date + a running clock
     burn_style: str = "clean"  # see BURN_STYLES
@@ -398,6 +406,15 @@ OVERRIDE_KEYS = ("video_preset", "video_variant", "photo_format", "audio_format"
 # Off again every time Listo opens (everything else is remembered): captions start heavy background
 # work as soon as files arrive, and joining changes what comes out. Recipes still carry them.
 SESSION_ONLY = ("captions", "join")
+
+
+def timecode_mode(s: Settings, joining: bool = False, preset: str = "") -> str:
+    """TIMECODE_MODES key for clips without their own timecode (preset: a file's own format choice).
+    Rewrap and sound-only can't show timecode (the choice is hidden for them), so they keep the old
+    rule: a joined video runs on, separate files don't."""
+    if (preset or s.video_preset) in ("rewrap", "audio"):
+        return "continuous" if joining else "restart"
+    return s.timecode_mode if s.timecode_mode in {c.key for c in TIMECODE_MODES} else "continuous"
 
 
 def format_label(kind: str, s: Settings) -> str:

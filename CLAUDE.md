@@ -58,7 +58,9 @@ listo/
   ui/
     tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
     theme.py       stylesheet built from tokens, SVG icons (icon(name, color))
-    widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), Segmented (tabs), FlowLayout, repolish
+    widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), PathCombo (every file /
+                   folder setting: fixed choices, the ones picked before, "Choose …"; DESIGN.md §6), Segmented (tabs:
+                   marigold underline, never boxed like a setting), FlowLayout, repolish
     main_window.py queue + batch controller, toolbar, drop zone, footer
     sidebar.py     recipe dropdown + Video/Photo/Audio format settings (all dropdowns)
     titlebar.py    Mac only: Listo's own title bar (Qt ExpandedClientAreaHint, dark, "listo." centred; the Mac's
@@ -96,6 +98,10 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   `MainWindow.eff(item)` = base (or live panel) + the file's own `Item.override` (format only, see presets.OVERRIDE_KEYS).
 - Up to 2 conversions run at once (`Settings.parallel`); `MainWindow.active` maps item id -> ConvertThread.
   Output names are reserved under `engine._plan_lock`, and every queued source path is pre-reserved so "Replace" can't hit another original.
+- Every setting that points at a file or folder is a widgets.PathCombo (DESIGN.md §6 "Picking a file or folder"):
+  fixed choices, the ones picked before (QSettings list, newest first, gone ones dropped), "Choose …" (system picker).
+  LUT: "recent_luts". Where: "recent_folders"; its value is "source" / "subfolder" / a folder (-> destination +
+  dest_folder, ExportPanel._where_value). Never a Change… button, a path label or a folder-of-files mode.
 - Recipes are user-made only (full Settings dicts in QSettings "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
@@ -142,9 +148,17 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   recording date -> info.created (naive wall time), aspect -> info.sar (JVC flags widescreen MOD as 4:3).
 - Burn-ins never use ffmpeg's drawtext (Homebrew's ffmpeg lacks it). With burn-ins the picture goes through -filter_complex,
   starts at pts 0 (setpts=PTS-STARTPTS, audio asetpts) so time-based digit expressions line up; the engine deletes the PNGs (Plan.cleanup).
-- Joined videos: join.running_timecodes() gives clips without timecode a tape-style running counter through the whole
-  joined video (one Convert = one tape, from 0); passed as Conversion(timecode=) -> video.build(timecode=) (start_tc for
-  the burn-in and -timecode). Only the first part keeps the PLAY badge (REC stays on every part).
+- Timecode for clips WITHOUT their own (Settings.timecode_mode, the dropdown in Burn-In › Clip Info, shown even with
+  the burn-in off because it's also stored; presets.timecode_mode(s, joining, preset) resolves it: rewrap / audio keep
+  the old rule). Clips with real timecode always keep theirs.
+  "continuous" (default): one Convert = one tape. join.running_timecodes(clips, start) counts kept lengths in list
+  order; a joined video gets them up front (JoinJob.timecodes), separate files get theirs as they start
+  (MainWindow._tape_clock -> Item.clock, MainWindow._tape_s; clips added mid-batch carry on). Passed as
+  Conversion(timecode=) -> video.build(timecode=) (start_tc for the burn-in and -timecode).
+  "restart": nothing passed (burn-in from 00:00:00:00, nothing stored). "record": video.build works it out per clip
+  (probe.record_timecode: file_date + trim start as time-of-day timecode, drop-frame at 29.97).
+  Previews: MainWindow._clocks() (what Convert will give, in one pass) -> PreviewTask(clock=) / PreviewDialog's 6th
+  item -> video.preview_plan(clock=(t, tc)). Only the first part of a joined video keeps the PLAY badge (REC stays on every part).
 - Space = play/pause via player.space_plays(window, player) (a WindowShortcut; text fields keep their spaces).
 - Tape effects never apply to rewrap / GIF / audio (tape.NO_EFFECTS), and only with the VHS look. The sidebar's
   "VHS Tape" section (only with the VHS look, under Clip Info) is four dropdowns: burn_badge, burn_end (-> burn_stop),

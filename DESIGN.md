@@ -139,8 +139,9 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 | Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, clear list), scissors, info, close. **Must** have a tooltip |
 | Chip | `Chip` | The per-file format pill on a card |
 | Token button | `Token` | "+ Name" buttons in the naming pattern builder |
-| Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio). Not for settings |
+| Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio, With Your Settings / Original). Not for settings. They never look like a setting: no box; a hairline runs under the row and the open tab's name is `ACCENT` with a `TAB_LINE` underline |
 | Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
+| File / folder dropdown | `widgets.PathCombo` | **Every** setting that points at a file or folder (LUT, Where). See "Picking a file or folder" below |
 | On/off setting | `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, whole row clickable. Never side-by-side |
 | Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
 | Preview window | `preview_dialog.PreviewDialog` | One frame rendered with the real conversion steps |
@@ -148,11 +149,23 @@ Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the
 
 Choosing a control:
 - Pick one setting → **dropdown**, always, even with only 2–3 choices. Format, quality, size, LUT, recipe,
-  Where, Name and Name taken are all dropdowns. Build them with `widgets.combo` / `set_combo` / `disable_item`.
+  Where, Name, Name taken and timecode are all dropdowns. Build them with `widgets.combo` / `set_combo` /
+  `disable_item`; a file or folder with `widgets.PathCombo`.
 - The result of a choice is shown once, in a live preview (the export panel's picture and "Saves As" box),
   not repeated under every option.
 - Tabs (`Segmented`) only switch which page of settings you see.
-- Actions that belong to a dropdown (Save recipe…, Choose a LUT file…) go **inside** that dropdown, below a separator.
+- Actions that belong to a dropdown (Save recipe…, Choose a LUT File…) go **inside** that dropdown, below a separator.
+
+Picking a file or folder (`widgets.PathCombo`), always the same three parts:
+1. The fixed choices first, default on top: "No LUT"; "In Source Folder", "Create Subfolder".
+2. A separator, then the files or folders picked before, most recent first (up to `RECENT_PATHS`). Each shows its
+   name (a LUT without its extension); two with the same name add their folder's name in brackets. The full path
+   is the item's tooltip. Ones that no longer exist drop off; the current one always stays.
+3. A separator, then **"Choose a … …"** ("Choose a LUT File…", "Choose a Destination…"), which opens the system
+   picker. What you pick goes to the top of the list and is selected; Cancel leaves the choice as it was.
+
+No Change… buttons or path labels under the dropdown, no "folder of files" modes (a LUT folder): the dropdown
+is the whole control. A setting a choice needs (the subfolder's name) shows under it only for that choice.
 - Menus open from icon buttons (the toolbar `+`) with `InstantPopup`; the menu arrow is hidden.
 - The toolbar holds only the wordmark on the left and icon buttons on the right. No text buttons up there.
 

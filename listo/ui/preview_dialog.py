@@ -20,7 +20,8 @@ from .workers import PreviewSignals, PreviewTask
 
 
 class PreviewDialog(QDialog):
-    """`clips` = [(label, path, info, settings, captions or None)] — every video in the list."""
+    """`clips` = [(label, path, info, settings, captions or None, clock or None)] — every video in the
+    list (clock: Continuous Timecode, see video.preview_plan)."""
 
     def __init__(self, clips: list[tuple], start: int = 0, parent: QWidget | None = None, play: bool = False):
         super().__init__(parent)
@@ -73,7 +74,8 @@ class PreviewDialog(QDialog):
 
     # ------------------------------------------------------------------ behavior
     def _clip(self) -> tuple:
-        return self.clips[max(0, self.pick.currentIndex())]
+        c = self.clips[max(0, self.pick.currentIndex())]
+        return (*c, None) if len(c) == 5 else c  # (no clock given)
 
     def _original(self) -> bool:
         return self.view.value() == "original"
@@ -89,7 +91,7 @@ class PreviewDialog(QDialog):
         play, self._play_next = play or self._play_next, False
         i = max(0, self.pick.currentIndex())
         self.player.set_steps(i > 0, i < len(self.clips) - 1)
-        _, path, info, s, cues = self._clip()
+        _, path, info, s, cues, _clock = self._clip()
         w, h = naming.output_size(info, s, "video")
         size = f"{w}×{h}" if w and h else ""
         preset = VIDEO_BY_KEY[s.video_preset].title
@@ -115,11 +117,13 @@ class PreviewDialog(QDialog):
         if self._original() and self.player.is_open():
             self.player.set_still(None)  # the paused clip is the original
             return
-        _, path, info, s, cues = self._clip()
+        _, path, info, s, cues, clock = self._clip()
         self.seq += 1
         self._at = at
         self.pool.start(
-            PreviewTask(self.seq, path, info, s, at, self._original(), self.signals, captions=cues)
+            PreviewTask(
+                self.seq, path, info, s, at, self._original(), self.signals, captions=cues, clock=clock
+            )
         )
 
     def _got(self, seq: int, data: bytes, error: str) -> None:

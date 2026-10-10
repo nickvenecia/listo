@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- **Timecode choice** (Burn-In › Clip Info) for clips without their own timecode (camcorders, phones): **Continuous Timecode** (one Convert is one tape: each clip carries on where the last one ended, now for separate files too, not just a joined video), **Restart Timecode Each Clip** (every clip from 00:00:00:00, also inside a joined video) or **Match Record Time** (the time of day it was shot, like a pro camera's time-of-day timecode). It's burned in and stored in the file, so Resolve and Premiere read the same numbers, and the previews show it. Clips with real timecode keep theirs. Command line: `--timecode continuous|restart|record`
+- **Where** reads like the LUT dropdown: **In Source Folder**, **Create Subfolder**, the folders you picked before, then **Choose a Destination…**. No more Change… button
+- The LUT dropdown lists the LUTs you picked before, then **Choose a LUT File…**; the LUT folder option is gone
+- The **Video / Photo / Audio** tabs look like tabs: the open one is marigold and underlined, so they don't look like a setting (the Preview window's With Your Settings / Original too)
+
 ## 2.3.2
 - **The recording date and time travel inside the file**: every video Listo makes (MP4, MOV, WebM) now stores when it was shot, in the places Apple Photos, Finder, DaVinci Resolve, Premiere and Listo read: the standard creation time and Apple's creation date with your time zone. Camcorder .MOD clips get the date from their .MOI (with this computer's time zone for that day, daylight saving included), so you can upload, email or copy the new file, delete the .MOD and .MOI, and the real date stays. It's the same time the Date & Time burn-in shows: a trimmed clip gets the time of its new first frame, a joined video its first clip's time, and a clip that already had a creation time keeps it. File dates (Finder's "Created") are still copied as before
 

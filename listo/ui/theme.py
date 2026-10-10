@@ -56,6 +56,7 @@ from .tokens import (
     SPACE_4,
     SPACE_5,
     STEP_BADGE,
+    TAB_LINE,
     TEXT,
     TEXT_BRAND,
     TEXT_LG,
@@ -80,7 +81,7 @@ MONO = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace'
 # button, dropdown and text field comes out exactly CONTROL_H tall.
 _INNER = CONTROL_H - 2
 _SMALL_INNER = SMALL_H - 2
-_SEG_INNER = CONTROL_H - 2 - 2 * SEG_INSET  # segmented control: 1px border + inset
+_TAB_INNER = CONTROL_H - 1  # tabs: the row's 1px hairline underneath
 
 
 def load_fonts() -> str:
@@ -186,12 +187,14 @@ QComboBox QAbstractItemView::item {{ padding: 0 {SPACE_3}px; min-height: {CONTRO
 QComboBox QAbstractItemView::item:selected {{ background: {ACCENT}; color: {ON_ACCENT}; }}
 QComboBox QAbstractItemView::separator {{ height: 1px; background: {BORDER_STRONG}; margin: {SPACE_1}px {SPACE_2}px; }}
 
-/* ---------- segmented control: CONTROL_H tall overall */
-#Seg {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: {RADIUS}px; }}
-#SegBtn {{ background: transparent; border: none; border-radius: {RADIUS_SM}px; padding: 0 {SPACE_2}px;
-    min-height: {_SEG_INNER}px; max-height: {_SEG_INNER}px; color: {MUTED}; font-weight: {WEIGHT_MEDIUM}; }}
+/* ---------- tabs (widgets.Segmented), CONTROL_H tall: never a box like a setting. A hairline runs
+   under the row; the open tab's name is marigold with a marigold line under it */
+#Seg {{ background: transparent; border: none; border-bottom: 1px solid {BORDER_STRONG}; border-radius: 0; }}
+#SegBtn {{ background: transparent; border: none; border-bottom: {TAB_LINE}px solid transparent; border-radius: 0;
+    padding: 0 {SPACE_2}px; min-height: {_TAB_INNER}px; max-height: {_TAB_INNER}px; color: {MUTED};
+    font-weight: {WEIGHT_MEDIUM}; }}
 #SegBtn:hover {{ color: {TEXT}; }}
-#SegBtn:checked {{ background: {RAISED}; color: {TEXT}; font-weight: {WEIGHT_SEMIBOLD}; }}
+#SegBtn:checked {{ color: {ACCENT}; border-bottom-color: {ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
 
 /* ---------- checkboxes, sliders, progress */
 QCheckBox {{ spacing: {SPACE_2}px; min-height: {SMALL_H}px; }}

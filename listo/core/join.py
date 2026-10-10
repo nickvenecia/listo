@@ -55,22 +55,19 @@ def conform_for(info: MediaInfo, s: Settings) -> video.Conform:
     return video.Conform(w, h, rate, 48000, 2)
 
 
-def running_timecodes(clips: list[tuple[MediaInfo, float]]) -> list[str]:
-    """Where each clip's timecode starts in a joined video: (info, length) in list order.
+def running_timecodes(clips: list[tuple[MediaInfo, float]], start: float = 0.0) -> list[str]:
+    """Continuous Timecode: where each clip's timecode starts, (info, kept length) in list order,
+    `start` seconds into the tape. Used for a joined video and for separate files alike.
 
     One Convert = one tape: clips without their own timecode (camcorder .MOD, phones) get a counter
-    that keeps running from clip to clip through the whole joined video, from 00:00:00:00 (even
-    across days: it's often one event). Clips with real timecode (pro cameras) keep it ("")."""
-    from .probe import tc_add
+    that keeps running from clip to clip, from 00:00:00:00 (even across days: it's often one event).
+    Clips with real timecode (pro cameras) keep it (""); the counter runs on through them."""
+    from .probe import tc_add, zero_tc
 
     out: list[str] = []
-    running = 0.0
+    running = start
     for info, length in clips:
-        if info.timecode or not info.rate:
-            out.append("")
-        else:
-            ntsc = info.rate in ("30000/1001", "60000/1001")
-            out.append(tc_add("00:00:00;00" if ntsc else "00:00:00:00", running, info.rate))
+        out.append("" if info.timecode or not info.rate else tc_add(zero_tc(info.rate), running, info.rate))
         running += max(0.0, length)
     return out
 

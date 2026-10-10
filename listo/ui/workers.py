@@ -250,9 +250,11 @@ class PreviewTask(QRunnable):
         original: bool,
         signals: PreviewSignals,
         captions: list | None = None,
+        clock: tuple[float, str] | None = None,
     ):
         super().__init__()
         self.captions = captions
+        self.clock = clock  # (t, timecode): Continuous Timecode, see video.preview_plan
         self.seq, self.path, self.info, self.s = seq, path, info, settings
         self.at, self.original, self.signals = at, original, signals
         self.setAutoDelete(True)
@@ -279,7 +281,9 @@ class PreviewTask(QRunnable):
             if self.original:
                 args = original_frame_args(self.path, self.info, self.at, name)
             else:
-                args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name, self.captions)
+                args, plan = preview_plan(
+                    self.path, self.info, self.s, caps, self.at, name, self.captions, self.clock
+                )
             log.debug("preview frame at %.2f s of %s", self.at, self.path)
             cp = subprocess.run(
                 [caps.ffmpeg, *args],

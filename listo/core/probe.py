@@ -356,6 +356,11 @@ def tc_add(tc: str, seconds: float, rate: str) -> str:
         return tc
 
 
+def zero_tc(rate: str) -> str:
+    """00:00:00:00 at this frame rate (drop-frame ';' at 29.97 / 59.94, like camcorders)."""
+    return "00:00:00;00" if rate in ("30000/1001", "60000/1001") else "00:00:00:00"
+
+
 def tc_double_frames(tc: str) -> str:
     """29.97 timecode -> the same moment at 59.94 (frames field doubled)."""
     try:
@@ -619,3 +624,16 @@ def recorded(path: str | Path, info: MediaInfo, start_s: float = 0.0) -> Shot | 
         return None
     utc = (info.creation_time + shift).replace(microsecond=0) if info.creation_time else local
     return Shot(utc.astimezone(UTC), local)
+
+
+def record_timecode(path: str | Path, info: MediaInfo, start_s: float = 0.0) -> str:
+    """Time-of-day timecode: the wall-clock time the first frame we keep (start_s into the clip) was
+    shot, the same clock the Date & Time burn-in shows. "" without a frame rate or any date."""
+    if not info.rate:
+        return ""
+    try:
+        t = file_date(path, info) + timedelta(seconds=start_s)
+    except (OSError, ValueError, OverflowError):
+        return ""
+    since_midnight = t.hour * 3600 + t.minute * 60 + t.second + t.microsecond / 1e6
+    return tc_add(zero_tc(info.rate), since_midnight, info.rate)

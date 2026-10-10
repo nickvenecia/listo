@@ -26,6 +26,7 @@ from .widgets import (
     Disclosure,
     FitScroll,
     FlowLayout,
+    PathCombo,
     Section,
     StepHeader,
     ToggleRow,
@@ -57,11 +58,10 @@ FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
     ("folder", "Folder"),
     ("ext", "Old Extension"),
 )
-WHERE = (
-    ("source", "Next to the Original"),
-    ("subfolder", "In a Subfolder"),
-    ("folder", "In a Folder I Pick…"),
-)
+WHERE = [  # then the folders picked before, then "Choose a Destination…" (a PathCombo)
+    ("source", "In Source Folder", "Next to each original file"),
+    ("subfolder", "Create Subfolder", "A new folder next to each original, with the name you give it"),
+]
 
 
 def style_for(template: str) -> str:
@@ -78,7 +78,7 @@ def summary(s: Settings) -> tuple[str, str]:
     elif s.destination == "subfolder":
         where = f"“{s.subfolder_name or 'Listo'}” subfolders"
     else:
-        where = "Next to Originals"
+        where = "In Source Folders"
     style = style_for(s.naming)
     name = s.naming if style == "custom" else dict((k, t) for k, t, _ in NAME_STYLES)[style]
     return where, name
@@ -158,8 +158,12 @@ class ExportPanel(QFrame):
 
         # ---- where
         where = Section("Where")
-        self.where = combo([(k, t, "") for k, t in WHERE], self.s.destination)
-        self.where.currentIndexChanged.connect(lambda _i: self._destination(self.where.currentData()))
+        self.where = PathCombo(
+            QSettings("Listo", "Listo"), "recent_folders", WHERE, "Choose a Destination…", self._ask_folder,
+            folders=True,
+        )  # fmt: skip
+        self.where.set_value(self._where_value())
+        self.where.picked.connect(self._destination)
         where.add(self.where)
         self.d_sub_row = QWidget()
         sr = hbox(self.d_sub_row, (0, SPACE_1, 0, 0))
@@ -171,16 +175,6 @@ class ExportPanel(QFrame):
         sr.addWidget(lbl)
         sr.addWidget(self.d_sub, 1)
         where.add(self.d_sub_row)
-        self.d_folder_row = QWidget()
-        fr = hbox(self.d_folder_row, (0, SPACE_1, 0, 0))
-        self.d_path = ElidedLabel("", Qt.TextElideMode.ElideLeft)
-        self.d_path.setObjectName("Muted")
-        self.d_pick = QPushButton("Change…")
-        self.d_pick.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.d_pick.clicked.connect(self._choose_folder)
-        fr.addWidget(self.d_path, 1)
-        fr.addWidget(self.d_pick)
-        where.add(self.d_folder_row)
         self.d_proxy_hint = hint("Edit proxies go into a Proxy folder next to the original.")
         where.add(self.d_proxy_hint)
         lay.addWidget(where)
@@ -266,23 +260,24 @@ class ExportPanel(QFrame):
         n = sum(1 for k in ("collision", "keep_dates", "verify") if getattr(self.s, k) != getattr(base, k))
         self.adv.set_summary(f"{n} changed" if n else "")
 
-    def _destination(self, key: str) -> None:
-        if key == "folder" and not self.s.dest_folder and not self._choose_folder():
-            set_combo(self.where, self.s.destination)
-            return
-        self._set("destination", key)
-        self._sync()
+    def _where_value(self) -> str:
+        """The Where dropdown's value: "source", "subfolder" or the chosen folder."""
+        return (
+            self.s.dest_folder
+            if self.s.destination == "folder" and self.s.dest_folder
+            else self.s.destination
+        )
 
-    def _choose_folder(self) -> bool:
-        start = self.s.dest_folder or str(Path.home())
-        d = QFileDialog.getExistingDirectory(self, "Save Converted Files To…", start)
-        if d:
-            self.s.dest_folder = d
-            set_combo(self.where, "folder")
+    def _ask_folder(self, start: str) -> str:
+        return QFileDialog.getExistingDirectory(self, "Save Converted Files To…", start)
+
+    def _destination(self, value: str) -> None:
+        if value in ("source", "subfolder"):
+            self._set("destination", value)
+        else:
+            self.s.dest_folder = value
             self._set("destination", "folder")
-            self._sync()
-            return True
-        return False
+        self._sync()
 
     def _style(self, key: str) -> None:
         if key == "custom":
@@ -302,8 +297,6 @@ class ExportPanel(QFrame):
     def _sync(self) -> None:
         dest = self.s.destination
         self.d_sub_row.setVisible(dest == "subfolder")
-        self.d_folder_row.setVisible(dest == "folder")
-        self.d_path.setText(self.s.dest_folder or "No Folder Chosen")
         self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
         self.videos_sec.setVisible(self._videos >= 2 and join.can_join(self.s))
@@ -331,7 +324,7 @@ class ExportPanel(QFrame):
             w.blockSignals(True)
         try:
             set_combo(self.join_pick, "join" if self.s.join else "separate")
-            set_combo(self.where, self.s.destination)
+            self.where.set_value(self._where_value())
             self.d_sub.setText(self.s.subfolder_name)
             style = style_for(self.s.naming)
             set_combo(self.styles, style)

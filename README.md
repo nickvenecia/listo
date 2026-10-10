@@ -42,6 +42,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - Interlaced footage is detected and deinterlaced, with a choice of smooth 59.94p or film-look 29.97p.
 - ProRes/DNxHR/Rewrap keep **every audio track** as uncompressed PCM at the source bit depth.
 - **Timecode** and the **recording date and time** are carried over: every video Listo makes stores when it was shot (camcorder .MOI dates included, with your time zone), so it travels with the file when you upload, email or copy it. File dates are kept too, including "Date Created" on Mac and Windows.
+- Clips without their own timecode (camcorders, phones) get **continuous timecode** that runs on from clip to clip like one tape (separate files or joined into one video), **restart at 00:00:00:00** each clip, or **match the record time** (the time of day it was shot). Burned in and stored in the file.
 - iPhone **HDR** (HLG/PQ) is tone-mapped for H.264, WebM and GIF so it doesn't look washed out, and kept as HDR for ProRes, HEVC and AV1.
 - Odd-sized video (screen recordings, crops) just works.
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
@@ -54,7 +55,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Workflow:**
 - **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
-- **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font). With the VHS look you can also add STOP ■ at the end and **Tape Effects**: a screen at the start and end (VCR blue, black, color bars & tone, or any color; PLAY blinks going in, STOP ■ coming out), a tracking glitch at each cut of a joined video, and random glitches if you like.
+- **Look for review copies**: pick any LUT (`.cube` and more; the ones you used before stay in the list) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font). With the VHS look you can also add STOP ■ at the end and **Tape Effects**: a screen at the start and end (VCR blue, black, color bars & tone, or any color; PLAY blinks going in, STOP ■ coming out), a tracking glitch at each cut of a joined video, and random glitches if you like.
 - **Frame**: desqueeze anamorphic footage (1.33×–2×), and change the shape to 16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35 or 2.39. Crop to fill, add black bars, or draw cinema bars over the picture with adjustable opacity.
 - **Size** means the short edge, so 1080 gives 1920×1080 for widescreen and 1080×1920 for vertical video. It scales up too (old 720×480 camcorder footage at 1080 comes out 1440×1080, in its true 4:3 shape).
 - **Captions**: Listo listens to each clip on your computer (nothing is uploaded), you check and fix the words, then they're burned in (Clean or VHS look) and/or saved as an .srt file. The speech model downloads once the first time (150 MB to 1.6 GB depending on accuracy). Check them with the Check Captions button: play the clip with sound, watch each caption light up as it's spoken, click to jump, fix or add lines.
@@ -80,7 +81,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 
 `{date}_{name}_{preset}` → `2026-10-08_A001_C003_prores422.mov`
 
-Save next to the original, in a subfolder next to it, or all in one folder. If a name is taken: add a number, skip, or replace.
+Save in the source folder, in a new subfolder next to each original, or in a destination you choose (the ones you used before stay in the list). If a name is taken: add a number, skip, or replace.
 
 ## Run from source
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from .core.engine import Conversion
 from .core.log import setup_logging
-from .core.presets import AUDIO_BY_KEY, PHOTO_BY_KEY, VIDEO_BY_KEY, Settings
+from .core.presets import AUDIO_BY_KEY, PHOTO_BY_KEY, TIMECODE_MODES, VIDEO_BY_KEY, Settings, timecode_mode
 from .core.probe import KNOWN_EXTS, ext_of, probe
 from .core.tools import capabilities, detect_hardware
 
@@ -30,6 +30,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--naming", default="{name}")
     ap.add_argument("--collision", choices=["number", "skip", "replace"], default="number")
     ap.add_argument("--no-hardware", action="store_true")
+    ap.add_argument(
+        "--timecode", choices=[c.key for c in TIMECODE_MODES], default=Settings().timecode_mode,
+        help="clips without their own timecode: run on through the files, restart each, or the record time",
+    )  # fmt: skip
     a = ap.parse_args(argv)
     setup_logging()
 
@@ -43,6 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         naming=a.naming,
         collision=a.collision,
         hardware=not a.no_hardware,
+        timecode_mode=a.timecode,
     )
     if a.variant:
         s.video_variant[a.video] = a.variant
@@ -68,9 +73,16 @@ def main(argv: list[str] | None = None) -> int:
 
     reserved: set[str] = {naming.reserve_key(Path(f)) for f in files}  # never replace another original
     failed = 0
+    tape = 0.0  # Continuous Timecode: one run = one tape
     for n, f in enumerate(files, 1):
         info = probe(f)
-        r = Conversion(f, info, s, caps, reserved, counter=n).run()
+        tc = ""
+        if info.kind == "video" and timecode_mode(s) == "continuous":
+            from .core.join import running_timecodes
+
+            tc = running_timecodes([(info, info.duration)], tape)[0]
+            tape += info.duration
+        r = Conversion(f, info, s, caps, reserved, counter=n, timecode=tc).run()
         out = f" -> {r.output}" if r.output else ""
         print(f"[{r.status}] {f}{out} {r.message} {' '.join(r.notes)}".rstrip())
         if r.status == "failed":

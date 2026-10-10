@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+from PySide6.QtCore import QPoint, QRect, QRectF, QSettings, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -131,7 +135,8 @@ def repolish(w: QWidget) -> None:
 
 
 class Segmented(QFrame):
-    """A row of mutually exclusive buttons."""
+    """Tabs: a row of mutually exclusive buttons that switch which page you see (styled as tabs in
+    theme.py, so they never look like a setting)."""
 
     changed = Signal(str)
 
@@ -139,8 +144,8 @@ class Segmented(QFrame):
         super().__init__(parent)
         self.setObjectName("Seg")
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(*(tokens.SEG_INSET,) * 4)
-        lay.setSpacing(tokens.SEG_INSET)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.buttons: dict[str, QPushButton] = {}
@@ -257,6 +262,104 @@ def combo(items: list[tuple[str, str, str]], current: str) -> QComboBox:
     c.setCurrentIndex(max(0, c.findData(current)))
     c.setCursor(Qt.CursorShape.PointingHandCursor)
     return c
+
+
+CHOOSE = "__choose__"  # data of the "Choose …" item at the bottom of a PathCombo
+RECENT_PATHS = 8  # how many picked files / folders a PathCombo remembers
+
+
+class PathCombo(QComboBox):
+    """The one way Listo picks a file or folder (DESIGN.md §6, like the LUT dropdown): the fixed
+    choices first, then the files / folders picked before (most recent first; the name, with the
+    full path in the tip; ones that are gone drop off), then "Choose …", which opens the system
+    picker. `picked` gives the fixed key or the path, only when the choice changes."""
+
+    picked = Signal(str)
+
+    def __init__(
+        self,
+        qs: QSettings,
+        store: str,
+        fixed: list[tuple[str, str, str]],
+        choose: str,
+        ask: Callable[[str], str],
+        folders: bool = False,
+    ):
+        """store: the QSettings key of the remembered paths. ask(start) shows the system picker
+        and returns the path (or "" when cancelled)."""
+        super().__init__()
+        self.qs, self.store, self.fixed, self.choose, self.ask, self.folders = (
+            qs,
+            store,
+            fixed,
+            choose,
+            ask,
+            folders,
+        )
+        self.value = fixed[0][0] if fixed else ""
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.activated.connect(self._activated)
+        self.set_value(self.value)
+
+    def recent(self) -> list[str]:
+        try:
+            data = json.loads(self.qs.value(self.store, "[]") or "[]")
+        except (ValueError, TypeError):
+            data = []
+        there = Path.is_dir if self.folders else Path.is_file
+        return [p for p in data if isinstance(p, str) and p and there(Path(p))]
+
+    def remember(self, path: str) -> None:
+        paths = [path] + [p for p in self.recent() if p != path]
+        self.qs.setValue(self.store, json.dumps(paths[:RECENT_PATHS]))
+
+    def _name(self, path: str) -> str:
+        p = Path(path)
+        return (p.name if self.folders else p.stem) or path
+
+    def set_value(self, value: str) -> None:
+        """Show this fixed key or path as the choice (a path not in the list yet is added to it)."""
+        self.value = value
+        paths = self.recent()
+        if value and value not in paths and all(value != k for k, _, _ in self.fixed):
+            paths.insert(0, value)  # e.g. a folder on a drive that isn't plugged in: still the setting
+        names = [self._name(p) for p in paths]
+        self.blockSignals(True)
+        self.clear()
+        for key, label, tip in self.fixed:
+            self.addItem(label, key)
+            if tip:
+                self.setItemData(self.count() - 1, tip, Qt.ItemDataRole.ToolTipRole)
+        if paths:
+            self.insertSeparator(self.count())
+        for p, name in zip(paths, names, strict=True):
+            if names.count(name) > 1:
+                name = f"{name} ({Path(p).parent.name})"  # two with the same name: say where each is
+            self.addItem(name, p)
+            self.setItemData(self.count() - 1, p, Qt.ItemDataRole.ToolTipRole)
+        self.insertSeparator(self.count())
+        self.addItem(self.choose, CHOOSE)
+        self.setCurrentIndex(max(0, self.findData(value)))
+        self.blockSignals(False)
+
+    def _activated(self, index: int) -> None:
+        data = self.itemData(index)
+        if data == CHOOSE:
+            start = self.value if self.value and Path(self.value).exists() else str(Path.home())
+            if Path(start).is_file():
+                start = str(Path(start).parent)
+            data = self.ask(start)
+            if not data:
+                self.set_value(self.value)  # cancelled: back to what it was
+                return
+        if data is None:
+            return
+        if data and all(data != k for k, _, _ in self.fixed):
+            self.remember(data)
+        changed = data != self.value
+        self.set_value(data)
+        if changed:
+            self.picked.emit(data)
 
 
 def set_combo(c: QComboBox, key: str) -> None:
