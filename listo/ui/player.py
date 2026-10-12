@@ -42,7 +42,7 @@ from ..core import burnin, naming
 from ..core.presets import Settings
 from ..core.probe import MediaInfo
 from . import theme
-from .tokens import ICON, MUTED, SPACE_1, SPACE_2, TEXT_SM, WELL
+from .tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
 from .trim_dialog import fmt_clock
 from .widgets import hbox, vbox
 
@@ -140,7 +140,7 @@ class ClipPlayer(QWidget):
         self.stage.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.stage.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.stage.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.stage.setBackgroundBrush(QBrush(QColor(WELL)))
+        self.stage.setBackgroundBrush(QBrush(QColor(SCREEN)))  # dark in both looks
         self.stage.clicked.connect(self.clicked)
         self.scene = QGraphicsScene(0, 0, width, height, self.stage)
         self.stage.setScene(self.scene)
@@ -153,7 +153,7 @@ class ClipPlayer(QWidget):
         self.still.setZValue(2)
         self.scene.addItem(self.still)
         self.message = QGraphicsSimpleTextItem()
-        self.message.setBrush(QBrush(QColor(MUTED)))
+        self.message.setBrush(QBrush(QColor(SCREEN_TEXT)))
         f = QFont(self.font())
         f.setPixelSize(TEXT_SM)
         self.message.setFont(f)
@@ -216,7 +216,7 @@ class ClipPlayer(QWidget):
     def _nav_button(self, icon: str, tip: str, direction: int) -> QToolButton:
         b = QToolButton()
         b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(icon, theme.TEXT))
+        b.setIcon(theme.icon(icon, "TEXT"))
         b.setIconSize(QSize(ICON, ICON))
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setToolTip(tip)
@@ -411,7 +411,7 @@ class ClipPlayer(QWidget):
     def _state(self, *_a) -> None:
         playing = self.is_playing()
         self.btn_play.setVisible(not self.fallback)
-        self.btn_play.setIcon(theme.icon("pause" if playing else "play", theme.TEXT))
+        self.btn_play.setIcon(theme.icon("pause" if playing else "play", "TEXT"))
         self._still_visibility()
         if playing:
             self._settle.stop()

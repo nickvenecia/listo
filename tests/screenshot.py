@@ -1,12 +1,12 @@
 """Render the app offscreen and save screenshots (dev helper).
 
 QT_QPA_PLATFORM=offscreen python tests/screenshot.py OUTDIR [SAMPLES_DIR]
+LISTO_LOOK=light (or dark) picks the look; otherwise it follows the system like the app.
 """
 
 from __future__ import annotations
 
 import sys
-import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import QTimer
@@ -30,7 +30,7 @@ def main() -> None:
     f = QFont(fam)
     f.setPointSizeF(10)
     app.setFont(f)
-    app.setStyleSheet(theme.stylesheet(Path(tempfile.mkdtemp(prefix="listo-shot-"))))
+    appmod.follow_system(app)
     from listo.ui.main_window import MainWindow
 
     w = MainWindow()

@@ -5,14 +5,16 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QRectF, Qt
-from PySide6.QtGui import QFontDatabase, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
+from PySide6.QtGui import QFontDatabase, QIcon, QIconEngine, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
+from . import tokens
 from .tokens import (
     ACCENT,
     ACCENT_EDGE,
     ACCENT_HOVER,
+    ACCENT_INK,
     ACCENT_OFF,
     ACCENT_OFF_TEXT,
     ACCENT_PRESS,
@@ -46,6 +48,7 @@ from .tokens import (
     RAISED,
     RAISED_HOVER,
     RAISED_PRESS,
+    SCREEN,
     SCROLL_MIN,
     SCROLL_W,
     SEG_INSET,
@@ -94,7 +97,9 @@ def load_fonts() -> str:
     return family or ""
 
 
-STYLESHEET = f"""
+def _qss() -> str:
+    """The whole look, from the colors in use right now (theme.use switches them)."""
+    return f"""
 * {{ outline: none; }}
 QWidget {{ color: {TEXT}; font-size: {TEXT_MD}px; }}
 QMainWindow, #Root {{ background: {BG}; }}
@@ -115,7 +120,7 @@ QToolTip {{ background: {RAISED}; color: {TEXT}; border: 1px solid {BORDER_STRON
 #OutName {{ color: {FAINT}; font-size: {TEXT_SM}px; }}
 #Status {{ font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; color: {MUTED}; }}
 #Status[tone="probing"] {{ color: {FAINT}; }}
-#Status[tone="converting"], #Status[tone="downloading"], #Status[tone="transcribing"] {{ color: {ACCENT}; }}
+#Status[tone="converting"], #Status[tone="downloading"], #Status[tone="transcribing"] {{ color: {ACCENT_INK}; }}
 #Status[tone="paused"], #Status[tone="warning"] {{ color: {WARN}; }}
 #Status[tone="done"] {{ color: {GOOD}; }}
 #Status[tone="failed"], #Status[tone="unsupported"] {{ color: {BAD}; }}
@@ -163,11 +168,11 @@ QPushButton#Chip, QPushButton#Token {{ border-radius: {RADIUS_SM}px; padding: 0 
     color: {MUTED}; }}
 QPushButton#Chip {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; }}
 QPushButton#Chip:hover {{ color: {TEXT}; border-color: {BORDER_HOVER}; }}
-QPushButton#Chip[custom="true"] {{ color: {ACCENT}; border-color: {ACCENT_EDGE}; background: {ACCENT_TINT}; }}
+QPushButton#Chip[custom="true"] {{ color: {ACCENT_INK}; border-color: {ACCENT_EDGE}; background: {ACCENT_TINT}; }}
 QPushButton#Chip:disabled {{ background: transparent; border-color: {BORDER}; color: {FAINT}; }}
 QPushButton#Token {{ background: {CARD}; border: 1px solid {BORDER_STRONG}; }}
 QPushButton#Token:hover {{ color: {ON_ACCENT}; background: {ACCENT}; border-color: {ACCENT}; }}
-#TrimTag {{ color: {ACCENT}; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#TrimTag {{ color: {ACCENT_INK}; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 
 /* ---------- fields + dropdowns: all CONTROL_H tall */
 QComboBox, QLineEdit {{
@@ -194,7 +199,7 @@ QComboBox QAbstractItemView::separator {{ height: 1px; background: {BORDER_STRON
     padding: 0 {SPACE_2}px; min-height: {_TAB_INNER}px; max-height: {_TAB_INNER}px; color: {MUTED};
     font-weight: {WEIGHT_MEDIUM}; }}
 #SegBtn:hover {{ color: {TEXT}; }}
-#SegBtn:checked {{ color: {ACCENT}; border-bottom-color: {ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
+#SegBtn:checked {{ color: {ACCENT_INK}; border-bottom-color: {ACCENT_INK}; font-weight: {WEIGHT_SEMIBOLD}; }}
 
 /* ---------- checkboxes, sliders, progress */
 QCheckBox {{ spacing: {SPACE_2}px; min-height: {SMALL_H}px; }}
@@ -225,7 +230,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Card[state="active"] {{ border-color: {ACCENT}; }}
 #Card[state="failed"] {{ border-color: {BAD_EDGE}; }}
 #Card[selected="true"], #Card[selected="true"]:hover {{ background: {CARD_SELECTED}; border-color: {ACCENT_EDGE}; }}
-#Thumb, #TrimPreview {{ background: {WELL}; border-radius: {RADIUS}px; }}
+#Thumb, #TrimPreview {{ background: {SCREEN}; border-radius: {RADIUS}px; }}
 #TrimPreview {{ border: 1px solid {BORDER}; }}
 
 /* ---------- option list (export dialog) */
@@ -253,8 +258,8 @@ QPlainTextEdit#CaptionText[current="true"] {{ background: {CARD_SELECTED}; borde
 QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {ACCENT}; }}
 #CueTime {{ color: {MUTED}; padding-top: {SPACE_1}px; }}
 #CueTime:hover {{ color: {TEXT}; }}
-#CueTime[current="true"] {{ color: {ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
-#Player {{ background: {WELL}; border-radius: {RADIUS}px; }}
+#CueTime[current="true"] {{ color: {ACCENT_INK}; font-weight: {WEIGHT_SEMIBOLD}; }}
+#Player {{ background: {SCREEN}; border-radius: {RADIUS}px; }}
 QPlainTextEdit {{ background: {WELL}; border: 1px solid {BORDER}; border-radius: {RADIUS}px; font-family: {MONO};
     font-size: {TEXT_XS}px; color: {MUTED}; }}
 QMenu {{ background: {RAISED}; border: 1px solid {BORDER_STRONG}; border-radius: {RADIUS_LG}px; padding: {SPACE_1}px; }}
@@ -265,6 +270,7 @@ QMenu::icon {{ padding-left: {SPACE_2}px; }}
 QMenu::separator {{ height: 1px; background: {BORDER_STRONG}; margin: {SPACE_1}px {SPACE_2}px; }}
 QMenu::section {{ color: {FAINT}; padding: {SPACE_2}px {SPACE_2}px 0 {SPACE_2}px; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 """
+
 
 # Minimal line icons (Lucide-style, ISC licensed shapes redrawn).
 _SVG = {
@@ -298,6 +304,18 @@ _SVG = {
 }
 
 
+def use(scheme: str) -> None:
+    """Switch to the "dark" or "light" look: every color name here and in tokens follows. Then set
+    the app's stylesheet again (stylesheet()); icons from icon() / menu_icon() follow by themselves."""
+    tokens.use(scheme)
+    globals().update({k: getattr(tokens, k) for k in tokens.COLORS})
+
+
+def color(c: str) -> str:
+    """A color role ("MUTED", the name of a token) as it is in the look in use; anything else as is."""
+    return getattr(tokens, c) if c in tokens.COLORS else c
+
+
 def svg_markup(name: str, color: str = TEXT, stroke: float = 2.0) -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
@@ -306,10 +324,9 @@ def svg_markup(name: str, color: str = TEXT, stroke: float = 2.0) -> str:
 
 
 @lru_cache(maxsize=512)
-def pixmap(name: str, size: int = ICON, color: str = TEXT, stroke: float = 2.0, dpr: float = 2.0) -> QPixmap:
-    """Drawn once per look and reused (a long list redraws the same few icons thousands of times)."""
+def _render(name: str, size: int, color: str, stroke: float, dpr: float) -> QPixmap:
     r = QSvgRenderer(QByteArray(svg_markup(name, color, stroke).encode()))
-    pm = QPixmap(int(size * dpr), int(size * dpr))
+    pm = QPixmap(round(size * dpr), round(size * dpr))
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -319,22 +336,57 @@ def pixmap(name: str, size: int = ICON, color: str = TEXT, stroke: float = 2.0, 
     return pm
 
 
+def pixmap(
+    name: str, size: int = ICON, color_: str = "TEXT", stroke: float = 2.0, dpr: float = 2.0
+) -> QPixmap:
+    """One icon drawn now, in a color role ("FAINT") or a literal color. Drawn once per look and
+    reused (a long list redraws the same few icons thousands of times). A QLabel keeps the colors it
+    got, so give labels colors that are the same in both looks (ACCENT, SCREEN_*)."""
+    return _render(name, size, color(color_), stroke, dpr)
+
+
+class _Icon(QIconEngine):
+    """A line icon in a color ROLE, looked up each time it's painted, so it follows a switch
+    between the light and dark look. `active`: the role on a highlighted (marigold) menu row."""
+
+    def __init__(self, name: str, role: str, size: int, active: str = ""):
+        super().__init__()
+        self.name, self.role, self.size, self.active = name, role, size, active
+
+    def _role(self, mode: QIcon.Mode) -> str:
+        if mode == QIcon.Mode.Disabled:
+            return "FAINT"
+        if self.active and mode in (QIcon.Mode.Active, QIcon.Mode.Selected):
+            return self.active
+        return self.role
+
+    def pixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State) -> QPixmap:
+        return self.scaledPixmap(size, mode, state, 1.0)
+
+    def scaledPixmap(self, size: QSize, mode: QIcon.Mode, state: QIcon.State, scale: float) -> QPixmap:
+        scale = scale if scale > 0 else 1.0
+        return _render(self.name, round(size.width() / scale), color(self._role(mode)), 2.0, scale)
+
+    def paint(self, painter: QPainter, rect, mode: QIcon.Mode, state: QIcon.State) -> None:
+        dpr = painter.device().devicePixelRatioF() if painter.device() else 1.0
+        pm = _render(self.name, rect.width(), color(self._role(mode)), 2.0, dpr)
+        painter.drawPixmap(rect, pm)
+
+    def clone(self) -> QIconEngine:
+        return _Icon(self.name, self.role, self.size, self.active)
+
+
 @lru_cache(maxsize=256)
-def icon(name: str, color: str = TEXT, size: int = ICON) -> QIcon:
-    """An icon that looks the same however the button is hovered, focused or pressed."""
-    ic = QIcon()
-    for mode in (QIcon.Mode.Normal, QIcon.Mode.Active, QIcon.Mode.Selected):
-        ic.addPixmap(pixmap(name, size, color), mode)
-    return ic
+def icon(name: str, color_: str = "TEXT", size: int = ICON) -> QIcon:
+    """An icon in a color role ("MUTED") that follows the light / dark look and looks the same
+    however the button is hovered, focused or pressed."""
+    return QIcon(_Icon(name, color_, size))
 
 
 @lru_cache(maxsize=128)
-def menu_icon(name: str, color: str = MUTED, size: int = ICON) -> QIcon:
+def menu_icon(name: str, color_: str = "MUTED", size: int = ICON) -> QIcon:
     """For menu rows: the highlighted row is marigold, so its icon switches to dark there."""
-    ic = QIcon(pixmap(name, size, color))
-    ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Active)
-    ic.addPixmap(pixmap(name, size, ON_ACCENT), QIcon.Mode.Selected)
-    return ic
+    return QIcon(_Icon(name, color_, size, active="ON_ACCENT"))
 
 
 def stylesheet(folder: Path) -> str:
@@ -346,8 +398,9 @@ def stylesheet(folder: Path) -> str:
         import tempfile
 
         folder = Path(tempfile.mkdtemp(prefix="listo-ui-"))
-    chevron = folder / "chevron.svg"
+    look = tokens.SCHEME  # one file per look: Qt keeps images it loaded by their path
+    chevron = folder / f"chevron-{look}.svg"
     chevron.write_text(svg_markup("chevron", MUTED))
-    check = folder / "check.svg"
+    check = folder / f"check-{look}.svg"
     check.write_text(svg_markup("check", ON_ACCENT, 3))
-    return STYLESHEET.replace("__CHEVRON__", chevron.as_posix()).replace("__CHECK__", check.as_posix())
+    return _qss().replace("__CHEVRON__", chevron.as_posix()).replace("__CHECK__", check.as_posix())

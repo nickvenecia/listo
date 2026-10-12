@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Light and dark**: Listo follows your computer's appearance, and switches with it while it's open (Auto appearance on a Mac switches at sunset). The light look keeps clips, previews and thumbnails on black, like a monitor, and darkens marigold and status words so they read on white
 - **Timecode choice** (Burn-In › Clip Info) for clips without their own timecode (camcorders, phones): **Continuous Timecode** (one Convert is one tape: each clip carries on where the last one ended, now for separate files too, not just a joined video), **Restart Timecode Each Clip** (every clip from 00:00:00:00, also inside a joined video) or **Match Record Time** (the time of day it was shot, like a pro camera's time-of-day timecode). It's burned in and stored in the file, so Resolve and Premiere read the same numbers, and the previews show it. Clips with real timecode keep theirs. Command line: `--timecode continuous|restart|record`
 - **Where** reads like the LUT dropdown: **In Source Folder**, **Create Subfolder**, the folders you picked before, then **Choose a Destination…**. No more Change… button
 - The LUT dropdown lists the LUTs you picked before, then **Choose a LUT File…**; the LUT folder option is gone

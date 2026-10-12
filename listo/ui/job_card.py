@@ -199,7 +199,7 @@ class JobCard(QFrame):
     def _icon_btn(self, name: str, tip: str, fn) -> QToolButton:
         b = QToolButton()
         b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(name, theme.MUTED, tokens.ICON))
+        b.setIcon(theme.icon(name, "MUTED", tokens.ICON))
         b.setIconSize(QSize(tokens.ICON, tokens.ICON))
         b.setToolTip(tip)
         b.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -209,7 +209,7 @@ class JobCard(QFrame):
 
     def _set_kind_icon(self) -> None:
         name = {"video": "film", "photo": "image", "audio": "audio", "link": "link"}.get(self.kind, "file")
-        self.thumb.setPixmap(theme.pixmap(name, tokens.ICON_LG, theme.FAINT, 1.6))
+        self.thumb.setPixmap(theme.pixmap(name, tokens.ICON_LG, "SCREEN_FAINT", 1.6))
 
     # ---- updates
     def set_thumb(self, data: bytes) -> None:
@@ -256,7 +256,7 @@ class JobCard(QFrame):
             "reviewed": (f"{detail} — " if detail else "Captions checked — ") + "click to edit",
         }
         self.btn_cc.setToolTip(tips.get(status, ""))
-        color = {"review": theme.ACCENT, "reviewed": theme.GOOD, "failed": theme.BAD}.get(status, theme.FAINT)
+        color = {"review": "ACCENT_INK", "reviewed": "GOOD", "failed": "BAD"}.get(status, "FAINT")
         self.btn_cc.setIcon(theme.icon("captions", color))
         self._show_cc()
 

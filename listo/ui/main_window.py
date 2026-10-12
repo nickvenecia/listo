@@ -172,7 +172,7 @@ class DropZone(QFrame):
         lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.setSpacing(tokens.SPACE_2)
         ic = QLabel()
-        ic.setPixmap(theme.pixmap("drop", tokens.ICON_XL, theme.ACCENT, 1.6))
+        ic.setPixmap(theme.pixmap("drop", tokens.ICON_XL, "ACCENT", 1.6))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
         word.setObjectName("Wordmark")
@@ -334,7 +334,9 @@ class MainWindow(QMainWindow):
         v = QVBoxLayout(root)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
-        self.titlebar = titlebar.install(self)  # Mac: Listo's own dark title bar, wordmark centred
+        self.titlebar = titlebar.install(
+            self
+        )  # Mac: Listo's own title bar (follows the look), wordmark centred
         if self.titlebar is not None:
             titlebar.ignore_safe_area(root)
             v.addWidget(self.titlebar)
@@ -349,7 +351,7 @@ class MainWindow(QMainWindow):
         bar = step1.actions
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("IconBtn")
-        self.btn_add.setIcon(theme.icon("plus", theme.MUTED))
+        self.btn_add.setIcon(theme.icon("plus", "MUTED"))
         self.btn_add.setIconSize(QSize(tokens.ICON, tokens.ICON))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add files, a folder or a link — or just drop them in")
@@ -362,7 +364,7 @@ class MainWindow(QMainWindow):
         bar.addWidget(self.btn_add)
         self.btn_clear_all = QToolButton()
         self.btn_clear_all.setObjectName("IconBtn")
-        self.btn_clear_all.setIcon(theme.icon("list-x", theme.MUTED))
+        self.btn_clear_all.setIcon(theme.icon("list-x", "MUTED"))
         self.btn_clear_all.setIconSize(QSize(tokens.ICON, tokens.ICON))
         self.btn_clear_all.setToolTip("Remove files from the list (your files aren't touched)")
         self.btn_clear_all.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -441,7 +443,7 @@ class MainWindow(QMainWindow):
             f.addWidget(b)
         self.btn_update = QPushButton()
         self.btn_update.setObjectName("Ghost")
-        self.btn_update.setIcon(theme.icon("drop", tokens.ACCENT))
+        self.btn_update.setIcon(theme.icon("drop", "ACCENT_INK"))
         self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_update.setToolTip("A newer Listo is out. See what's new and update")
         self.btn_update.clicked.connect(self.open_update)
@@ -450,7 +452,7 @@ class MainWindow(QMainWindow):
         # Tools that every system can reach (the menu bar only shows on a Mac)
         self.btn_more = QToolButton()
         self.btn_more.setObjectName("IconBtn")
-        self.btn_more.setIcon(theme.icon("more", theme.FAINT))
+        self.btn_more.setIcon(theme.icon("more", "FAINT"))
         self.btn_more.setIconSize(QSize(tokens.ICON, tokens.ICON))
         self.btn_more.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_more.setToolTip("Storage & Cache, Debug Console, Log File, About")
@@ -469,7 +471,7 @@ class MainWindow(QMainWindow):
         self.btn_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         f.addWidget(self.btn_more)
         self.btn_check = QPushButton("Check Captions")
-        self.btn_check.setIcon(theme.icon("captions", theme.TEXT))
+        self.btn_check.setIcon(theme.icon("captions", "TEXT"))
         self.btn_check.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_check.setToolTip("Watch each clip with its captions and fix any words before converting")
         self.btn_check.clicked.connect(self.check_captions)

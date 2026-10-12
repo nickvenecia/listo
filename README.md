@@ -45,6 +45,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - Clips without their own timecode (camcorders, phones) get **continuous timecode** that runs on from clip to clip like one tape (separate files or joined into one video), **restart at 00:00:00:00** each clip, or **match the record time** (the time of day it was shot). Burned in and stored in the file.
 - iPhone **HDR** (HLG/PQ) is tone-mapped for H.264, WebM and GIF so it doesn't look washed out, and kept as HDR for ProRes, HEVC and AV1.
 - Odd-sized video (screen recordings, crops) just works.
+- **Light or dark**, following your computer's setting (and switching with it).
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 

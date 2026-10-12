@@ -7,6 +7,9 @@ All numbers and colors live in **`listo/ui/tokens.py`**. The stylesheet (`listo/
 every widget import from there. **Never type a size, spacing, font size or color anywhere else.**
 If you need a value that doesn't exist, add a token, give it a comment, and add it to the tables below.
 
+Listo has a **light and a dark look** and follows the computer's setting, also when it switches while
+Listo is open (§5). Colors are roles, never values: see "Two looks" below before you use one.
+
 ---
 
 ## 1. Sizes
@@ -37,8 +40,9 @@ If you need a value that doesn't exist, add a token, give it a comment, and add 
 | `ICON_LG` | 24 | Placeholder icons in empty thumbnails |
 | `ICON_XL` | 44 | The drop-zone arrow |
 
-All icons are line icons drawn as SVG in `theme._SVG` and made with `theme.icon(name, color)`.
-Add new icons there; don't load image files for UI icons.
+All icons are line icons drawn as SVG in `theme._SVG` and made with `theme.icon(name, role)`, where
+role is a color token's NAME (`"MUTED"`, `"ACCENT_INK"`): the icon looks its color up each time it's
+drawn, so it follows the light / dark switch. Add new icons there; don't load image files for UI icons.
 
 ### Fixed layout sizes
 
@@ -99,7 +103,7 @@ the popup window see-through and gives every dropdown `widgets.ComboItemDelegate
 
 ---
 
-## 5. Color (dark theme)
+## 5. Color: two looks
 
 | Token | Use |
 |---|---|
@@ -107,10 +111,13 @@ the popup window see-through and gives every dropdown `widgets.ComboItemDelegate
 | `PANEL` | Sidebar, footer, dialogs |
 | `CARD` / `CARD_HOVER` / `CARD_SELECTED` | File cards (normal / hover / selected), text fields |
 | `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups |
-| `WELL` | Sunken areas: thumbnails, previews, logs |
+| `WELL` | Sunken areas with words: Saves As, logs, notes |
+| `SCREEN` / `SCREEN_TEXT` / `SCREEN_FAINT` | Behind pictures (players, previews, thumbnails) / words and placeholder icons on it. **Black in both looks** |
 | `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, control borders, hover, empty checkbox |
+| `TRACK` / `TRACK_HOVER` / `KNOB` | An off switch (track, hovered track, knob) |
 | `TEXT` / `MUTED` / `FAINT` | Main text / secondary text / hints, labels, disabled |
-| `ACCENT` (+ `_HOVER`, `_PRESS`) | Marigold. Selection, the one primary action, progress, focus |
+| `ACCENT` (+ `_HOVER`, `_PRESS`) | Marigold **fills**: selection, the one primary action, progress, focus rings |
+| `ACCENT_INK` | Marigold **words, icons and thin lines** on the background (darker in the light look so it reads) |
 | `ON_ACCENT` | Text and icons on marigold |
 | `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A disabled primary button |
 | `ACCENT_TINT` / `ACCENT_EDGE` | Marigold wash and outline (custom chip, hot drop zone) |
@@ -120,8 +127,23 @@ the popup window see-through and gives every dropdown `widgets.ComboItemDelegate
 - Marigold means "selected" or "do this". **One** Primary button per view.
 - Status color comes from data, not code: set `setProperty("tone", "done" | "warning" | "failed" | ...)`
   and call `widgets.repolish(w)`. The stylesheet maps tone to color.
-- Never call `setStyleSheet()` on a single widget. Add a rule to `theme.STYLESHEET`
+- Never call `setStyleSheet()` on a single widget. Add a rule to `theme._qss()`
   under an object name instead.
+
+### Two looks: light and dark
+
+Every color token has a dark value (the ones written in `tokens.py`) and a light one (`tokens.LIGHT`,
+the same names). Listo uses the computer's setting at launch and switches when it changes
+(`app.follow_system`: `theme.use(look)`, then the stylesheet is set again). For that to work:
+- Read colors when you draw: `tokens.NAME` / `theme.NAME` in a stylesheet rule or `paintEvent`.
+  Never copy one into a variable, a widget or a cached image at startup (it would keep the old look).
+- Icons take a role name, not a color: `theme.icon("plus", "MUTED")`, `theme.menu_icon("file")`.
+- A `QLabel` keeps the picture it got, so a picture on a label uses a color that's the same in both
+  looks (`ACCENT`, `SCREEN_*`).
+- Pictures are never put on a light background: players, previews and thumbnails sit on `SCREEN`.
+- Words in marigold use `ACCENT_INK`; marigold fills use `ACCENT`. Status words use `GOOD` / `WARN` / `BAD`,
+  which are darker in the light look. `tests/test_theme.py` checks every pair stays readable in both looks.
+- Check both: `LISTO_LOOK=light` (or `dark`) forces a look for screenshots and testing.
 
 ---
 
@@ -228,7 +250,8 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
 - **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
   (`app._RoundPopups` enforces it); values change only by clicking or dragging.
 - **One identity everywhere.** The app icon is the "listo." wordmark on the dark tile (`scripts/make_icon.py`);
-  on the Mac the title bar is ours (`ui/titlebar.py`): `BG`, a `BORDER` hairline, the wordmark centred.
+  on the Mac the title bar is ours (`ui/titlebar.py`): `BG`, a `BORDER` hairline, the wordmark centred
+  (it follows the look like everything else; the wordmark's dot is always `ACCENT`).
   Nothing is said twice: counts live in the bottom bar, not also in a header.
 - **Tools are one click, out of the way.** A faint ⋯ at the right of the bottom bar holds Storage & Cache, the
   Debug Console, the log file and About (the Mac menu bar has them too); never needed for normal work.
@@ -274,4 +297,5 @@ width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, pa
 2. New controls are `CONTROL_H` tall (or `SMALL_H` for chips / icon buttons) and line up with their neighbours.
 3. Every icon-only button has a tooltip.
 4. Labels are short and in Title Case; sentences (tooltips, hints, messages) are plain sentences.
-5. Screenshots look right: `QT_QPA_PLATFORM=offscreen python tests/screenshot.py SHOTS OUTDIR`.
+5. Screenshots look right in both looks: `QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py SHOTS OUTDIR`
+   (and again with `LISTO_LOOK=dark`).

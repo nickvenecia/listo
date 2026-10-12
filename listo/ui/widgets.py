@@ -118,7 +118,7 @@ class Disclosure(QWidget):
 
     def set_open(self, on: bool, emit: bool = False) -> None:
         self.body.setVisible(on)
-        self.header.setIcon(theme.icon("chevron" if on else "chevron-right", theme.MUTED))
+        self.header.setIcon(theme.icon("chevron" if on else "chevron-right", "MUTED"))
         self.header.setToolTip("Hide" if on else "Show more settings")
         if emit:
             self.toggled.emit(on)
@@ -505,7 +505,7 @@ class ToggleRow(QAbstractButton):
         if on:
             fill = tokens.ACCENT_HOVER if self._hover and enabled else tokens.ACCENT
         else:
-            fill = tokens.BORDER_HOVER if self._hover and enabled else tokens.BORDER_STRONG
+            fill = tokens.TRACK_HOVER if self._hover and enabled else tokens.TRACK
         if not enabled:
             fill = tokens.ACCENT_OFF if on else tokens.BORDER
         p.setPen(Qt.PenStyle.NoPen)
@@ -513,6 +513,6 @@ class ToggleRow(QAbstractButton):
         p.drawRoundedRect(track, th / 2, th / 2)
         knob = th - 2 * tokens.TOGGLE_INSET
         x = track.right() - tokens.TOGGLE_INSET - knob if on else track.left() + tokens.TOGGLE_INSET
-        p.setBrush(QColor(tokens.ON_ACCENT if on else tokens.TEXT) if enabled else QColor(tokens.FAINT))
+        p.setBrush(QColor(tokens.ON_ACCENT if on else tokens.KNOB) if enabled else QColor(tokens.FAINT))
         p.drawEllipse(QRectF(x, track.top() + tokens.TOGGLE_INSET, knob, knob))
         p.end()

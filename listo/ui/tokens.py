@@ -76,7 +76,10 @@ WINDOW_SIZE = (1360, 820)
 WINDOW_MIN = (1180, 620)
 DIALOG_W = 480
 
-# ---------------------------------------------------------------- colors (dark theme)
+# ---------------------------------------------------------------- colors
+# Two looks with the same names: dark (the values right here) and LIGHT (below). Listo follows the
+# system's light / dark setting (app.py -> theme.use), even while it's open. So read a color as
+# tokens.NAME (or theme.NAME) when you draw or style, never copy one into a variable at import.
 BG = "#111113"  # window background
 PANEL = "#17171A"  # sidebar, footer, dialogs
 CARD = "#1E1E22"  # cards, fields
@@ -89,13 +92,20 @@ BORDER = "#2C2C33"
 BORDER_STRONG = "#3A3A42"
 BORDER_HOVER = "#4A4A54"
 BORDER_CHECK = "#55555F"  # unchecked checkbox outline
+TRACK = "#3A3A42"  # an off switch's track (TRACK_HOVER under the pointer)
+TRACK_HOVER = "#4A4A54"
+KNOB = "#F4F1EC"  # an off switch's knob (on: ON_ACCENT on marigold)
 TEXT = "#F4F1EC"
 MUTED = "#A09B93"  # secondary text
 FAINT = "#6E6A64"  # hints, disabled, section labels
-WELL = "#0C0C0E"  # sunken areas: thumbnails, previews, logs
+WELL = "#0C0C0E"  # sunken areas with text: Saves As, logs, notes
+SCREEN = "#0C0C0E"  # behind pictures (players, previews, thumbnails): dark in both looks, like a monitor
+SCREEN_TEXT = "#A09B93"  # words on SCREEN ("Making a preview…")
+SCREEN_FAINT = "#6E6A64"  # placeholder icons on SCREEN
 ACCENT = "#F5A524"  # cempasúchil marigold — selection, primary action, progress
 ACCENT_HOVER = "#FFB743"
 ACCENT_PRESS = "#DB8F12"
+ACCENT_INK = "#F5A524"  # marigold as text, icons and thin lines on the background (darker in light)
 ON_ACCENT = "#1B1206"  # text/icons on marigold
 ACCENT_OFF = "#3A3326"  # disabled primary button
 ACCENT_OFF_TEXT = "#7D705A"
@@ -106,3 +116,57 @@ BAD = "#F0616D"
 BAD_TINT = "#2A1A1D"  # danger button hover
 BAD_EDGE = "#5A2A30"  # failed card border
 WARN = "#E9B949"
+
+COLORS = (
+    "BG", "PANEL", "CARD", "CARD_HOVER", "CARD_SELECTED", "RAISED", "RAISED_HOVER", "RAISED_PRESS",
+    "BORDER", "BORDER_STRONG", "BORDER_HOVER", "BORDER_CHECK", "TRACK", "TRACK_HOVER", "KNOB",
+    "TEXT", "MUTED", "FAINT", "WELL",
+    "SCREEN", "SCREEN_TEXT", "SCREEN_FAINT", "ACCENT", "ACCENT_HOVER", "ACCENT_PRESS", "ACCENT_INK",
+    "ON_ACCENT", "ACCENT_OFF", "ACCENT_OFF_TEXT", "ACCENT_TINT", "ACCENT_EDGE",
+    "GOOD", "BAD", "BAD_TINT", "BAD_EDGE", "WARN",
+)  # fmt: skip
+DARK = {k: globals()[k] for k in COLORS}
+# Light: warm paper whites, the same marigold for fills; marigold text and status colors are darker
+# so they read on white. Pictures still sit on SCREEN black.
+LIGHT = {
+    **DARK,
+    "BG": "#F6F5F2",
+    "PANEL": "#EFEEEA",
+    "CARD": "#FFFFFF",
+    "CARD_HOVER": "#FAF9F7",
+    "CARD_SELECTED": "#FCEFD6",
+    "RAISED": "#FFFFFF",
+    "RAISED_HOVER": "#F4F3EF",
+    "RAISED_PRESS": "#E9E7E2",
+    "BORDER": "#E2E0DB",
+    "BORDER_STRONG": "#D0CDC6",
+    "BORDER_HOVER": "#B3AFA7",
+    "BORDER_CHECK": "#A19D95",
+    "TRACK": "#C9C5BE",
+    "TRACK_HOVER": "#B3AFA7",
+    "KNOB": "#FFFFFF",
+    "TEXT": "#1D1C1A",
+    "MUTED": "#5F5B54",
+    "FAINT": "#8A857D",
+    "WELL": "#E8E6E1",
+    "ACCENT_HOVER": "#EE9C17",
+    "ACCENT_PRESS": "#D88A0E",
+    "ACCENT_INK": "#9A5800",
+    "ACCENT_OFF": "#F3E4C6",
+    "ACCENT_OFF_TEXT": "#A38B69",
+    "ACCENT_TINT": "rgba(245, 165, 36, 0.14)",
+    "ACCENT_EDGE": "rgba(214, 135, 10, 0.65)",
+    "GOOD": "#1E8550",
+    "BAD": "#C42F3C",
+    "BAD_TINT": "#FBE6E8",
+    "BAD_EDGE": "#EDB3B9",
+    "WARN": "#946600",
+}
+SCHEME = "dark"  # which look is in use: "dark" or "light"
+
+
+def use(scheme: str) -> None:
+    """Point every color name at the dark or the light look (theme.use rebuilds the stylesheet)."""
+    global SCHEME
+    SCHEME = "light" if scheme == "light" else "dark"
+    globals().update(LIGHT if SCHEME == "light" else DARK)

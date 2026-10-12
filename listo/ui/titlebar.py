@@ -1,4 +1,4 @@
-"""The Mac title bar, drawn by Listo: the app's dark background with the "listo." wordmark centred.
+"""The Mac title bar, drawn by Listo: the app's background (light or dark) with the "listo." wordmark centred.
 
 Qt (6.9+) lets the window's content run up under the title bar (ExpandedClientAreaHint) with no
 bar background (NoTitleBarBackgroundHint); the traffic-light buttons stay where they are, on top of
@@ -7,7 +7,7 @@ undraggable strip above our bar: the window turns that off, so our bar IS the ti
 own title text is hidden with one call into AppKit (ctypes, no extra packages). Dragging the bar
 moves the window (Listo moves it itself); double-clicking zooms it, like any Mac title bar.
 
-Windows and Linux keep their system title bar (dark, via the app's colour scheme in app.py).
+Windows and Linux keep their system title bar, which follows the system's light / dark setting.
 If any piece is missing (older Qt, the AppKit call fails), the normal title bar stays.
 """
 

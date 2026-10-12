@@ -135,6 +135,27 @@ class _RoundPopups(QObject):
         return False
 
 
+def system_look(app: QApplication) -> str:
+    """The look to use: "light" when the computer is in light mode, else "dark" (also when it can't tell).
+    LISTO_LOOK=light / dark overrides it (screenshots, testing the other look)."""
+    forced = os.environ.get("LISTO_LOOK", "")
+    if forced in ("light", "dark"):
+        return forced
+    scheme = getattr(app.styleHints(), "colorScheme", None)  # Qt 6.5+
+    return "light" if scheme is not None and scheme() == Qt.ColorScheme.Light else "dark"
+
+
+def follow_system(app: QApplication) -> None:
+    """Use the light or dark look like the computer, also when it switches while Listo is open
+    (Auto appearance on a Mac): every color, the stylesheet and the icons follow."""
+    look = system_look(app)
+    if look == theme.tokens.SCHEME and app.styleSheet():
+        return
+    theme.use(look)
+    app.setStyleSheet(theme.stylesheet(data_dir() / "ui"))
+    log.info("look: %s (following the system)", look)
+
+
 class ListoApp(QApplication):
     """Also receives files dropped on the Dock icon / opened with 'Open With' on macOS."""
 
@@ -219,9 +240,6 @@ def main() -> int:
     app.setOrganizationName("Listo")
     app.setApplicationVersion(__version__)
     app.setStyle("Fusion")
-    hints = app.styleHints()
-    if hasattr(hints, "setColorScheme"):  # Qt 6.8+: dark system title bars (Windows 11, Linux, Mac fallback)
-        hints.setColorScheme(Qt.ColorScheme.Dark)
     icon_path = theme.ASSETS / "icon.png"
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
@@ -230,7 +248,9 @@ def main() -> int:
     f.setPointSizeF(13 if sys.platform == "darwin" else 10)
     f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(f)
-    app.setStyleSheet(theme.stylesheet(data_dir() / "ui"))
+    follow_system(app)  # light or dark, like the computer (title bars follow the system by themselves)
+    if hasattr(app.styleHints(), "colorSchemeChanged"):
+        app.styleHints().colorSchemeChanged.connect(lambda _scheme: follow_system(app))
 
     from .ui.main_window import MainWindow
 

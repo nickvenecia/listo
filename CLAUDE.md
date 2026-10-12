@@ -56,8 +56,10 @@ listo/
                    and reopens it; run() starts it detached
     sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
   ui/
-    tokens.py      THE design tokens (sizes, spacing, type, radii, colors)
-    theme.py       stylesheet built from tokens, SVG icons (icon(name, color))
+    tokens.py      THE design tokens (sizes, spacing, type, radii, colors). Colors come in two looks: the dark values
+                   as written + LIGHT (same names); use(scheme) points every color name at one of them
+    theme.py       use(look) (tokens + its own color names), _qss() / stylesheet() built from the colors in use,
+                   SVG icons: icon(name, role) / menu_icon(name) take a color ROLE ("MUTED") looked up when drawn
     widgets.py     shared building blocks: vbox/hbox, Section, combo/set_combo (dropdowns), PathCombo (every file /
                    folder setting: fixed choices, the ones picked before, "Choose …"; DESIGN.md §6), Segmented (tabs:
                    marigold underline, never boxed like a setting), FlowLayout, repolish
@@ -98,6 +100,11 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   `MainWindow.eff(item)` = base (or live panel) + the file's own `Item.override` (format only, see presets.OVERRIDE_KEYS).
 - Up to 2 conversions run at once (`Settings.parallel`); `MainWindow.active` maps item id -> ConvertThread.
   Output names are reserved under `engine._plan_lock`, and every queued source path is pre-reserved so "Replace" can't hit another original.
+- Light and dark: app.follow_system() picks the look from styleHints().colorScheme() at launch and on
+  colorSchemeChanged (LISTO_LOOK=light|dark overrides), then theme.use(look) + app.setStyleSheet(theme.stylesheet()).
+  So never capture a color at startup: read tokens.NAME / theme.NAME when drawing, give icons role names
+  (theme.icon("plus", "MUTED")), keep pictures on SCREEN (black in both), marigold words in ACCENT_INK
+  (DESIGN.md §5 "Two looks"). tests/test_theme.py checks both palettes are complete and readable.
 - Every setting that points at a file or folder is a widgets.PathCombo (DESIGN.md §6 "Picking a file or folder"):
   fixed choices, the ones picked before (QSettings list, newest first, gone ones dropped), "Choose …" (system picker).
   LUT: "recent_luts". Where: "recent_folders"; its value is "source" / "subfolder" / a folder (-> destination +
@@ -198,6 +205,7 @@ python -m listo cli FILES --video prores --variant 3 --out OUT --naming "{name}_
 python -m pytest -q                    # unit + integration tests (integration needs ffmpeg on PATH)
 python tests/samples.py OUTDIR         # generate tricky sample media
 QT_QPA_PLATFORM=offscreen python tests/screenshot.py SHOTS OUTDIR   # UI screenshots without a display
+LISTO_LOOK=light python -m listo       # force the light (or dark) look instead of following the system
 pyinstaller listo.spec --noconfirm     # build the app into dist/
 ```
 
