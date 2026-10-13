@@ -25,7 +25,7 @@ def _labels(c) -> list[str]:
 def test_choose_remembers_and_cancel_goes_back(tmp_path: Path, app):
     from PySide6.QtCore import QSettings
 
-    from listo.ui.widgets import CHOOSE, PathCombo
+    from listo.ui.components.widgets import CHOOSE, PathCombo
 
     qs = QSettings(str(tmp_path / "t.ini"), QSettings.Format.IniFormat)
     shoot, other = tmp_path / "Shoot" / "Exports", tmp_path / "Other" / "Exports"
@@ -68,10 +68,10 @@ def test_lut_and_where_follow_the_rule(tmp_path: Path, monkeypatch, app):
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QFileDialog
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb_mod
-    from listo.ui.widgets import CHOOSE
+    import listo.ui.panels.convert as sb_mod
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
+    from listo.ui.components.widgets import CHOOSE
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb_mod, ep):
@@ -109,9 +109,9 @@ def test_lut_and_where_follow_the_rule(tmp_path: Path, monkeypatch, app):
 def test_timecode_choice_is_in_clip_info(tmp_path: Path, monkeypatch, app):
     from PySide6.QtCore import QSettings
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb_mod
+    import listo.ui.panels.convert as sb_mod
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb_mod, ep):

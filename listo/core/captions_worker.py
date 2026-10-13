@@ -19,9 +19,9 @@ from __future__ import annotations
 import os
 import sys
 
-from . import captions
-from .log import get_logger, setup_logging
-from .probe import probe
+from listo.core import captions
+from listo.core.log import get_logger, setup_logging
+from listo.core.probe import probe
 
 log = get_logger(__name__)
 

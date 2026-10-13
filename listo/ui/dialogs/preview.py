@@ -11,12 +11,12 @@ from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
-from ..core import naming
-from ..core.presets import VIDEO_BY_KEY
-from .player import ClipPlayer, space_plays
-from .tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
-from .widgets import Segmented, combo, hbox, vbox
-from .workers import PreviewSignals, PreviewTask
+from listo.core import naming
+from listo.core.presets import VIDEO_BY_KEY
+from listo.ui.components.player import ClipPlayer, space_plays
+from listo.ui.components.widgets import Segmented, combo, hbox, vbox
+from listo.ui.style.tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
+from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
 
 class PreviewDialog(QDialog):

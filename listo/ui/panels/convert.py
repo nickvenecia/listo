@@ -21,9 +21,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.captions import LANGUAGES
-from ..core.captions import MODELS as CAPTION_MODELS
-from ..core.presets import (
+from listo.core.captions import LANGUAGES
+from listo.core.captions import MODELS as CAPTION_MODELS
+from listo.core.presets import (
     ASPECT_CHOICES,
     AUDIO_FORMATS,
     BUILTIN_RECIPES,
@@ -36,10 +36,9 @@ from ..core.presets import (
     VIDEO_PRESETS,
     Settings,
 )
-from ..core.tape import BLUE, NO_EFFECTS
-from ..core.tools import Capabilities
-from .tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import (
+from listo.core.tape import BLUE, NO_EFFECTS
+from listo.core.tools import Capabilities
+from listo.ui.components.widgets import (
     Disclosure,
     FitScroll,
     PathCombo,
@@ -53,6 +52,7 @@ from .widgets import (
     set_combo,
     vbox,
 )
+from listo.ui.style.tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_TIP = "Apply a LUT to every video — handy for review copies"
@@ -862,8 +862,8 @@ class Sidebar(QFrame):
 
     # ------------------------------------------------------------------ capabilities
     def apply_capabilities(self, caps: Capabilities) -> None:
-        from ..core.photo import is_heic_encodable
-        from ..core.video import preset_available
+        from listo.core.photo import is_heic_encodable
+        from listo.core.video import preset_available
 
         for p in VIDEO_PRESETS:
             ok = preset_available(p.key, caps) if p.needs else caps.ok

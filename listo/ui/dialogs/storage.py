@@ -7,11 +7,11 @@ from collections.abc import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QFrame, QLabel, QMessageBox, QPushButton, QWidget
 
-from ..core import storage
-from ..core.fileutil import reveal
-from ..core.paths import data_dir
-from .tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_5
-from .widgets import hbox, hint, vbox
+from listo.core import storage
+from listo.core.fileutil import reveal
+from listo.core.paths import data_dir
+from listo.ui.components.widgets import hbox, hint, vbox
+from listo.ui.style.tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_5
 
 
 class StorageDialog(QDialog):

@@ -10,8 +10,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import NamedTuple
 
-from .log import get_logger
-from .tools import capabilities, run_quiet
+from listo.core.log import get_logger
+from listo.core.tools import capabilities, run_quiet
 
 log = get_logger(__name__)
 
@@ -569,7 +569,7 @@ def probe(path: str | Path, as_media: bool = False) -> MediaInfo:
 def probe_photo(path: str) -> MediaInfo:
     info = MediaInfo(kind="photo")
     try:
-        from . import photo
+        from listo.core import photo
 
         w, h, created = photo.peek(path)
         info.width, info.height, info.created = w, h, created

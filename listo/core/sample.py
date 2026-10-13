@@ -6,9 +6,9 @@ from __future__ import annotations
 import subprocess
 from datetime import UTC, datetime
 
-from .log import get_logger
-from .paths import data_dir
-from .tools import capabilities, popen_kwargs
+from listo.core.log import get_logger
+from listo.core.paths import data_dir
+from listo.core.tools import capabilities, popen_kwargs
 
 log = get_logger(__name__)
 NAME = "sample-v2.mov"  # bump the number when the look changes

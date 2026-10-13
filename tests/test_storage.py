@@ -48,7 +48,7 @@ def test_storage_window_deletes_and_refreshes(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication, QMessageBox
 
-    import listo.ui.storage_dialog as sd
+    import listo.ui.dialogs.storage as sd
 
     monkeypatch.setattr(storage, "data_dir", lambda: tmp_path)
     monkeypatch.setattr(storage, "tools_dir", lambda: tmp_path / "tools")

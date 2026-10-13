@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
 
-from . import burnin, tape
-from .burnin import BurnPlan
-from .frame import Area, frame_plan, resized
-from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings, timecode_mode
-from .probe import MediaInfo, Shot, record_timecode, recorded, tc_add, tc_double_frames
-from .tools import Capabilities
+from listo.core import burnin, tape
+from listo.core.burnin import BurnPlan
+from listo.core.frame import Area, frame_plan, resized
+from listo.core.presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings, timecode_mode
+from listo.core.probe import MediaInfo, Shot, record_timecode, recorded, tc_add, tc_double_frames
+from listo.core.tools import Capabilities
 
 
 class PlanError(Exception):
@@ -293,7 +293,7 @@ def build(
         return Plan(args, "mov", notes, shot=shot)
 
     # ---- picture filters
-    from .naming import output_size
+    from listo.core.naming import output_size
 
     out_size = output_size(info, s, "video")
     vf: list[str] = []
@@ -329,7 +329,7 @@ def build(
         notes.append(f"Cinema bars added ({s.aspect})." if bars_only else f"Reshaped to {fw}×{fh}.")
     cues = None
     if s.captions and captions:
-        from .captions import for_output
+        from listo.core.captions import for_output
 
         cues = for_output(captions, trim[0] if trim else 0.0, (trim[1] - trim[0]) if trim else None)
     burn = burn_plan(

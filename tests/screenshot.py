@@ -14,7 +14,7 @@ from PySide6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from listo import app as appmod
-from listo.ui import theme
+from listo.ui.style import theme
 
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
 out.mkdir(parents=True, exist_ok=True)
@@ -31,7 +31,7 @@ def main() -> None:
     f.setPointSizeF(10)
     app.setFont(f)
     appmod.follow_system(app)
-    from listo.ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     w = MainWindow()
     app.aboutToQuit.connect(w.shutdown)

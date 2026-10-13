@@ -11,13 +11,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import naming, photo, tape, video
-from .fileutil import copy_dates
-from .log import get_logger
-from .presets import Settings
-from .probe import MediaInfo, Shot
-from .runner import Canceled, FFmpegFailed, FFmpegRun
-from .tools import Capabilities
+from listo.core import naming, photo, tape, video
+from listo.core.fileutil import copy_dates
+from listo.core.log import get_logger
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo, Shot
+from listo.core.runner import Canceled, FFmpegFailed, FFmpegRun
+from listo.core.tools import Capabilities
 
 log = get_logger(__name__)
 
@@ -77,7 +77,7 @@ class Conversion:
 
     def _write_srt(self, target: Path, notes: list[str]) -> None:
         """Captions as an .srt next to the video (same name), for players and editing apps."""
-        from .captions import for_output, to_srt
+        from listo.core.captions import for_output, to_srt
 
         srt = target.with_suffix(".srt")
         if srt.exists() or naming.reserve_key(srt) in self.reserved:
@@ -87,7 +87,7 @@ class Conversion:
         tmp = srt.with_name(f".{srt.name}.part")
         cues = for_output(self.captions, start, length)
         if self.blue_added:  # the blue screen comes first
-            from .captions import Cue
+            from listo.core.captions import Cue
 
             cues = [Cue(c.start + self.blue_added, c.end + self.blue_added, c.text) for c in cues]
         tmp.write_text(to_srt(cues, self.s.caption_words), encoding="utf-8")
@@ -102,7 +102,7 @@ class Conversion:
         without re-encoding."""
         import shutil
 
-        from .join import concat_args
+        from listo.core.join import concat_args
 
         folder = tmp.with_name(f".listo-blue-{uuid.uuid4().hex[:6]}")
         folder.mkdir()
@@ -155,7 +155,7 @@ class Conversion:
 
     def _verify(self, out: Path, notes: list[str]) -> str:
         """Re-read the new file and compare it to the original. Returns a warning or ''."""
-        from .probe import fmt_duration, probe
+        from listo.core.probe import fmt_duration, probe
 
         got = probe(out, as_media=True)
         if got.error:
@@ -216,7 +216,7 @@ class Conversion:
                     return Result("failed", message="ffmpeg is missing.")
                 conform = self.conform
                 if self.blue and conform is None:  # the blue screen must match the video exactly
-                    from .join import conform_for
+                    from listo.core.join import conform_for
 
                     conform = conform_for(self.info, self.s)
                 marks = self.marks

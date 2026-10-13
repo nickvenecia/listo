@@ -21,9 +21,9 @@ import tempfile
 import zlib
 from pathlib import Path
 
-from .presets import Settings
-from .probe import MediaInfo
-from .tools import Capabilities, popen_kwargs
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.core.tools import Capabilities, popen_kwargs
 
 BLUE = "0x1E2EE6"  # a VCR's blue screen
 BLUE_SECONDS = 2.0
@@ -207,7 +207,7 @@ def vhs(s: Settings) -> bool:
 def marks(s: Settings, length: float, first: bool, last: bool):
     """PLAY / STOP timing for a clip (first / last = it starts / ends the video). PLAY blinks for 4
     seconds, the first 2 of them on the start screen if there is one; STOP comes up at the end."""
-    from .burnin import Marks
+    from listo.core.burnin import Marks
 
     if not vhs(s):
         return None
@@ -260,7 +260,7 @@ def screen_sources(s: Settings, conform, seconds: float) -> tuple[str, str]:
 
 def picture_area(info: MediaInfo, s: Settings):
     """Where the picture sits in the frame (inside any bars), so the badges line up with the video's."""
-    from .frame import frame_plan
+    from listo.core.frame import frame_plan
 
     return frame_plan(info.width, info.height, info.sar, s)[3]
 
@@ -288,9 +288,9 @@ def make_blue(
     video exactly (size, frame rate, sound, encoder),
     so it can be joined on without re-encoding; badge "play" (blinking) or "stop" (steady, then gone)
     drawn where the video's own badge sits. Returns the engine Result."""
-    from .burnin import FULL, badge_plan
-    from .engine import Conversion
-    from .probe import probe
+    from listo.core.burnin import FULL, badge_plan
+    from listo.core.engine import Conversion
+    from listo.core.probe import probe
 
     with tempfile.TemporaryDirectory(prefix="listo-blue-") as d:
         src = Path(d) / "screen.mkv"

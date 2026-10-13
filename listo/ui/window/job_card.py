@@ -16,8 +16,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import theme, tokens
-from .widgets import repolish
+from listo.ui.components.widgets import repolish
+from listo.ui.style import theme, tokens
 
 THUMB_W, THUMB_H = tokens.THUMB_W, tokens.THUMB_H
 

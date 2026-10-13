@@ -18,11 +18,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import APP_NAME, __version__
-from .core.log import get_logger, setup_logging
-from .core.paths import data_dir, log_dir
-from .ui import theme
-from .ui.widgets import ComboItemDelegate
+from listo import APP_NAME, __version__
+from listo.core.log import get_logger, setup_logging
+from listo.core.paths import data_dir, log_dir
+from listo.ui.components.widgets import ComboItemDelegate
+from listo.ui.style import theme
 
 log = get_logger(__name__)
 
@@ -252,7 +252,7 @@ def main() -> int:
     if hasattr(app.styleHints(), "colorSchemeChanged"):
         app.styleHints().colorSchemeChanged.connect(lambda _scheme: follow_system(app))
 
-    from .ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     w = MainWindow()
     app.window = w
@@ -263,12 +263,12 @@ def main() -> int:
     w.raise_()
 
     if smoke:  # used by the build pipeline: launch, check, quit
-        from .core.tools import capabilities
+        from listo.core.tools import capabilities
 
         caps = capabilities()
         print("smoke:", caps.ffmpeg, caps.version, flush=True)
-        from .core.captions_worker import ping
-        from .ui.caption_editor import HAS_PLAYER
+        from listo.core.captions_worker import ping
+        from listo.ui.dialogs.captions import HAS_PLAYER
 
         status = ping()  # captions run in their own process: make sure the packaged app can start it
         print(f"captions process: {status or 'DID NOT START'}", flush=True)

@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from listo.ui.tokens import ACCENT, TEXT  # noqa: E402
+from listo.ui.style.tokens import ACCENT, TEXT  # noqa: E402
 
 SIZE = 1024
 TILE = 824  # Apple's icon grid: an 824 px rounded square centred on 1024 (room for the shadow)

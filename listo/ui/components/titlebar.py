@@ -18,9 +18,9 @@ import sys
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QLabel, QMainWindow, QWidget
 
-from . import theme
-from .tokens import TITLEBAR_H
-from .widgets import hbox
+from listo.ui.components.widgets import hbox
+from listo.ui.style import theme
+from listo.ui.style.tokens import TITLEBAR_H
 
 
 def supported() -> bool:

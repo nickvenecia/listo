@@ -32,15 +32,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import APP_NAME, __version__
-from ..core import captions, console, join, naming, tape, update
-from ..core.captions import sample_cues
-from ..core.engine import Conversion, Result
-from ..core.fileutil import reveal
-from ..core.links import is_link
-from ..core.log import get_logger
-from ..core.paths import data_dir
-from ..core.presets import (
+from listo import APP_NAME, __version__
+from listo.core import captions, console, join, naming, tape, update
+from listo.core.captions import sample_cues
+from listo.core.engine import Conversion, Result
+from listo.core.fileutil import reveal
+from listo.core.links import is_link
+from listo.core.log import get_logger
+from listo.core.paths import data_dir
+from listo.core.presets import (
     AUDIO_FORMATS,
     OVERRIDE_KEYS,
     PHOTO_FORMATS,
@@ -50,7 +50,7 @@ from ..core.presets import (
     format_label,
     timecode_mode,
 )
-from ..core.probe import (
+from listo.core.probe import (
     KNOWN_EXTS,
     SIDECAR_EXTS,
     UNSUPPORTED_HINTS,
@@ -60,20 +60,21 @@ from ..core.probe import (
     kind_from_ext,
     probe,
 )
-from ..core.sample import sample_clip, sample_clip_if_made
-from ..core.tools import capabilities
-from . import theme, titlebar, tokens
-from .caption_editor import CaptionEditor
-from .export_panel import ExportPanel
-from .job_card import JobCard
-from .player import space_plays
-from .preview_dialog import PreviewDialog
-from .sidebar import Sidebar
-from .storage_dialog import StorageDialog
-from .trim_dialog import TrimDialog, fmt_time
-from .update_dialog import CheckThread, UpdateDialog, restart_into
-from .widgets import FitScroll, StepHeader, Toast, repolish
-from .workers import (
+from listo.core.sample import sample_clip, sample_clip_if_made
+from listo.core.tools import capabilities
+from listo.ui.components import titlebar
+from listo.ui.components.player import space_plays
+from listo.ui.components.widgets import FitScroll, StepHeader, Toast, repolish
+from listo.ui.dialogs.captions import CaptionEditor
+from listo.ui.dialogs.preview import PreviewDialog
+from listo.ui.dialogs.storage import StorageDialog
+from listo.ui.dialogs.trim import TrimDialog, fmt_time
+from listo.ui.dialogs.update import CheckThread, UpdateDialog, restart_into
+from listo.ui.panels.convert import Sidebar
+from listo.ui.panels.export import ExportPanel
+from listo.ui.style import theme, tokens
+from listo.ui.window.job_card import JobCard
+from listo.ui.window.jobs import (
     ConvertThread,
     DownloadThread,
     HardwareSignals,
@@ -670,8 +671,8 @@ class MainWindow(QMainWindow):
             self.btn_check.setText(" Check Captions")
 
     def _show_log(self) -> None:
-        from ..core.fileutil import reveal
-        from ..core.paths import log_dir
+        from listo.core.fileutil import reveal
+        from listo.core.paths import log_dir
 
         reveal(str(log_dir() / "listo.log"))
 

@@ -112,9 +112,9 @@ def test_window_gives_separate_files_their_timecode(tmp_path: Path, monkeypatch,
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.panels.convert as sb
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb, ep):

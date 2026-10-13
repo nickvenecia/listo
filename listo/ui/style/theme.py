@@ -9,8 +9,8 @@ from PySide6.QtCore import QByteArray, QRectF, QSize, Qt
 from PySide6.QtGui import QFontDatabase, QIcon, QIconEngine, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-from . import tokens
-from .tokens import (
+from listo.ui.style import tokens
+from listo.ui.style.tokens import (
     ACCENT,
     ACCENT_EDGE,
     ACCENT_HOVER,
@@ -76,7 +76,7 @@ from .tokens import (
     WELL,
 )
 
-ASSETS = Path(__file__).resolve().parent.parent / "assets"
+ASSETS = Path(__file__).resolve().parents[2] / "assets"
 FONT_FAMILY = "Inter"
 MONO = '"Menlo", "Consolas", "DejaVu Sans Mono", monospace'
 

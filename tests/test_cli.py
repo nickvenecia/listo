@@ -48,7 +48,7 @@ def test_photo_thumbnail():
 
     from PIL import Image
 
-    from listo.ui import workers
+    from listo.ui.window import jobs as workers
 
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "t.png"
@@ -65,17 +65,17 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel
-    import listo.ui.main_window
-    import listo.ui.sidebar
+    import listo.ui.panels.convert
+    import listo.ui.panels.export
+    import listo.ui.window.main_window
 
     # Never touch the real Listo preferences on this computer.
     ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.main_window, listo.ui.sidebar, listo.ui.export_panel):
+    for mod in (listo.ui.window.main_window, listo.ui.panels.convert, listo.ui.panels.export):
         if hasattr(mod, "QSettings"):
             monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
 
-    from listo.ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
     w = MainWindow()
@@ -96,7 +96,7 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.g_picture.set_open(True)
     assert sb.matte_row.isVisibleTo(sb)
     from listo.core.presets import Settings
-    from listo.ui.sidebar import GROUPS
+    from listo.ui.panels.convert import GROUPS
 
     for group, key in ((sb.g_picture, "picture"), (sb.g_text, "text")):
         n = sum(1 for k in GROUPS[key] if getattr(s, k) != getattr(Settings(), k))
@@ -171,13 +171,13 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window
-    import listo.ui.sidebar
+    import listo.ui.panels.convert
+    import listo.ui.window.main_window
 
     ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.main_window, listo.ui.sidebar):
+    for mod in (listo.ui.window.main_window, listo.ui.panels.convert):
         monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
-    from listo.ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
     folder = tmp_path / "SD_VIDEO"
@@ -212,9 +212,9 @@ def test_preview_window_opens_for_clips_and_for_an_empty_list(tmp_path: Path, mo
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.preview_dialog as pd
-    import listo.ui.sidebar as sb
+    import listo.ui.dialogs.preview as pd
+    import listo.ui.panels.convert as sb
+    import listo.ui.window.main_window as mw
     from listo.core import sample
 
     ini = str(tmp_path / "t.ini")

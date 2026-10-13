@@ -39,9 +39,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .. import __version__
-from .links import _ssl_context
-from .log import get_logger
+from listo import __version__
+from listo.core.links import _ssl_context
+from listo.core.log import get_logger
 
 log = get_logger(__name__)
 

@@ -15,14 +15,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import join, naming
-from ..core.log import get_logger
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from .job_card import ElidedLabel
-from .player import ClipPlayer
-from .tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
-from .widgets import (
+from listo.core import join, naming
+from listo.core.log import get_logger
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.ui.components.player import ClipPlayer
+from listo.ui.components.widgets import (
     Disclosure,
     FitScroll,
     FlowLayout,
@@ -36,6 +34,8 @@ from .widgets import (
     set_combo,
     vbox,
 )
+from listo.ui.style.tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
+from listo.ui.window.job_card import ElidedLabel
 
 log = get_logger(__name__)
 

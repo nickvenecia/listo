@@ -38,13 +38,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import burnin, naming
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from . import theme
-from .tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
-from .trim_dialog import fmt_clock
-from .widgets import hbox, vbox
+from listo.core import burnin, naming
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.ui.components.widgets import hbox, vbox
+from listo.ui.dialogs.trim import fmt_clock
+from listo.ui.style import theme
+from listo.ui.style.tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
 
 # No hardware decoding for playback: Qt's player crashed on MPEG-2 (.MOD) when the Mac's decoder
 # refused it. "," = an empty list (Qt docs: Advanced FFmpeg Configuration). Must be set before Qt

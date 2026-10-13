@@ -18,8 +18,8 @@ def test_reading_many_files_bundles_the_refreshes(tmp_path: Path, monkeypatch):
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.panels.convert as sb
+    import listo.ui.window.main_window as mw
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb):
@@ -33,7 +33,7 @@ def test_reading_many_files_bundles_the_refreshes(tmp_path: Path, monkeypatch):
         f = tmp_path / f"C{i:03d}.mov"
         shutil.copy(one, f)
         files.append(str(f))
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
     from tests import speech_standin
 
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))

@@ -19,9 +19,9 @@ def test_title_bar_is_on_top_and_drags_the_window(tmp_path: Path, monkeypatch):
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
-    from listo.ui import titlebar
+    import listo.ui.panels.convert as sb
+    import listo.ui.window.main_window as mw
+    from listo.ui.components import titlebar
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb):

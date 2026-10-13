@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import theme, tokens
+from listo.ui.style import theme, tokens
 
 
 def section_label(text: str) -> QLabel:

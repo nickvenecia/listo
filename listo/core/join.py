@@ -18,14 +18,14 @@ from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 
-from . import naming, tape, video
-from .engine import Result, _plan_lock
-from .fileutil import copy_dates
-from .log import get_logger
-from .presets import AUDIO_BY_KEY, Settings
-from .probe import MediaInfo, Shot, fmt_duration, probe, recorded
-from .runner import Canceled, FFmpegFailed, FFmpegRun
-from .tools import Capabilities
+from listo.core import naming, tape, video
+from listo.core.engine import Result, _plan_lock
+from listo.core.fileutil import copy_dates
+from listo.core.log import get_logger
+from listo.core.presets import AUDIO_BY_KEY, Settings
+from listo.core.probe import MediaInfo, Shot, fmt_duration, probe, recorded
+from listo.core.runner import Canceled, FFmpegFailed, FFmpegRun
+from listo.core.tools import Capabilities
 
 log = get_logger(__name__)
 
@@ -62,7 +62,7 @@ def running_timecodes(clips: list[tuple[MediaInfo, float]], start: float = 0.0) 
     One Convert = one tape: clips without their own timecode (camcorder .MOD, phones) get a counter
     that keeps running from clip to clip, from 00:00:00:00 (even across days: it's often one event).
     Clips with real timecode (pro cameras) keep it (""); the counter runs on through them."""
-    from .probe import tc_add, zero_tc
+    from listo.core.probe import tc_add, zero_tc
 
     out: list[str] = []
     running = start
@@ -196,7 +196,7 @@ class Join:
                 shutil.rmtree(f, ignore_errors=True)
 
     def _write_srt(self, target: Path, lengths: list[float], notes: list[str]) -> None:
-        from .captions import Cue, to_srt
+        from listo.core.captions import Cue, to_srt
 
         srt = target.with_suffix(".srt")
         if srt.exists() or naming.reserve_key(srt) in self.reserved:

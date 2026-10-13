@@ -9,11 +9,18 @@ import argparse
 import sys
 from pathlib import Path
 
-from .core.engine import Conversion
-from .core.log import setup_logging
-from .core.presets import AUDIO_BY_KEY, PHOTO_BY_KEY, TIMECODE_MODES, VIDEO_BY_KEY, Settings, timecode_mode
-from .core.probe import KNOWN_EXTS, ext_of, probe
-from .core.tools import capabilities, detect_hardware
+from listo.core.engine import Conversion
+from listo.core.log import setup_logging
+from listo.core.presets import (
+    AUDIO_BY_KEY,
+    PHOTO_BY_KEY,
+    TIMECODE_MODES,
+    VIDEO_BY_KEY,
+    Settings,
+    timecode_mode,
+)
+from listo.core.probe import KNOWN_EXTS, ext_of, probe
+from listo.core.tools import capabilities, detect_hardware
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -69,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             files.append(str(p))
 
-    from .core import naming
+    from listo.core import naming
 
     reserved: set[str] = {naming.reserve_key(Path(f)) for f in files}  # never replace another original
     failed = 0
@@ -78,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         info = probe(f)
         tc = ""
         if info.kind == "video" and timecode_mode(s) == "continuous":
-            from .core.join import running_timecodes
+            from listo.core.join import running_timecodes
 
             tc = running_timecodes([(info, info.duration)], tape)[0]
             tape += info.duration

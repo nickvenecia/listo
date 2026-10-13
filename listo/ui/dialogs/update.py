@@ -20,11 +20,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
-from ..core import update
-from ..core.log import get_logger
-from .tokens import DIALOG_W, SPACE_2, SPACE_3, SPACE_5
-from .widgets import hbox, hint, vbox
+from listo import __version__
+from listo.core import update
+from listo.core.log import get_logger
+from listo.ui.components.widgets import hbox, hint, vbox
+from listo.ui.style.tokens import DIALOG_W, SPACE_2, SPACE_3, SPACE_5
 
 log = get_logger(__name__)
 

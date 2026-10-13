@@ -8,8 +8,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .log import get_logger
-from .tools import popen_kwargs
+from listo.core.log import get_logger
+from listo.core.tools import popen_kwargs
 
 log = get_logger(__name__)
 

@@ -14,13 +14,15 @@ from PySide6.QtCore import QEvent, QObject, Qt, QThreadPool
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QWidget
 
-from ..core import captions
-from ..core.captions import Cue, Transcript
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from . import theme
-from .player import HAS_PLAYER, ClipPlayer, space_plays
-from .tokens import (
+from listo.core import captions
+from listo.core.captions import Cue, Transcript
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.ui.components.player import HAS_PLAYER, ClipPlayer, space_plays
+from listo.ui.components.widgets import ClickLabel, combo, hbox, hint, repolish, vbox
+from listo.ui.dialogs.trim import fmt_clock
+from listo.ui.style import theme
+from listo.ui.style.tokens import (
     CAPTION_LIST_W,
     CAPTION_ROW_H,
     EDITOR_PIC_H,
@@ -31,9 +33,7 @@ from .tokens import (
     SPACE_5,
     TIME_FIELD_W,
 )
-from .trim_dialog import fmt_clock
-from .widgets import ClickLabel, combo, hbox, hint, repolish, vbox
-from .workers import PreviewSignals, PreviewTask
+from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
 __all__ = ["HAS_PLAYER", "CaptionEditor"]
 

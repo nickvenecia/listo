@@ -173,7 +173,7 @@ def test_update_window(monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from listo.ui.update_dialog import UpdateDialog, _whats_new
+    from listo.ui.dialogs.update import UpdateDialog, _whats_new
 
     app = QApplication.instance() or QApplication([])
     assert "Download" not in _whats_new(GITHUB_ANSWER["body"]) and "Faster glitches" in _whats_new(
@@ -191,9 +191,9 @@ def test_window_offers_the_update(tmp_path: Path, monkeypatch):
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.panels.convert as sb
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
 
     ini = str(tmp_path / "t.ini")
     for mod in (mw, sb, ep):

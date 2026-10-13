@@ -18,8 +18,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .log import get_logger
-from .paths import data_dir, log_dir
+from listo.core.log import get_logger
+from listo.core.paths import data_dir, log_dir
 
 log = get_logger(__name__)
 

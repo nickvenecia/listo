@@ -6,7 +6,7 @@ preview ({res}) always agree.
 
 from __future__ import annotations
 
-from .presets import Settings
+from listo.core.presets import Settings
 
 ASPECTS = {
     "16:9": 16 / 9,

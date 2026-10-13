@@ -24,9 +24,9 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 
-from .log import get_logger
-from .paths import downloads_dir, tools_dir
-from .tools import EXE, IS_WIN, capabilities, popen_kwargs
+from listo.core.log import get_logger
+from listo.core.paths import downloads_dir, tools_dir
+from listo.core.tools import EXE, IS_WIN, capabilities, popen_kwargs
 
 log = get_logger(__name__)
 

@@ -8,7 +8,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from listo.ui import theme, tokens
+from listo.ui.style import theme, tokens
 
 
 @pytest.fixture
@@ -83,9 +83,9 @@ def test_icons_follow_the_look(back_to_dark):
 def test_window_follows_the_computer(tmp_path, monkeypatch, back_to_dark):
     from PySide6.QtCore import QSettings
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.panels.convert as sb
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
     from listo import app as appmod
 
     ini = str(tmp_path / "t.ini")
