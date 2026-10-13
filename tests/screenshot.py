@@ -2,6 +2,7 @@
 
 QT_QPA_PLATFORM=offscreen python tests/screenshot.py OUTDIR [SAMPLES_DIR]
 LISTO_LOOK=light (or dark) picks the look; otherwise it follows the system like the app.
+Runs on a throwaway data folder and settings file, never the real ones.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ from PySide6.QtCore import QTimer
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from listo import app as appmod
-from listo.ui.style import theme
 
 out = Path(sys.argv[1] if len(sys.argv) > 1 else "shots")
 out.mkdir(parents=True, exist_ok=True)
@@ -22,20 +22,23 @@ samples = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 
 
 def main() -> None:
-    app = appmod.ListoApp(sys.argv[:1])
-    app.setStyle("Fusion")
-    fam = theme.load_fonts()
-    from PySide6.QtGui import QFont
+    import tempfile
 
-    f = QFont(fam)
-    f.setPointSizeF(10)
-    app.setFont(f)
-    appmod.follow_system(app)
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    from listo.core.paths import use_data_dir
+
+    scratch = Path(tempfile.mkdtemp(prefix="listo-shots-"))  # never the real settings or recipes
+    use_data_dir(scratch)
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(scratch))
+    app = QApplication(sys.argv[:1])
+    appmod.setup_app(app)
     from listo.ui.window.main_window import MainWindow
 
     w = MainWindow()
     app.aboutToQuit.connect(w.shutdown)
-    w.qs.clear()
     w.resize(1120, 720)
     w.show()
     steps = []

@@ -54,7 +54,7 @@ class TitleBar(QWidget):
         self.setFixedHeight(TITLEBAR_H)
         ignore_safe_area(self)
         lay = hbox(self, 0, 0)
-        word = QLabel(f'listo<span style="color:{theme.ACCENT}">.</span>')
+        word = QLabel(theme.wordmark())
         word.setObjectName("TitleWordmark")
         word.setTextFormat(Qt.TextFormat.RichText)
         word.setAlignment(Qt.AlignmentFlag.AlignCenter)

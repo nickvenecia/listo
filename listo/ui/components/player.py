@@ -216,7 +216,7 @@ class ClipPlayer(QWidget):
     def _nav_button(self, icon: str, tip: str, direction: int) -> QToolButton:
         b = QToolButton()
         b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(icon, "TEXT"))
+        b.setIcon(theme.icon(icon, theme.TEXT))
         b.setIconSize(QSize(ICON, ICON))
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setToolTip(tip)
@@ -411,7 +411,7 @@ class ClipPlayer(QWidget):
     def _state(self, *_a) -> None:
         playing = self.is_playing()
         self.btn_play.setVisible(not self.fallback)
-        self.btn_play.setIcon(theme.icon("pause" if playing else "play", "TEXT"))
+        self.btn_play.setIcon(theme.icon("pause" if playing else "play", theme.TEXT))
         self._still_visibility()
         if playing:
             self._settle.stop()

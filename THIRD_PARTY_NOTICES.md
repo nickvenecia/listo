@@ -12,7 +12,8 @@ The packaged app includes these open-source components. Thank you to their autho
 | NumPy | BSD-3 | https://github.com/numpy/numpy |
 | psutil | BSD-3 | https://github.com/giampaolo/psutil |
 | Python | PSF License | https://www.python.org |
-| Inter typeface | SIL Open Font License 1.1 | https://github.com/rsms/inter (see `listo/assets/fonts/OFL.txt`) |
+| Inter typeface | SIL Open Font License 1.1 | https://github.com/rsms/inter (see `listo/assets/fonts/OFL-Inter.txt`) |
+| IBM Plex Mono typeface | SIL Open Font License 1.1 | https://github.com/IBM/plex (see `listo/assets/fonts/OFL-IBMPlexMono.txt`) |
 | faster-whisper (speech to text for captions) | MIT | https://github.com/SYSTRAN/faster-whisper |
 | CTranslate2 | MIT | https://github.com/OpenNMT/CTranslate2 |
 | Whisper speech models (downloaded on first use) | MIT | https://github.com/openai/whisper · converted models: https://huggingface.co/Systran |

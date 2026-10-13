@@ -116,7 +116,7 @@ class CaptionEditor(QDialog):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right.addWidget(self.scroll)
         self.btn_add = QPushButton(" Add Caption")
-        self.btn_add.setIcon(theme.icon("plus", "TEXT"))
+        self.btn_add.setIcon(theme.icon("plus", theme.TEXT))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add a caption where the clip is now (pause where the words start)")
         self.btn_add.clicked.connect(self.add_caption)

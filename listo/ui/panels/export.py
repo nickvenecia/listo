@@ -34,7 +34,7 @@ from listo.ui.components.widgets import (
     set_combo,
     vbox,
 )
-from listo.ui.style.tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
+from listo.ui.style.tokens import INSPECTOR_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 from listo.ui.window.job_card import ElidedLabel
 
 log = get_logger(__name__)
@@ -91,7 +91,7 @@ class ExportPanel(QFrame):
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("ExportPanel")
-        self.setFixedWidth(EXPORT_W)
+        self.setFixedWidth(INSPECTOR_W)
         self.s = settings
         self._sample: tuple[str, MediaInfo | None, str] | None = None
         self._custom_text = (
@@ -108,7 +108,7 @@ class ExportPanel(QFrame):
 
         # ---- live preview: the selected (or first) clip with every setting applied
         prev = Section("Preview")
-        pic_w = EXPORT_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
+        pic_w = INSPECTOR_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
         # Paused: the exact result (MainWindow renders it). Playing: the clip with its captions, with sound.
         self.player = ClipPlayer(pic_w, round(pic_w * 9 / 16))
         self.player.stage.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -305,7 +305,7 @@ class ExportPanel(QFrame):
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):
             self.tok_flow.itemAt(i).widget().ensurePolished()
-        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(EXPORT_W - 2 * SPACE_4 - SPACE_2))
+        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(INSPECTOR_W - 2 * SPACE_4 - SPACE_2))
         self._update_example()
 
     def reload(self) -> None:
