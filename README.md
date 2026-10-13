@@ -26,7 +26,9 @@ Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…" m
 
 ffmpeg and everything else comes bundled. There's no Homebrew, Python or terminal needed.
 
-**Updates:** Listo checks for a new version once a day. When there is one, an **Update to …** button appears in the bottom bar: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo. You can also use **⋯ → Check for Updates…** (or turn the daily check off there).
+**Updates:** every time Listo opens, it checks for a new version. When there is one, the update window opens by itself: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo (**Later** closes it; **Update to …** stays at the bottom of the sidebar). You can also check any time from the menu at the bottom of the sidebar (your name) → **Check for Updates…**, and turn the automatic check off in **Settings › General**.
+
+**Your settings stay yours:** settings, recipes and checked captions are kept on your computer only, in Listo's folder (Settings › Your Data shows where, and **Back Up…** zips them). Undo (⌘Z / Ctrl+Z) takes back a change to the settings or the list.
 
 ## What it does
 
@@ -100,20 +102,18 @@ Build the app yourself: `pyinstaller listo.spec --noconfirm` → `dist/`.
 
 ## Making a release
 
-Builds run on GitHub for every push. To publish downloads:
-
-```bash
-# bump __version__ in listo/__init__.py, then:
-git tag v2.0.1 && git push --tags
-```
-
-GitHub Actions builds the Mac (Apple Silicon and Intel), Windows and Linux versions, tests each one, and attaches them to a new Release.
+**Merging is releasing.** A pull request with a change people will notice also bumps `__version__` in
+`listo/__init__.py` (the last number for fixes, the middle one for a new feature) and writes its notes in
+`CHANGELOG.md` under that version. When it's merged, GitHub Actions builds the Mac (Apple Silicon and Intel),
+Windows and Linux versions, tests each one, tags the commit `vX.Y.Z` and publishes the Release with the downloads
+and the notes, all by itself. Nobody tags or releases by hand. Pull requests themselves never release.
 
 ### Optional: signing the Mac app
 To get rid of the "can't check this app" warning you need an Apple Developer account ($99/yr). Add these repository secrets and the workflow will sign and notarize automatically: `MACOS_CERTIFICATE` (base64 .p12), `MACOS_CERTIFICATE_PWD`, `MACOS_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`.
 
 ## Changing the icon
-Replace `listo/assets/icon.png` with a 1024×1024 PNG (transparent corners). The Mac and Windows icons are generated from it at build time.
+The icon ("l." on a dark tile, the dot in marigold) is drawn by `python scripts/make_icon.py` into `listo/assets/icon.png`
+from the app's own colors and font. The Mac and Windows icons are generated from it at build time.
 
 ## License
 Copyright © Nick Venecia.

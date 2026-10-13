@@ -172,6 +172,7 @@ DARK = {
     "ACCENT_EDGE": "rgba(255, 183, 67, 0.55)",
     "GOOD": "#4CC38A",
     "BAD": "#F0616D",  # failed, remove
+    "ON_BAD": "#FFFFFF",  # words on a red fill (the alert's Delete)
     "BAD_TINT": "#2A1A1D",  # danger button hover
     "BAD_EDGE": "#5A2A30",  # a failed outline
     "WARN": "#DCCF45",  # needs a look: shifted toward yellow, away from the marigold accent
@@ -222,6 +223,7 @@ LIGHT = {
     "ACCENT_EDGE": "rgba(168, 99, 0, 0.45)",
     "GOOD": "#1E9A5E",
     "BAD": "#D3374A",
+    "ON_BAD": "#FFFFFF",  # words on a red fill (the alert's Delete)
     "BAD_TINT": "#FBEAEC",
     "BAD_EDGE": "#EFB7BF",
     "WARN": "#7F7500",

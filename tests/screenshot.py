@@ -94,7 +94,7 @@ def main() -> None:
             w.export_panel.styles.setCurrentIndex(w.export_panel.styles.findData("custom"))
 
         steps.append((100, groups_open))
-        steps.append((500, shot("03-panel", lambda: w.panel)))
+        steps.append((500, shot("03-panel")))  # (the panel alone would lose the glass behind it)
 
         def recipe():
             w.convert.open_groups(False)

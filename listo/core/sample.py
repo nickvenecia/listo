@@ -3,8 +3,11 @@ with timecode, a recording date and a tone), made once with Listo's ffmpeg and k
 
 from __future__ import annotations
 
+import os
 import subprocess
+import threading
 from datetime import UTC, datetime
+from pathlib import Path
 
 from listo.core.log import get_logger
 from listo.core.paths import data_dir
@@ -34,11 +37,21 @@ def sample_clip() -> str | None:
     caps = capabilities()
     if not caps.ffmpeg:
         return None
+    with _making:  # two previews asking at once make it once (the second finds it made)
+        return _make(target, caps.ffmpeg)
+
+
+_making = threading.Lock()
+
+
+def _make(target: Path, ffmpeg: str) -> str | None:
+    if target.is_file():
+        return str(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(".making-" + NAME)
+    tmp = target.with_name(f".making-{os.getpid()}-{NAME}")
     now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     cmd = [
-        caps.ffmpeg, "-hide_banner", "-v", "error", "-y",
+        ffmpeg, "-hide_banner", "-v", "error", "-y",
         "-f", "lavfi", "-i", GRADIENT,
         "-f", "lavfi", "-i", "sine=frequency=440:d=6",
         "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-c:a", "aac",

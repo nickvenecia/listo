@@ -1,7 +1,12 @@
 name: Build Listo
 
-# Every push builds and tests on all platforms.
-# Pushing a tag like v2.0.0 also publishes a GitHub Release with the downloads.
+# Every push and pull request builds and tests on all platforms.
+#
+# Merging is releasing: when a push to main carries a version (listo/__init__.py __version__) that has no tag
+# yet, this same run builds, tags that exact commit vX.Y.Z and publishes the GitHub Release with the downloads
+# and the version's CHANGELOG notes. (A tag made with the workflow's own token doesn't start another workflow,
+# so the release can't wait for a tag-triggered run.) Pull requests never release. Pushing a tag by hand still
+# works, but only if it matches __version__.
 # Actions are pinned to exact commits (a tag can be moved; a commit can't). Dependabot proposes updates.
 on:
   push:
@@ -16,6 +21,10 @@ permissions:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      release: ${{ steps.release.outputs.release }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -28,17 +37,45 @@ jobs:
         run: ruff format --check .
       - name: Lint (style, bugs, security)
         run: ruff check .
-      - name: The tag matches the app's version
-        # a release whose app reports an older number keeps offering itself as an update
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Is this a release?
+        # main: release when vX.Y.Z (from __version__) has no tag yet. A pushed tag: it must match __version__
+        # (a release whose app reports an older number keeps offering itself as an update). Pull requests: never.
+        id: release
         env:
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           v=$(python -c "import ast, pathlib; t = ast.parse(pathlib.Path('listo/__init__.py').read_text()); print(next(n.value.value for n in t.body if isinstance(n, ast.Assign) and n.targets[0].id == '__version__'))")
-          if [ "$TAG" != "v$v" ]; then
-            echo "::error::Tag $TAG doesn't match __version__ $v in listo/__init__.py. Bump the version, commit, then tag."
-            exit 1
+          tag="v$v"
+          release=false
+          if [ "$EVENT" = "push" ] && [[ "$REF" == refs/tags/v* ]]; then
+            if [ "$REF_NAME" != "$tag" ]; then
+              echo "::error::Tag $REF_NAME doesn't match __version__ $v in listo/__init__.py. Bump the version, commit, then tag."
+              exit 1
+            fi
+            if gh release view "$tag" --repo "$REPO" > /dev/null 2>&1; then
+              echo "Release $tag already exists: building only."
+            else
+              release=true
+            fi
+          elif [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/main" ]; then
+            if gh api "repos/$REPO/git/ref/tags/$tag" --silent > /dev/null 2>&1; then
+              echo "$tag is already released: building only."
+            else
+              awk -v v="$v" '$1 == "##" && $2 == v { f = 1 } END { exit !f }' CHANGELOG.md ||
+                echo "::warning::CHANGELOG.md has no '## $v' section: the release will have no notes."
+              echo "Releasing $tag from this commit once the builds pass."
+              release=true
+            fi
           fi
+          {
+            echo "version=$v"
+            echo "tag=$tag"
+            echo "release=$release"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: lint
@@ -226,31 +263,90 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    # only a push (to main, or a matching tag) whose version has no release yet; never a pull request
+    if: github.event_name == 'push' && needs.lint.outputs.release == 'true'
+    needs: [lint, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # two quick merges: their releases run one after the other, and the second finds the tag already made
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      TAG: ${{ needs.lint.outputs.tag }}
+      VERSION: ${{ needs.lint.outputs.version }}
+      SHA: ${{ github.sha }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Tag this commit (once)
+        id: tag
+        # Making the tag is the lock: only one run can create refs/tags/vX.Y.Z. If it's already there (a run
+        # that finished first, or a tag pushed by hand), this run publishes nothing new.
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            if gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+              echo "Release $TAG already exists."
+              echo "go=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "go=true" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+          if gh api "repos/$REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" --silent; then
+            echo "Tagged $SHA as $TAG."
+            echo "go=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          at=$(gh api "repos/$REPO/git/ref/tags/$TAG" --jq .object.sha 2> /dev/null || true)
+          if [ "$at" = "$SHA" ] && ! gh release view "$TAG" --repo "$REPO" > /dev/null 2>&1; then
+            echo "$TAG is already on this commit but has no release yet (a re-run): publishing it."
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$TAG already exists on another commit or is released: nothing to release."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Release notes (downloads, then this version's CHANGELOG)
+        if: steps.tag.outputs.go == 'true'
+        run: |
+          {
+            echo "## Download"
+            echo "| Your computer | File |"
+            echo "|---|---|"
+            echo "| Mac with Apple Silicon (M1 and newer) | \`Listo-mac-apple-silicon.dmg\` |"
+            echo "| Intel Mac | \`Listo-mac-intel.dmg\` |"
+            echo "| Windows (installer) | \`Listo-windows-setup.exe\` |"
+            echo "| Windows (no install) | \`Listo-windows-portable.zip\` |"
+            echo "| Linux (one file, double-click to run) | \`Listo-linux-x64.AppImage\` |"
+            echo "| Linux (folder + install script) | \`Listo-linux-x64.tar.gz\` |"
+            echo
+            echo "Everything Listo needs (including ffmpeg) is inside, nothing else to install."
+            echo "**First launch on Mac:** if macOS says it can't check the app, open **System Settings → Privacy & Security** and click **Open Anyway**."
+            echo "**First launch on Windows:** if SmartScreen appears, click **More info → Run anyway**."
+            echo
+            echo "## What's New in $VERSION"
+            awk -v v="$VERSION" '$0 ~ "^## " { if (on) exit; if ($2 == v) { on = 1; next } } on' CHANGELOG.md
+          } > notes.md
+          cat notes.md
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: steps.tag.outputs.go == 'true'
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
-        with:
-          files: artifacts/*
-          generate_release_notes: true
-          body: |
-            ## Download
-            | Your computer | File |
-            |---|---|
-            | Mac with Apple Silicon (M1 and newer) | `Listo-mac-apple-silicon.dmg` |
-            | Intel Mac | `Listo-mac-intel.dmg` |
-            | Windows (installer) | `Listo-windows-setup.exe` |
-            | Windows (no install) | `Listo-windows-portable.zip` |
-            | Linux (one file — double-click to run) | `Listo-linux-x64.AppImage` |
-            | Linux (folder + install script) | `Listo-linux-x64.tar.gz` |
 
-            Everything Listo needs (including ffmpeg) is inside — nothing else to install.
-            **First launch on Mac:** if macOS says it can't check the app, open **System Settings → Privacy & Security** and click **Open Anyway**.
-            **First launch on Windows:** if SmartScreen appears, click **More info → Run anyway**.
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        if: steps.tag.outputs.go == 'true'
+        with:
+          tag_name: ${{ needs.lint.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Listo ${{ needs.lint.outputs.version }}
+          body_path: notes.md
+          files: artifacts/*
+          fail_on_unmatched_files: true

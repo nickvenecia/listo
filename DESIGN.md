@@ -1,301 +1,266 @@
 # Listo design rules
 
-The rules for how Listo looks and reads. Follow them for every screen, dialog and control.
+The rules for how Listo looks, reads and behaves. Follow them for every screen, dialog and control.
 If a change needs something these rules don't cover, add a rule here in the same commit.
 
-All numbers and colors live in **`listo/ui/tokens.py`**. The stylesheet (`listo/ui/theme.py`) and
-every widget import from there. **Never type a size, spacing, font size or color anywhere else.**
+All numbers and colors live in **`listo/ui/style/tokens.py`**. The stylesheet (`listo/ui/style/theme.py`) and
+every widget read from there. **Never type a size, spacing, font size, timing or color anywhere else.**
 If you need a value that doesn't exist, add a token, give it a comment, and add it to the tables below.
 
-Listo has a **light and a dark look** and follows the computer's setting, also when it switches while
-Listo is open (§5). Colors are roles, never values: see "Two looks" below before you use one.
+The look is the Mac's: a flat backdrop, floating rounded glass panels, capsule buttons, round icon buttons,
+light and dark. Marigold is Listo's own accent; people can pick another in Settings › General.
 
 ---
 
-## 1. Sizes
+## 1. The window
 
-### Controls: one height for everything you click or type in
+```
+┌───────────────┬────────────────────────────────────────────────────┬───────────────────┐
+│ listo.        │ All Files 12        ( Search            )      (+) │ Convert To   (◉)(✕)│
+│ Files ⌄    +  │ ⋮⋮ ▢ A001_C001.MOV                         Ready    │ ┌ preview ───────┐ │
+│ ▸ All Files 12│      0:02 · 3840×2160 · 23.976p · HEVC              │ └────────────────┘ │
+│   Videos    9 │      [ProRes 422 ▾]  → A001_C001.mov                │ Recipe             │
+│   Photos    2 │ ⋮⋮ ▢ A001_C002.MOV                         31% ▬▬   │ Video|Photo|Audio  │
+│   Audio     1 │ …                                                   │ ╭ Format… ╮        │
+│ Progress ⌄    │                                                     │ ╭ ▸ Image ╮        │
+│   To Convert 9│                                                     │ ╭ ▸ Burn-In ╮      │
+│   Done      2 │ ─────────────────────────────────────────────────── │ ╭ ▸ Encoding ╮     │
+│   Need a Look1│ 9 videos · 2 photos · 1 audio file   [Convert 12 Files]│ ╭ Saves To ╮    │
+│ (NV) Your Name│ 0:42 of media                                       │ ╭ ▸ Advanced ╮     │
+└───────────────┴────────────────────────────────────────────────────┴───────────────────┘
+  left panel (glass)        the files (on the backdrop)                   right panel (glass)
+```
+
+**Where you are (left) → your files (middle) → what they become (right).**
+
+- **The backdrop** is one flat color (`WINDOW_TOP`), drawn once (`components/glass.GlassRoot`). The file list sits
+  directly on it. Panels float on glass, `GLASS_GAP` from the window's edges and from each other.
+- **The left panel** (`window/sidebar.Sidebar`, a `components/panels.LeftPanel`, `SIDEBAR_W`): the wordmark on top
+  (`TOOLBAR_H` tall, level with the toolbar), then two sections with small headings that fold when clicked:
+  **Files** (All Files, Videos, Photos, Audio) and **Progress** (To Convert, Done, Need a Look), each row with its
+  count. Need a Look's count turns `BAD` when something failed. The **+** beside Files (Add Files / a Folder /
+  a Link) fades in only while the pointer is over that section (`FADE_MS`). At the bottom: "Update to …" when
+  there is one, and the **profile card** (the computer user's initials and name; click it for Send Feedback,
+  Check for Updates and Settings).
+- **The toolbar** (`TOOLBAR_H`): the place's large title and count ("12", or "3 selected") on the left, the
+  **search capsule** centred (it shrinks to `SEARCH_MIN` before anything collides), the primary round **+** on
+  the right (Add Files / a Folder / a Link). Nothing else.
+- **The file list** (`window/tables.FileList`): one painted row per file, `TABLE_ROW_H` tall (never a widget per
+  row). Left to right: the grip (drag to reorder), a 16:9 thumbnail on `SCREEN`, the name, what the file is,
+  then its format chip, a trim and the new name; on the right its status word (colored by tone) and progress
+  bar, and its buttons (captions, trim, details, try again, show the new file), shown while the pointer is over
+  the row or it's picked. Under the list, the **bar**: what's in the list (or the batch's progress), Show Files,
+  Pause, Stop, Check Captions, and **Convert N Files**, the one primary button.
+- **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**. On top,
+  the live preview (the picked clip, or the first, exactly as it will come out; the sample test pattern when the
+  list is empty). Then Recipe, the Video / Photo / Audio tabs, the format card, the fold-away **Image**,
+  **Burn-In** and **Encoding** cards, **Saves To** (joining, the example name, Where, Name) and **Advanced
+  Options**. Its header: the title, a round eye (the bigger Preview window), the round ✕. It slides in
+  (`DOCK_MS`) when the first file arrives or you click a file, and away with its ✕, Esc or a click on empty space
+  in the list. View › Convert Settings (⌥⌘I) toggles it. On a smaller window it narrows (to `INSPECTOR_MIN`).
+- **Size and place**: the first launch fills the screen (all but the menu bar and Dock); after that Listo opens
+  where and how big you left it, if that still fits a screen.
+- **The Mac title bar is Listo's own** (`components/titlebar.py`): the traffic lights, the wordmark centred,
+  macOS drags the window. Double-click fills the screen, or (if it already does) goes to the smallest size,
+  centred, animated. Windows and Linux keep the system bar, which follows light / dark.
+
+---
+
+## 2. Sizes
 
 | Token | px | Used for |
 |---|---|---|
-| `CONTROL_H` | 34 | **Every** button, dropdown, text field and segmented control |
-| `SMALL_H` | 24 | Chips on file cards, naming token buttons, icon-only buttons |
-| `INDICATOR` | 16 | Standard icon box |
+| `CONTROL_H` | 34 | **Every** button, dropdown, text field, segmented control and round icon button |
+| `SMALL_H` | 24 | Small round icon buttons inside rows and cards, naming token buttons |
+| `CHIP_SM_H` | 18 | The format chip on a row |
+| `SECTION_ADD` | 20 | A sidebar section's + |
 | `TOGGLE_ROW_H` · `TOGGLE_W`×`TOGGLE_H` | 32 · 36×20 | An on/off row and its switch |
-| `BAR_H` | 6 | Progress bars |
-| `TRACK_H` / `HANDLE` | 4 / 14 | Slider groove / handle |
-| `SCROLL_W` / `SCROLL_MIN` | 10 / 30 | Scrollbar width / shortest handle |
+| `BAR_H` · `TRACK_H` · `HANDLE` | 6 · 4 · 14 | Progress bars · slider groove · slider handle |
+| `NAV_H` · `NAV_GAP` | 30 · 2 | A sidebar row and the gap between rows |
+| `TABLE_ROW_H` · `THUMB_W`×`THUMB_H` · `GRIP_W` · `STATUS_W` | 64 · 96×54 · 20 · 200 | A file row, its thumbnail, grip and status column |
+| `SIDEBAR_W` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 232 · 420 / 360 · 64 | The window's parts |
+| `ICON_SM` · `ICON` · `ICON_LG` · `ICON_XL` | 14 · 16 · 20 · 44 | Icons in small buttons · buttons and menus · placeholders · the empty list's arrow |
 
-- A button, a dropdown and a text field side by side must line up exactly. Never set a height on
-  a single control; the stylesheet already sets it.
-- Buttons size their width to their text (padding `0 SPACE_3`). Don't give buttons fixed widths.
-- Dropdowns and text fields in the sidebar stretch to the full column width.
+- A button, a dropdown and a text field side by side line up exactly. Never set a height on one control.
+- Buttons size to their words (capsules). Never a fixed width.
+- Every other fixed size (`PREVIEW_W/H`, `VIEWER_W/H`, `DIALOG_W`, `SETTINGS_SIZE`, `ALERT_W`, `WINDOW_SIZE`,
+  `WINDOW_MIN`…) is a token with a comment saying where it's used.
 
-### Icons
-
-| Token | px | Used for |
-|---|---|---|
-| `ICON_SM` | 14 | Icons inside small buttons (scissors, info, close) |
-| `ICON` | 16 | Icons inside normal buttons and menus |
-| `ICON_LG` | 24 | Placeholder icons in empty thumbnails |
-| `ICON_XL` | 44 | The drop-zone arrow |
-
-All icons are line icons drawn as SVG in `theme._SVG` and made with `theme.icon(name, role)`, where
-role is a color token's NAME (`"MUTED"`, `"ACCENT_INK"`): the icon looks its color up each time it's
-drawn, so it follows the light / dark switch. Add new icons there; don't load image files for UI icons.
-
-### Fixed layout sizes
-
-`SIDEBAR_W`, `THUMB_W/H` (16:9), `CARD_H`, `STATUS_W`, `CARD_BAR_W`, `PREVIEW_W/H`, `TIME_FIELD_W`,
-`LINK_BOX_W`, `DIALOG_W`, `DETAILS_SIZE`, `WINDOW_SIZE`, `WINDOW_MIN`. Use these names, never the numbers.
-
----
-
-## 2. Spacing: a 4-point grid
+## 3. Spacing: a 4-point grid
 
 | Token | px | Use it for |
 |---|---|---|
-| `SPACE_1` | 4 | A label and its control; an icon and its text; lines inside one item |
-| `SPACE_2` | 8 | Related items: buttons in a row, cards in the list, checkboxes in a stack |
-| `SPACE_3` | 12 | Between sections inside a panel |
+| `SPACE_1` | 4 | A label and its control; an icon and its text |
+| `SPACE_2` | 8 | Related items: buttons in a row, options in a stack |
+| `SPACE_3` | 12 | Between sections and cards inside a panel |
 | `SPACE_4` | 16 | Padding of panels, bars and the main areas |
-| `SPACE_5` | 24 | Padding of dialogs and the empty drop zone |
+| `SPACE_5` | 24 | Padding of dialogs and the empty list |
 
-- Build layouts with the helpers in `listo/ui/widgets.py`:
-  `vbox(widget, margins, spacing)` / `hbox(...)` (spacing defaults to `SPACE_2`),
-  `combo(...)` for dropdowns, and `Section("Title")` for a labelled group (Title Case label + its controls, `SPACE_1` apart).
-- Margins are `SPACE_*` tokens or `0`. Nothing else.
+Build layouts with `widgets.vbox(widget, margins, spacing)` / `hbox(...)`. Margins are `SPACE_*` tokens or 0.
 
----
+## 4. Type and corners
 
-## 3. Type
-
-Font: **Inter** (bundled in `listo/assets/fonts`). One family only.
+**Inter** for everything; **IBM Plex Mono** only for codes (the log, an ffmpeg command, a checksum). Both are bundled
+(`listo/assets/fonts`). Make a font with `theme.font(size, weight)`, never by hand.
 
 | Token | px | Used for |
 |---|---|---|
-| `TEXT_XS` | 11 | Chips |
-| `TEXT_SM` | 12 | Section labels (`MUTED`, semibold), secondary text: file details, hints, tooltips |
+| `TEXT_XS` | 11 | Chips, menu headings |
+| `TEXT_SM` | 12 | Section labels (`MUTED`, semibold), secondary text, tooltips, status words |
 | `TEXT_MD` | 13 | Body text and every control (the default) |
-| `TEXT_LG` | 14 | Emphasis: file names in the list, the footer title |
-| `TEXT_XL` | 18 | Dialog titles, the empty-state headline |
+| `TEXT_LG` | 14 | Panel titles, alert titles, the bar's title |
+| `TEXT_XL` | 18 | Dialog titles, the empty list's headline |
+| `TEXT_TITLE` | 24 | The page's large title in the toolbar and Settings |
 | `TEXT_BRAND` | 21 | The "listo." wordmark only |
 
-Weights: `WEIGHT_REGULAR` 400 for text, `WEIGHT_MEDIUM` 500 for controls,
-`WEIGHT_SEMIBOLD` 600 for titles, labels and the primary button, `WEIGHT_BOLD` 700 for the wordmark and dialog titles.
+Corners: `RADIUS_XS` 4 (checkbox), `RADIUS_SM` 6 (chips, thumbnails), `RADIUS` 8 (fields, dropdowns, segmented
+controls), `RADIUS_LG` 12 (cards, alerts), `GLASS_R` 18 (floating panels), `ROW_R` 9 (a row's highlight).
+**Every list of choices looks the same** (menus, dropdown lists, the sidebar, Settings' sections): rows `LIST_ROW_H`
+tall, inset `LIST_INSET` inside a list whose corners are `LIST_R`, so the corners run parallel. `app._RoundPopups`
+makes menus and dropdown lists see-through so those corners are what you see, opens a button's menu just below
+it (`MENU_GAP`), and stops the wheel from changing a dropdown or slider (it scrolls the panel instead).
 
----
+## 5. Color
 
-## 4. Corners
-
-| Token | px | Used for |
-|---|---|---|
-| `RADIUS_XS` | 4 | Small inner corners |
-| `RADIUS_SM` | 6 | Chips, menu and list rows, small buttons |
-| `RADIUS` | 8 | Buttons, fields, dropdowns, segmented controls |
-| `RADIUS_LG` | 12 | File cards, popups and menus, boxes inside dialogs |
-| `RADIUS_XL` | 16 | The drop zone |
-
-Menus and dropdown lists are **always rounded**, with transparent corners, and so is the highlighted
-row inside them. `app._RoundPopups` handles this for every `QMenu` and dropdown automatically: it makes
-the popup window see-through and gives every dropdown `widgets.ComboItemDelegate` (rounded highlight,
-`CONTROL_H - SPACE_2` rows, thin separator lines). Don't create popups that bypass it.
-
----
-
-## 5. Color: two looks
+Every color token has a dark value (`tokens.DARK`) and a light one (`tokens.LIGHT`), the same names. Listo follows
+the computer, also while it's open, unless Settings › General › Appearance picks Light or Dark
+(`app.set_appearance`, `theme.apply`). Both are read from settings.json before the first window opens.
 
 | Token | Use |
 |---|---|
-| `BG` | Window background |
-| `PANEL` | Sidebar, footer, dialogs |
-| `CARD` / `CARD_HOVER` / `CARD_SELECTED` | File cards (normal / hover / selected), text fields |
-| `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups |
-| `WELL` | Sunken areas with words: Saves As, logs, notes |
-| `SCREEN` / `SCREEN_TEXT` / `SCREEN_FAINT` | Behind pictures (players, previews, thumbnails) / words and placeholder icons on it. **Black in both looks** |
-| `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, control borders, hover, empty checkbox |
-| `TRACK` / `TRACK_HOVER` / `KNOB` | An off switch (track, hovered track, knob) |
-| `TEXT` / `MUTED` / `FAINT` | Main text / secondary text / hints, labels, disabled |
-| `ACCENT` (+ `_HOVER`, `_PRESS`) | Marigold **fills**: selection, the one primary action, progress, focus rings |
-| `ACCENT_INK` | Marigold **words, icons and thin lines** on the background (darker in the light look so it reads) |
-| `ON_ACCENT` | Text and icons on marigold |
+| `WINDOW_TOP` / `GLASS` / `GLASS_STROKE` / `GLASS_EDGE` / `GLASS_SHADOW` | The backdrop and the floating panels |
+| `BG` / `PANEL` | Window background / dialogs |
+| `BLOCK` | A card inside a panel (a soft tint, no outline) |
+| `CARD` / `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Surfaces, hover, a picked row |
+| `FIELD` / `FIELD_BORDER` / `FILL` | Text fields and dropdowns / their outline / segmented controls, bar tracks |
+| `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups, the lifted row |
+| `WELL` | Sunken text: the log, release notes |
+| `SCREEN` / `SCREEN_TEXT` / `SCREEN_FAINT` | Behind pictures (players, previews, thumbnails): **black in both looks** |
+| `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, outlines, hover, an empty checkbox |
+| `TEXT` / `MUTED` / `FAINT` | Main text / secondary text / hints, counts, disabled |
+| `ACCENT` (+ `_HOVER`, `_PRESS`) | The accent: the primary button, selection, progress, focus, the wordmark's dot |
+| `ON_ACCENT` | Words and icons on the accent (dark on a light accent: never assume white) |
 | `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A disabled primary button |
-| `ACCENT_TINT` / `ACCENT_EDGE` | Marigold wash and outline (custom chip, hot drop zone) |
-| `GOOD` / `WARN` / `BAD` | Done / needs a look / failed |
-| `BAD_TINT` / `BAD_EDGE` | Danger button hover / failed card border |
+| `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the drop target) |
+| `CHIP` / `CHIP_HOVER` | Tinted capsules, the gap where a dragged row will land |
+| `GOOD` / `WARN` / `BAD` (+ `BAD_TINT`, `BAD_EDGE`, `ON_BAD`) | Done / needs a look / failed (a danger button's hover, words on the alert's red button) |
 
-- Marigold means "selected" or "do this". **One** Primary button per view.
-- Status color comes from data, not code: set `setProperty("tone", "done" | "warning" | "failed" | ...)`
-  and call `widgets.repolish(w)`. The stylesheet maps tone to color.
-- Never call `setStyleSheet()` on a single widget. Add a rule to `theme._qss()`
-  under an object name instead.
-
-### Two looks: light and dark
-
-Every color token has a dark value (the ones written in `tokens.py`) and a light one (`tokens.LIGHT`,
-the same names). Listo uses the computer's setting at launch and switches when it changes
-(`app.follow_system`: `theme.use(look)`, then the stylesheet is set again). For that to work:
-- Read colors when you draw: `tokens.NAME` / `theme.NAME` in a stylesheet rule or `paintEvent`.
-  Never copy one into a variable, a widget or a cached image at startup (it would keep the old look).
-- Icons take a role name, not a color: `theme.icon("plus", "MUTED")`, `theme.menu_icon("file")`.
-- A `QLabel` keeps the picture it got, so a picture on a label uses a color that's the same in both
-  looks (`ACCENT`, `SCREEN_*`).
-- Pictures are never put on a light background: players, previews and thumbnails sit on `SCREEN`.
-- Words in marigold use `ACCENT_INK`; marigold fills use `ACCENT`. Status words use `GOOD` / `WARN` / `BAD`,
-  which are darker in the light look. `tests/test_theme.py` checks every pair stays readable in both looks.
-- Check both: `LISTO_LOOK=light` (or `dark`) forces a look for screenshots and testing.
-
----
+- **The accent** comes from `tokens.use(scheme, accent)`: marigold (`APP_ACCENT`) is hand-set in both looks; the
+  other choices in `tokens.ACCENTS` get a full set of shades from `tokens.accent_set()`. No choice is red (red means
+  failed or delete). `tests/test_accent.py` checks every choice reads.
+- **Read colors when you draw**: `tokens.NAME` / `theme.NAME` in a stylesheet rule or a `paintEvent`. Never keep
+  one from startup: the look and the accent can change while Listo is open.
+- **Icons** are line icons drawn as SVG in `theme._SVG` (24×24 grid, stroke 2, round caps): `theme.icon(name,
+  theme.MUTED)` for buttons, `theme.menu_icon(name)` in menus. They redraw themselves in the current look and
+  accent. A small icon that isn't a button is a `widgets.IconLabel(name, "MUTED")`. Never image files for UI icons.
+  `tests/test_icons.py` checks every icon named in the code exists.
+- Status color comes from data: `setProperty("tone", "done" | "warning" | "failed" | …)` and `widgets.repolish(w)`;
+  the file list paints its status words from the same tones.
+- Never call `setStyleSheet()` on one widget: add a rule to `theme._sheet()` under an object name.
 
 ## 6. Components
 
-Use an object name to pick a style (`btn.setObjectName("Ghost")`). These are the only variants:
+Use these; never build a control's look by hand.
 
-| Kind | Object name | When |
+**Buttons: text buttons are capsules, icon buttons are circles.**
+
+| Kind | How | When |
 |---|---|---|
-| Primary button | `Primary` | The single main action in a view (Convert, Done) |
-| Normal button | *(none)* | Everything else in dialogs (Change…, Cancel) |
-| Secondary button | `Secondary` | Buttons next to a primary one in dialogs |
-| Quiet button | `Ghost` | Show files, Pause, Stop |
-| Danger button | `Danger` | Destructive confirmations only |
-| Icon-only button | `IconBtn` (QToolButton) | Toolbar (+ add, clear list), scissors, info, close. **Must** have a tooltip |
-| Chip | `Chip` | The per-file format pill on a card |
-| Token button | `Token` | "+ Name" buttons in the naming pattern builder |
-| Tabs | `widgets.Segmented` | Switching between pages only (Video / Photo / Audio, With Your Settings / Original). Not for settings. They never look like a setting: no box; a hairline runs under the row and the open tab's name is `ACCENT` with a `TAB_LINE` underline |
-| Dropdown | `widgets.combo(items, current)` | **Every** pick-one setting, however few choices. Put extra detail in the item's tooltip |
-| File / folder dropdown | `widgets.PathCombo` | **Every** setting that points at a file or folder (LUT, Where). See "Picking a file or folder" below |
-| On/off setting | `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, whole row clickable. Never side-by-side |
-| Section | `widgets.Section` | Every labelled group in the sidebar and dialogs |
-| Preview window | `preview_dialog.PreviewDialog` | One frame rendered with the real conversion steps |
-| Fold-away group | `widgets.Disclosure` | "Advanced options": a chevron header with a changed-count summary |
+| Primary | `setObjectName("Primary")` | The one main action in a view (Convert 12 Files, Send, Delete in an alert) |
+| Normal | *(none)* | Everything else (Cancel, Show Files, Back Up…) |
+| Quiet | `Ghost` | Small helpers inside a card, "Update to …" |
+| Danger | `Danger` | Destructive actions in a form (Stop, Delete All): red words |
+| Alert's yes | `DangerFill` | Only the destructive button inside an alert |
+| Add | `widgets.add_chip("Caption")` | Adding a part at the end of a list |
+| Round icon button | `widgets.circle_button(icon, tip)` (`CirclePrimary` for the +) | Every icon button in the toolbar or a panel header |
+| Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | Icon buttons inside a row or card |
+| Section + | `SectionAdd` | The plain gray + beside a sidebar heading |
 
-Choosing a control:
-- Pick one setting → **dropdown**, always, even with only 2–3 choices. Format, quality, size, LUT, recipe,
-  Where, Name, Name taken and timecode are all dropdowns. Build them with `widgets.combo` / `set_combo` /
-  `disable_item`; a file or folder with `widgets.PathCombo`.
-- The result of a choice is shown once, in a live preview (the export panel's picture and "Saves As" box),
-  not repeated under every option.
-- Tabs (`Segmented`) only switch which page of settings you see.
-- Actions that belong to a dropdown (Save recipe…, Choose a LUT File…) go **inside** that dropdown, below a separator.
+Every icon-only button has a tooltip. "…" when a button opens a window or a picker.
 
-Picking a file or folder (`widgets.PathCombo`), always the same three parts:
-1. The fixed choices first, default on top: "No LUT"; "In Source Folder", "Create Subfolder".
-2. A separator, then the files or folders picked before, most recent first (up to `RECENT_PATHS`). Each shows its
-   name (a LUT without its extension); two with the same name add their folder's name in brackets. The full path
-   is the item's tooltip. Ones that no longer exist drop off; the current one always stays.
-3. A separator, then **"Choose a … …"** ("Choose a LUT File…", "Choose a Destination…"), which opens the system
-   picker. What you pick goes to the top of the list and is selected; Cancel leaves the choice as it was.
+| Component | Use |
+|---|---|
+| `panels.LeftPanel` + `NavRow` | Every list of places on the left (the sidebar, Settings' sections) |
+| `panels.SidePanel` | Every panel on the right; `header_icon()` adds its round buttons, the ✕ is always last |
+| `widgets.Card` · `Disclosure` | Every group inside a panel. A Disclosure folds away and its header says what's changed ("Burn-In · 2 changed"), so nothing that changes the output hides silently. Each remembers whether it's open |
+| `widgets.Section("Title")` | A labelled group of controls: Title Case label above, `SPACE_1` apart |
+| `widgets.combo(items, current)` / `set_combo` / `disable_item` | **Every** pick-one setting, however few choices; extra detail in the item's tooltip |
+| `widgets.PathCombo` | **Every** setting that points at a file or folder (LUT, Where); see below |
+| `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, the whole row clickable |
+| `widgets.Segmented` | 2–3 views of the same thing (Video / Photo / Audio; Match System / Light / Dark) |
+| `widgets.AccentPicker` | The Accent Color circles in Settings › General |
+| `widgets.SearchField` | The toolbar's search capsule |
+| `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip |
+| `widgets.Toast` | A few words at the bottom confirming what just happened (`TOAST_MS`); never a question |
+| `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
+| `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
+| `glass.GlassRoot` · `Dock` · `glass()` | The backdrop, the sliding right panel, marking a widget as glass |
 
-No Change… buttons or path labels under the dropdown, no "folder of files" modes (a LUT folder): the dropdown
-is the whole control. A setting a choice needs (the subfolder's name) shows under it only for that choice.
-- Menus open from icon buttons (the toolbar `+`) with `InstantPopup`; the menu arrow is hidden.
-- The toolbar holds only the wordmark on the left and icon buttons on the right. No text buttons up there.
+**Picking a file or folder** (`widgets.PathCombo`), always the same three parts: the fixed choices first ("No LUT";
+"In Source Folder", "Create Subfolder"); a separator and the files or folders picked before, most recent first
+(the name, the full path in the tooltip; ones that are gone drop off); a separator and **"Choose a … …"** (the
+system picker). No Change… buttons, no path labels, no "folder of files" modes. A setting a choice needs (the
+subfolder's name) shows under it only for that choice.
 
----
+## 7. Behavior
 
-## 7. Words
+- **Nothing to save by hand.** Every setting saves itself to settings.json as you change it; quitting saves too.
+- **Undo / Redo** (⌘Z / ⇧⌘Z, and Ctrl+Y on Windows) cover the Convert To settings, taking files off the list,
+  their order, and a file's own format and trim. In a text box they undo the typing instead. A change taken
+  straight back leaves no step.
+- **Removing goes through a menu or an alert, never one click.** Delete or Backspace asks first, naming the file
+  ("Remove A001_C001.MOV from the List?"). Taking files off the list never touches them on disk.
+- **The alert** (`dialogs/common.Alert`): narrow (`ALERT_W`), the app icon, a bold question, one short line, Cancel
+  and the action side by side (red when destructive). Return does it, Esc cancels.
+- **Picking**: click picks, ⌘-click adds or removes one, Shift-click a range, ⌘A everything showing, ↑ / ↓ the
+  file above or below. **Esc** (or a click on empty space in the list) picks nothing and closes the right panel.
+- **Drag to reorder** by a row's grip: the row lifts onto a card and follows the pointer, the others slide apart
+  to show where it will land, the list scrolls near its edges, Esc puts it back. List order is the order a joined
+  video plays in and Continuous Timecode runs in. A batch keeps its order while it converts.
+- **Only show what applies.** A control that depends on another appears only when that one is on. A feature this
+  computer or these files can't use is hidden, not greyed out (hardware encoding without a hardware encoder,
+  deinterlacing without interlaced files); an item in a format list stays, disabled, with a tooltip saying why.
+- **Nothing moves when a group opens**: scrolling panels keep the scroll bar's room (`widgets.FitScroll`).
+- **Names are shown as typed** (a file called "<b>clip.mov" stays that). Long ones are cut with "…" and shown
+  whole in a tooltip.
+- **Background work stays in the background.** Making captions runs in its own low-priority process and shows
+  its progress on the clip's captions icon. Nothing slow runs on the window's thread.
+- **Checking is watching.** Every picture of a clip can play with sound (double-click a clip, the preview, the
+  Preview window, the caption check). Paused shows the exact result; playing shows the clip with its captions.
+  Space plays and pauses when you're not typing.
+- **Updates**: every launch (unless switched off in Settings › General), Listo checks for a newer version just
+  after the window is up; if there is one, the update window opens by itself (never over another window, a menu
+  or a batch that's converting), and "Update to …" stays at the bottom of the sidebar.
+
+## 8. Motion
+
+The right panel slides over `DOCK_MS` (ease-out) and the list beside it slides as a picture, then the real one
+comes back. Dragged rows ease toward their places (`LIFT_EASE` per `LIFT_STEP_MS`). Small controls that come and go
+fade over `FADE_MS`. Nothing bounces. The backdrop, the glass, icons and thumbnails are drawn once and reused.
+
+## 9. Words
 
 Listo talks like a helpful person, not like software.
 
-- **Fewer words.** Labels and section titles are 1–4 words ("Name taken", not "If that name is already taken"). If something needs explaining, put it in a tooltip, not on screen.
-- Plain language: "Double-check each file", not "Verify output integrity". "Keep every audio track", not "Map all audio streams".
-- **Title Case for labels**: section and group names, buttons, checkboxes, tabs, menu items, dropdown
-  choices, dialog titles and card states ("Keep Every Audio Track", "Convert 3 Files", "Name Taken").
-  Small words stay lowercase inside a label (a, an, the, and, or, of, to, in, on, at, for, by, with, as, per);
-  acronyms and file things stay as they are (LUT, VHS, 4K, H.264, .srt, px). No ALL-CAPS labels.
-- **Sentences stay sentences**: tooltips, hints, placeholders, progress and error messages, toasts, and the
-  one-line descriptions under formats ("Plays everywhere", "Making captions in the background…").
-- Buttons are verbs ("Convert 8 files", "Show files"). Use "…" when the button opens a dialog or file picker.
-- Errors say what happened and what to do, without jargon: "Listo doesn't know .txt files."
-- Promise safety where it matters: "Your original files are never touched".
-- No exclamation marks, no emoji in the UI.
+- **No explaining on screen.** No hint sentences under fields; if a label needs explaining, change the label; if
+  it still does, a short tooltip. Promises that matter stay ("Your files themselves stay where they are").
+- **Few words.** Labels and headings 1–4 words, in plain language: "Double-Check Each File", not "Verify output
+  integrity".
+- **Title Case for labels**: buttons, menu items, section and card titles, dropdown choices, tabs, dialog titles.
+  Small words stay lowercase inside (a, an, the, and, or, of, to, in, on, at, for, by, with, as, per); LUT, VHS,
+  H.264 and .srt stay as they are. No ALL CAPS (the VHS caption look and STOP ■ are what's burned in, not labels).
+- **Sentences stay sentences**: tooltips, placeholders, toasts, errors.
+- Buttons are verbs ("Convert 8 Files", "Show Files"). "…" when they open a window.
+- Errors say what happened and what to do: "Listo doesn't know .txt files."
+- No exclamation marks (a thank-you aside), no emoji, no jargon. `&&` for a literal "&" in Qt buttons and
+  menu items; `ToggleRow` draws its text as typed.
 
----
+## 10. Checklist before you commit a UI change
 
-## 8. Layout of the main window
-
-```
-┌ ① Files ·········· N Files · + · ☰× ┬ ② Convert To (SIDEBAR_W) ┬ ③ Export (EXPORT_W) ┐
-│ file list (cards, SPACE_2 apart)      │ Recipe                   │ Preview (live)      │
-│   — or the drop zone (with the logo)  │ Video | Photo | Audio    │ Saves As example    │
-│                                       │ Format, Quality, Size    │ Where · Name        │
-│                                       │ ▸ Image ▸ Burn-In        │ ▸ Advanced Options  │
-├ status · progress · Show Files/Pause/Stop  ▸ Encoding            │ [ Convert N Files ] │
-└───────────────────────────────────────┴──────────────────────────┴─────────────────────┘
-```
-The window reads as three steps, left to right, in the order you work: **① add your files → ② choose what
-they become → ③ choose where they go and convert.** Every panel starts with a `widgets.StepHeader`
-(marigold number + Title Case name, `HEADER_H` tall) so the three line up. The two side panels share one
-width (`SIDEBAR_W` = `EXPORT_W`); the file list takes the rest because names, paths and status need room.
-
-- **The file list works like Finder / Explorer:** click selects, Cmd/Ctrl-click adds or removes one,
-  Shift-click selects a range, Cmd/Ctrl+A selects all, Delete or Backspace removes the selection,
-  Esc or a click on empty space clears it. Selected cards: `CARD_SELECTED` background + `ACCENT_EDGE` border
-  (a converting card has a solid `ACCENT` border instead).
-- The clear-list icon (`list-x`) opens a menu: Remove selected, Clear finished, Clear all. Actions that remove
-  things always go through a menu or a confirmation, never a single click. They only take files off the list; nothing on disk is touched.
-- A value along a range (opacity, photo quality) is a slider with its value shown as text next to it or in the section title.
-- Use `&&` for a literal "&" in Qt buttons and labels (a single `&` becomes a keyboard-shortcut underline);
-  `ToggleRow` draws its text as-is, so write a single `&` there.
-- Every keyboard shortcut needs a visible way to do the same thing (a button, icon or menu item).
-- **Only show what applies.** A control that depends on another appears only when that one is on
-  (burn-in style only when a burn-in is ticked, fit only when the shape changes, bar opacity only for
-  cinema bars). A feature this computer or these files can't use is hidden, not greyed out
-  (hardware encoding without a hardware encoder; deinterlacing with no interlaced files in the list).
-  The one exception: items in a format list stay, disabled with a tooltip saying why.
-- **Nothing moves when a group opens.** Scrolling panels use `widgets.FitScroll`, which always keeps the scroll
-  bar's space (invisible until there's something to scroll); give the content `SCROLL_GUTTER` less right margin.
-- **Menus open on click, never on hover** (accidental opens, especially for the clear-list menu). Hover shows a tip.
-  Tips and menus have rounded corners (`app._RoundPopups` makes their windows see-through).
-- **Scrolling never changes a value.** The wheel over a dropdown or slider scrolls the panel
-  (`app._RoundPopups` enforces it); values change only by clicking or dragging.
-- **One identity everywhere.** The app icon is the "listo." wordmark on the dark tile (`scripts/make_icon.py`);
-  on the Mac the title bar is ours (`ui/titlebar.py`): `BG`, a `BORDER` hairline, the wordmark centred
-  (it follows the look like everything else; the wordmark's dot is always `ACCENT`).
-  Nothing is said twice: counts live in the bottom bar, not also in a header.
-- **Tools are one click, out of the way.** A faint ⋯ at the right of the bottom bar holds Storage & Cache, the
-  Debug Console, the log file and About (the Mac menu bar has them too); never needed for normal work.
-- **Background work stays in the background.** Slow jobs that aren't the conversion itself (making captions)
-  run at low priority on half the cores, show their progress on the clip's own icon, and never take over the window.
-  Heavy Python work (loading the speech model, listening) runs in its **own process**, not a thread: Python runs
-  one thread at a time, so a busy thread makes the window stutter. Nothing slow is imported on the UI thread.
-- **Checking is watching.** Every picture of a clip can play with sound (double-click a clip, the Export
-  preview, the Preview window, the caption check). Paused shows the exact result; playing shows the clip
-  with its captions. In lists that follow time (captions), the item on screen right now lights up
-  (`CARD_SELECTED` + `ACCENT_EDGE`, time in `ACCENT`) and the list follows it. Clicking a line or a time
-  jumps there. Space plays/pauses when you're not typing.
-- **Optional steps are buttons, not interruptions.** Checking captions is its own button ("Check Captions · 2 New")
-  above Convert; Convert never opens a window in your way (it only waits for work that must finish).
-- **Captions read like their era.** The VHS caption look is ALL CAPS (tape closed captions were);
-  the clean look keeps the words as spoken. The .srt file always keeps the real case.
-- **Menus hold commands, the panel holds settings.** File / Edit / View / Help list actions with their
-  shortcuts (add, select, remove, preview, convert). They live in the Mac menu bar; on Windows and Linux
-  the bar is hidden (no strip across the window) and the shortcuts still work. Never put a setting in a menu.
-- **Basic first, the rest folded away.** Each panel shows only what most people change every time
-  (Video: Format, Quality/Flavor, Size; Photo: Format, Quality, Size; export panel: Preview, Where, Name).
-  Everything else lives in three fold-away groups (`widgets.Disclosure`): **Image** (frame, interlacing, LUT),
-  **Burn-In** (clip info, captions) and **Encoding** (audio tracks, speed) — closed by default, each remembered.
-  The folded header always says how many advanced settings differ from a fresh start ("· 2 changed"),
-  so nothing that changes the output is ever hidden silently. New settings go into Advanced unless
-  nearly everyone needs them.
-- Burn-ins always sit inside the picture: inside cinema bars, inside black bars, and on the cropped frame.
-- The settings panel holds **what** the files become; the export panel holds **where** they go, **what they're called**,
-  a live preview of the selected (or first) clip — the sample test pattern when the list is empty — and Convert.
-  The preview always shows the real result: it runs the exact conversion steps on one frame (captions use
-  sample text until the real words exist). Clicking it opens the big Preview window.
-- Under the file list: status and progress, with Show Files / Pause / Stop when relevant. Convert lives at the
-  bottom of the export panel and says "Converting…" while it works.
-- New settings go into an existing section if they fit; a new section needs a short Title Case label.
-
----
-
-## 9. Checklist before you commit a UI change
-
-1. No raw numbers or colors outside `tokens.py`. This should print nothing:
-   `grep -nE '[^{_A-Z0-9][0-9]{2,}px|#[0-9A-Fa-f]{6}|rgba' listo/ui/*.py | grep -v tokens.py`
-   (1px hairline borders are the one allowed literal.)
-2. New controls are `CONTROL_H` tall (or `SMALL_H` for chips / icon buttons) and line up with their neighbours.
-3. Every icon-only button has a tooltip.
-4. Labels are short and in Title Case; sentences (tooltips, hints, messages) are plain sentences.
-5. Screenshots look right in both looks: `QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py SHOTS OUTDIR`
-   (and again with `LISTO_LOOK=dark`).
+1. No raw sizes or colors outside `tokens.py`; this prints only `theme.qcolor`'s color reader (1 px hairlines are
+   the one allowed literal): `grep -rnE '[^{_A-Z0-9][0-9]{2,}px|#[0-9A-Fa-f]{6}|rgba' listo/ui --include=*.py | grep -v tokens.py`
+2. New controls are `CONTROL_H` tall (or `SMALL_H`) and line up with their neighbours; icon buttons have tooltips.
+3. Labels are short and in Title Case; sentences are plain sentences.
+4. Screenshots look right in both looks and in a light accent:
+   `QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES` (then `LISTO_LOOK=dark`,
+   then `LISTO_ACCENT=yellow`).

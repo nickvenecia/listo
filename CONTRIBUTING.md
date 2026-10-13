@@ -9,24 +9,32 @@ own rulebook: **[DESIGN.md](DESIGN.md)**. Read both before changing anything.
 
 ```
 listo/
-  core/        Everything that converts files. No Qt imports here — ever.
-               engine, video, photo, probe, naming, presets, runner, tools, links, fileutil, paths, log
+  core/        Everything that converts files, and Listo's own data (store.py: settings.json, safe writes).
+               No Qt imports here, ever. Works without a screen.
+  services/    Things outside this computer (feedback.py: the outbox). No Qt.
   ui/          Everything you see. Qt Widgets only. Talks to core/, never the other way round.
-               tokens (sizes/colors), theme (stylesheet/icons), widgets (shared building blocks),
-               main_window, sidebar, export_dialog, trim_dialog, job_card, workers
-  app.py       Starts the window (fonts, stylesheet, single-instance hand-off, --smoke-test)
+    style/       tokens.py (every size, color and timing), theme.py (stylesheet, icons, fonts)
+    components/  shared pieces: widgets, panels (LeftPanel, SidePanel), glass (the backdrop, the sliding
+                 panel), titlebar (the Mac's), player (ClipPlayer)
+    window/      main_window, sidebar, tables (the painted file list), lift (drag to reorder),
+                 history (undo / redo), jobs (threads)
+    panels/      the right panel: convert_to (Convert To), convert (what files become), export (where, names)
+    dialogs/     common (alerts, About), settings, shortcuts, feedback, update, captions, preview, trim, storage
+    old_settings.py  copies settings kept by older versions into settings.json, once
+  app.py       Starts the window (fonts, the saved look and accent, single-instance hand-off, --smoke-test)
   cli.py       Same engine without a window: `python -m listo cli ...`
-tests/         One test file per core module (test_<module>.py)
-scripts/       Build helpers (fetch_ffmpeg.py)
+tests/         One test file per area (test_<area>.py); conftest.py gives every test its own data folder
+scripts/       Build helpers (fetch_ffmpeg.py, make_icon.py)
 packaging/     Installer files per OS
 ```
 
-- `core/` must work headless. If you need to report progress, take a callback or emit through a
-  `ui/workers.py` thread, don't import Qt.
+- `core/` and `services/` must work headless. To report progress, take a callback or emit through a
+  `ui/window/jobs.py` thread; don't import Qt.
 - A new file format or preset goes in `core/presets.py` (definition) + `core/video.py` or
   `core/photo.py` (how it's built) + a test.
-- Per-user files (logs, downloaded tools, UI icons) go under `core.paths.data_dir()`.
-  Never write next to the app, and never into a fixed name in the shared temp folder.
+- Per-user files (settings.json, captions, logs, downloaded tools) go under `core.paths.data_dir()`
+  (`LISTO_DATA_DIR` points it elsewhere for trials). Never write next to the app, and never into a fixed name
+  in the shared temp folder.
 
 ---
 
@@ -59,6 +67,14 @@ packaging/     Installer files per OS
    name's extension can't be trusted.
 3. Downloads are the same: write to `*.part`, then `os.replace`.
 
+**Your data (settings, recipes, checked captions)**
+3a. Every write is atomic (`store.write_json` / `write_text`: a temp file beside it, then replace).
+3b. A file that can't be read is set aside (`<name>.unreadable-<time>`), never deleted or overwritten
+    (`store.set_aside`); saved recipes that can't be read are kept under a key of their own before a new list
+    is saved. Settings from older versions are copied into settings.json once and the old store is left as it was.
+3c. New `Settings` fields need defaults that mean "off": old settings and recipes are read through
+    `Settings.from_dict` / `Settings.complete()`. Test against settings saved by the previous version.
+
 **Running other programs**
 4. Always pass arguments as a **list**. Never `shell=True`, never build a command string.
 5. Every `subprocess` call gets `**tools.popen_kwargs()` (no console windows on Windows).
@@ -73,7 +89,9 @@ packaging/     Installer files per OS
 10. Pin download sources to official release pages (GitHub releases of yt-dlp, Deno, BtbN; ffmpeg.martin-riedl.de).
 
 **Input from outside**
-11. Treat file names, links, metadata and anything from another process as untrusted.
+11. Treat file names, links, metadata and anything from another process as untrusted. Labels show text as
+    typed (`app._RoundPopups` makes every label plain text; a label meant to be formatted says RichText).
+    `core/web.web_link()` is the one test of "is this a web link"; a link goes to yt-dlp after `--`.
     The single-instance socket only accepts the same user (`UserAccessOption`), caps its size,
     and only adds paths that exist.
 12. Never `eval`/`exec`/`pickle` anything. Settings are JSON.
@@ -111,8 +129,12 @@ packaging/     Installer files per OS
 
 - Every change to `core/` comes with a test. Name it after the behavior:
   `test_replace_never_hits_another_original`.
+- Tests never touch real data: `conftest.py` gives each its own data folder and an empty stand-in for the
+  settings store older versions used.
 - Integration tests that need ffmpeg skip themselves when it isn't installed (`tests/helpers.py`).
-- UI changes: check screenshots (`QT_QPA_PLATFORM=offscreen python tests/screenshot.py SHOTS OUTDIR`).
+- UI changes: check screenshots in both looks and a light accent
+  (`QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES`, then `dark`, then
+  `LISTO_ACCENT=yellow`).
 - Before a release, the packaged app must pass `--smoke-test` (CI does this on every platform).
 
 ---
@@ -122,8 +144,13 @@ packaging/     Installer files per OS
 - One topic per commit. Message: a short plain summary in the present tense ("Add WebP output"), nothing
   added after it: no sign-off, co-author or tool lines. Commits are authored as the developer
   (Nick Venecia <nicholasvenecia@gmail.com>, set in this repo's git config).
-- Update `CHANGELOG.md` under "Unreleased" for anything a user would notice.
-- Release: bump `__version__` in `listo/__init__.py`, move the changelog entries under the new version,
-  commit, then `git tag vX.Y.Z && git push --tags`. CI builds and publishes the downloads.
+- **Merging is releasing.** Every pull request with a change users will notice bumps `__version__` in
+  `listo/__init__.py` once (the last number for fixes and polish, 2.3.**3**; the middle one for a new feature,
+  2.**4**.0; the first for a big change, **3**.0.0) and puts its notes in `CHANGELOG.md` under that version's
+  heading (`## 2.4.0`), never under "Unreleased". Changes users won't notice (tests, docs, the build) don't bump it.
+- When a pull request that bumps the version is merged, the build workflow builds every download, tags that
+  commit `vX.Y.Z` and publishes the GitHub Release with the version's CHANGELOG notes, all in the same run.
+  Nobody tags or releases by hand. (Pushing a tag by hand still works, but only if it matches `__version__`.)
+- A number that has been released is never used again.
 - Never commit `vendor/`, `build/`, `dist/`, or anything with a password or key in it.
   Signing secrets live only in GitHub → Settings → Secrets.

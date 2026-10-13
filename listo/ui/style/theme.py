@@ -158,7 +158,7 @@ QToolButton#CirclePrimary:pressed {{ background: {tokens.ACCENT_PRESS}; }}
 QToolButton#Circle[active="true"] {{ background: {tokens.ACCENT_TINT}; border-color: {tokens.ACCENT_EDGE}; }}
 #Alert {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; }}
 #AlertTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
-QPushButton#DangerFill {{ background: {tokens.BAD}; border: 1px solid {tokens.BAD}; color: #FFFFFF; font-weight: {WEIGHT_SEMIBOLD}; }}
+QPushButton#DangerFill {{ background: {tokens.BAD}; border: 1px solid {tokens.BAD}; color: {tokens.ON_BAD}; font-weight: {WEIGHT_SEMIBOLD}; }}
 QPushButton#DangerFill:hover {{ background: {tokens.BAD}; border-color: {tokens.BAD}; }}
 #KeyCap {{ background: {tokens.CHIP}; color: {tokens.MUTED}; border-radius: {RADIUS_SM}px; padding: 2px {SPACE_2}px;
     font-weight: {WEIGHT_MEDIUM}; }}
