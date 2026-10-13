@@ -171,7 +171,7 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     w.add_paths([str(folder)])
     names = sorted(Path(it.path).name for it in w.items.values())
     assert names == ["MOV01A.MOD"]
-    assert "skipped 1 file that isn't" in w.toast.text().lower()  # only notes.txt counts as skipped
+    assert "skipped 1 file that isn't" in w.toaster.text.lower()  # only notes.txt counts as skipped
     w.add_paths([str(folder / "MOV01A.MOI")])  # dropped on its own: still not listed
     assert len(w.items) == 1
     second = tmp_path / "PRG002"

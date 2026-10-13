@@ -269,8 +269,7 @@ QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {tokens.ACCENT
 #CueTime:hover {{ color: {tokens.TEXT}; }}
 #CueTime[current="true"] {{ color: {tokens.ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
 
-/* ---------- popups, logs, toasts */
-#Toast {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; padding: {SPACE_2}px {SPACE_4}px; }}
+/* ---------- popups, logs */
 QTextBrowser#WhatsNew {{ background: {tokens.FILL}; color: {tokens.TEXT}; border: none; border-radius: {RADIUS_LG}px; }}
 QPlainTextEdit#Field {{ background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
     padding: {SPACE_1}px {SPACE_2}px; color: {tokens.TEXT}; font-size: {TEXT_MD}px; font-family: "{FONT_FAMILY}"; }}

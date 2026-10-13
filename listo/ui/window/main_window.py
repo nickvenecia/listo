@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QPoint, QSize, Qt, QThread, QThreadPool, QTimer
+from PySide6.QtCore import QByteArray, QPoint, QRect, QSize, Qt, QThread, QThreadPool, QTimer
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -307,7 +307,7 @@ class MainWindow(QMainWindow):
         self.dock.follower = lambda: self.pages.currentWidget()
         outer.addLayout(body, 1)
         self.setCentralWidget(root)
-        self.toast = Toast(root)
+        self.toaster = Toast(self, self._toast_area)
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self._escape)
         self.dock.set_open(self.qs.value("panel_open", True, type=bool), animate=False)
@@ -606,6 +606,8 @@ class MainWindow(QMainWindow):
         w = max(tokens.INSPECTOR_MIN, min(tokens.INSPECTOR_W, int(self.width() * tokens.INSPECTOR_SHARE)))
         self.dock.set_target(w)
         self.panel.set_width(w)
+        if self.toaster.isVisible():
+            self.toaster.place()
 
     # ------------------------------------------------------------------ settings, look, feedback
     def open_settings(self, pane: str = "general") -> None:
@@ -650,11 +652,21 @@ class MainWindow(QMainWindow):
 
         d = FeedbackDialog(self)
         if d.exec():
-            self.toast.show_message(
+            self.toast(
                 "Thanks! Sent."
                 if d.sent_now
-                else "Thanks! It's saved and goes out once sending is switched on."
+                else "Thanks! It's saved and goes out once sending is switched on.",
+                "done",
             )
+
+    def toast(self, text: str, tone: str = "") -> None:
+        """A short message over the list. `tone`: "done" (it worked), "problem" (it didn't: say what to do),
+        or "" for news."""
+        self.toaster.show_message(text, tone)
+
+    def _toast_area(self) -> QRect:
+        """Where toasts float: centred over the list, between the side panels, above the bar under it."""
+        return QRect(self.pages.mapTo(self, QPoint(0, 0)), self.pages.size())
 
     def open_data_folder(self) -> None:
         d = data_dir()
@@ -673,7 +685,7 @@ class MainWindow(QMainWindow):
             log.warning("back up failed", exc_info=True)
             notice(self, "Couldn't Back Up", "Listo couldn't write the backup there. Pick another folder.")
             return
-        self.toast.show_message(f"Backed up to {Path(path).name}.")
+        self.toast(f"Backed up to {Path(path).name}.", "done")
 
     # ------------------------------------------------------------------ undo / redo
     def _step(self, what: str, undo, redo) -> None:
@@ -757,14 +769,14 @@ class MainWindow(QMainWindow):
         self._settings_timer.stop()
         self._record_settings()  # a change still settling is the step to undo
         what = self.history.undo()
-        self.toast.show_message(f"Undid the change to {what}." if what else "Nothing to undo.")
+        self.toast(f"Undid the change to {what}." if what else "Nothing to undo.", "done" if what else "")
 
     def redo(self) -> None:
         if self._text_can_undo(redo=True):
             self._text_widget().redo()
             return
         what = self.history.redo()
-        self.toast.show_message(f"Redid the change to {what}." if what else "Nothing to redo.")
+        self.toast(f"Redid the change to {what}." if what else "Nothing to redo.", "done" if what else "")
 
     def _edit_menu_state(self) -> None:
         h = self.history
@@ -808,11 +820,11 @@ class MainWindow(QMainWindow):
         else:
             self.btn_update.hide()
             if not quiet:
-                self.toast.show_message(f"You have the newest Listo ({__version__}).")
+                self.toast(f"You have the newest Listo ({__version__}).", "done")
 
     def _update_failed(self, quiet: bool) -> None:
         if not quiet:
-            self.toast.show_message("Couldn't reach GitHub. Check your internet and try again.")
+            self.toast("Couldn't reach GitHub. Check your internet and try again.", "problem")
 
     def _show_update_button(self, version: str) -> None:
         self.btn_update.setText(f"Update to {version}")
@@ -870,7 +882,7 @@ class MainWindow(QMainWindow):
         """A terminal window that follows Listo's log live (core/console.py)."""
         error = console.open_console()
         if error:
-            self.toast.show_message(error)
+            self.toast(error, "problem")
         else:
             log.info("%d files in the list, %s", len(self.items), "converting" if self.running else "idle")
 
@@ -880,11 +892,11 @@ class MainWindow(QMainWindow):
         sel = [i for i in self.order if i in self.selected] or list(self.order)
         wanted = [self.items[i] for i in sel if self._wants_captions(self.items[i])]
         if not wanted:
-            self.toast.show_message("Turn on Captions (in Burn-In) and add a video with sound first.")
+            self.toast("Turn on Captions (in Burn-In) and add a video with sound first.", "problem")
             return
         ready = [it for it in wanted if it.transcript is not None]
         if not ready:
-            self.toast.show_message("Still making the captions. The button lights up when they're ready.")
+            self.toast("Still making the captions. The button lights up when they're ready.")
             return
         start = next((n for n, it in enumerate(ready) if not it.transcript.reviewed), 0)
         clips = [(Path(it.path).name, it.path, it.info, self.eff(it), it.transcript) for it in ready]
@@ -945,7 +957,7 @@ class MainWindow(QMainWindow):
             if links:
                 self.add_links(links)
             elif edit_.text().strip():
-                self.toast.show_message("That doesn't look like a link.")
+                self.toast("That doesn't look like a link.", "problem")
 
     def _paste(self) -> None:
         focus = QApplication.focusWidget()
@@ -980,7 +992,7 @@ class MainWindow(QMainWindow):
             self._start_download(it)
             added += 1
         if not added:
-            self.toast.show_message("That link is already in the list.")
+            self.toast("That link is already in the list.")
         self._refresh_footer()
 
     def _start_download(self, it: Item) -> None:
@@ -1043,7 +1055,7 @@ class MainWindow(QMainWindow):
         if not it or not it.info or it.state not in ("ready", "waiting") or it.kind not in ("video", "audio"):
             return
         if not it.info.duration:
-            self.toast.show_message("Listo can't tell how long this file is, so it can't be trimmed.")
+            self.toast("Listo can't tell how long this file is, so it can't be trimmed.", "problem")
             return
         dlg = TrimDialog(it.path, it.info, it.trim, self)
         if dlg.exec() == QDialog.DialogCode.Accepted and it.state in ("ready", "waiting"):
@@ -1136,8 +1148,9 @@ class MainWindow(QMainWindow):
             self._show_summary = False
             log.info("added %d file%s to the list", added, "s" if added != 1 else "")
         if msgs:
-            self.toast.show_message(
-                (f"Added {added}. " if added else "") + "; ".join(msgs).capitalize() + "."
+            self.toast(
+                (f"Added {added}. " if added else "") + "; ".join(msgs).capitalize() + ".",
+                "done" if added else "problem" if skipped else "",
             )
         self._refresh_footer()
         if self.running:
@@ -1355,7 +1368,7 @@ class MainWindow(QMainWindow):
             self._convert_after_captions = True
             self._sync_captions()
             n = len(making)
-            self.toast.show_message(
+            self.toast(
                 f"Still making captions for {n} clip{'s' if n != 1 else ''}. "
                 "Listo converts as soon as they're ready."
             )
@@ -1372,12 +1385,10 @@ class MainWindow(QMainWindow):
         elif iid in self._tx_failed:
             self._tx_failed.pop(iid)  # try again
             self._sync_captions()
-            self.toast.show_message("Trying the captions for this clip again.")
+            self.toast("Trying the captions for this clip again.")
         else:
             pct = self._tx_pct.get(iid)
-            self.toast.show_message(
-                "Still making captions for this clip" + (f" ({int(pct * 100)}%)." if pct else ".")
-            )
+            self.toast("Still making captions for this clip" + (f" ({int(pct * 100)}%)." if pct else "."))
 
     def _edit_captions(self, items: list[Item], action: str) -> bool:
         clips = [(Path(it.path).name, it.path, it.info, self.eff(it), it.transcript) for it in items]
@@ -1956,9 +1967,7 @@ class MainWindow(QMainWindow):
                 if self.items[iid].state in ("done", "warning", "failed", "canceled", "skipped")
             ]
             if again:
-                self.toast.show_message(
-                    "Everything here is finished. Use ↻ on a file to run it again, or add more."
-                )
+                self.toast("Everything here is finished. Use ↻ on a file to run it again, or add more.")
             return
         self.join_job = None
         self._last_joined = 0
@@ -1967,9 +1976,7 @@ class MainWindow(QMainWindow):
             self.items[iid].clock = None
         if self.export_panel.joining():
             if any(it.state in ("probing", "downloading") for it in self.items.values()):
-                self.toast.show_message(
-                    "Still reading some files. Press Convert again once every clip is in."
-                )
+                self.toast("Still reading some files. Press Convert again once every clip is in.", "problem")
                 return
             vids = [
                 self.items[i]

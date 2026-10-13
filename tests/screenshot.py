@@ -108,6 +108,11 @@ def main() -> None:
 
         steps.append((3000, override_one))
         steps.append((600, shot("02-list")))
+        steps.append((100, lambda: w.toast("Backed up to Listo Backup.zip.", "done")))
+        steps.append((500, shot("02b-toast-done")))
+        steps.append((100, lambda: w.toast("That doesn't look like a link.", "problem")))
+        steps.append((500, shot("02c-toast-problem")))
+        steps.append((100, lambda: w.toaster.dismiss()))
 
         def groups_open():
             w.convert.open_groups(True)

@@ -154,6 +154,8 @@ the computer, also while it's open, unless Settings › General › Appearance p
 | `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the files tile lit while files are dragged in) |
 | `CHIP` | Key caps in Keyboard Shortcuts, the gap where a dragged row will land |
 | `GOOD` / `WARN` / `BAD` (+ `BAD_TINT`, `BAD_EDGE`, `ON_BAD`) | Done / needs a look / failed (a danger button's hover, words on the alert's red button) |
+| `TOAST` / `TOAST_TEXT` / `TOAST_EDGE` / `TOAST_SHADOW` | A toast: a lighter card in dark, a dark card on the white page in light, so it's never missed |
+| `TOAST_DONE` / `TOAST_PROBLEM` (+ `_FILL`, `_EDGE`) | Its icon when something worked; when it didn't (WARN's yellow, not amber, so it never reads as the accent) |
 
 - **The accent** comes from `tokens.use(scheme, accent)`: marigold (`APP_ACCENT`) is hand-set in both looks; the
   other choices in `tokens.ACCENTS` get a full set of shades from `tokens.accent_set()`. No choice is red (red means
@@ -200,7 +202,7 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 | `widgets.AccentPicker` | The Accent Color circles in Settings › General |
 | `widgets.SearchField` | The toolbar's search capsule |
 | `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip |
-| `widgets.Toast` | A few words at the bottom confirming what just happened (`TOAST_MS`); never a question |
+| `widgets.Toast`, through `MainWindow.toast(text, tone)` | A short message, centred over the list just above the bar under it (`TOAST_LIFT`): it rises and fades in (`TOAST_IN_MS`, `TOAST_RISE`), stays `TOAST_MS` (longer for long ones, `TOAST_MS_PER_CHAR`), fades away (`TOAST_OUT_MS`). Resting the pointer on it keeps it; it never takes a click (what's under it still works). `tone`: "done" (a green check: Backed up, Undid), "problem" (a yellow alert on a yellow-tinted card: it didn't work, and the words say what to do), or "" for news (an info sign: Still making captions…). Never a question |
 | `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
 | `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
 | `glass.GlassRoot` · `Dock` · `glass()` | The backdrop, the sliding right panel, marking a widget as glass |
@@ -249,7 +251,8 @@ subfolder's name) shows under it only for that choice.
 ## 8. Motion
 
 The right panel slides over `DOCK_MS` (ease-out) and the list beside it slides as a picture, then the real one
-comes back. Dragged rows ease toward their places (`LIFT_EASE` per `LIFT_STEP_MS`). Small controls that come and go
+comes back. Dragged rows ease toward their places (`LIFT_EASE` per `LIFT_STEP_MS`). A toast rises `TOAST_RISE` as it
+fades in (`TOAST_IN_MS`, ease-out) and fades away (`TOAST_OUT_MS`). Small controls that come and go
 fade over `FADE_MS`. Nothing bounces. The backdrop, the glass, icons and thumbnails are drawn once and reused.
 
 ## 9. Words

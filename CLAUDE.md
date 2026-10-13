@@ -73,7 +73,8 @@ listo/
                    Plex Mono), font(), wordmark(), plain_tip(), qcolor(); SVG icons: icon(name, theme.MUTED) /
                    menu_icon(name) (a _Themed engine maps the color back to its token, so icons follow the look)
     components/widgets.py  Section, Card, Disclosure, ElidedLabel, Segmented, ToggleRow, AccentPicker, combo/set_combo,
-                   PathCombo (every file / folder setting; DESIGN.md §6), SearchField, Toast, TextBox, IconLabel,
+                   PathCombo (every file / folder setting; DESIGN.md §6), SearchField, Toast (MainWindow.toast(text, tone):
+                   "done" / "problem" / "" for news; floats over the list above the bar), TextBox, IconLabel,
                    circle_button / icon_button, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
     components/panels.py   LeftPanel + NavRow (the sidebar, Settings' sections), SidePanel (the right panel)
     components/glass.py    GlassRoot (backdrop + glass behind floating panels), Dock (the right panel sliding in/out)

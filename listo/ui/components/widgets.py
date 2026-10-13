@@ -4,9 +4,21 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import ClassVar
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    Signal,
+)
+from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
     QButtonGroup,
@@ -27,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from listo.core.store import Prefs, loads
+from listo.ui.components import glass
 from listo.ui.style import theme, tokens
 
 
@@ -364,27 +377,131 @@ class Segmented(QFrame):
         return ""
 
 
-class Toast(QLabel):
-    """A short message that floats at the bottom of its parent and fades away."""
+class Toast(QWidget):
+    """A short message floating over the bottom of the list: it rises and fades in, waits, and fades away.
+    Its tone's icon says what kind it is: "done" (a green check), "problem" (a yellow alert, on a yellow-tinted
+    toast) or news (an info sign). It never takes a click (what's under it still works); resting the pointer on
+    it keeps it up while you read. Painted, so its words are always plain text.
+    `anchor`: where it centres itself, in the parent's coordinates (the list, between the side panels)."""
 
-    def __init__(self, parent: QWidget):
+    TONES: ClassVar[dict[str, tuple[str, str]]] = {
+        "done": ("check", "TOAST_DONE"),
+        "problem": ("alert", "TOAST_PROBLEM"),
+        "": ("info", "TOAST_TEXT"),
+    }
+
+    def __init__(self, parent: QWidget, anchor=None):
         super().__init__(parent)
         self.setObjectName("Toast")
-        self.setWordWrap(True)
-        self.hide()
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.anchor = anchor or parent.rect
+        self.text, self.tone = "", ""
+        self._ms = tokens.TOAST_MS
+        self._shown = 0.0  # 0 gone … 1 all the way in
+        self._leaving = False
+        self._pill = QRectF()
+        self._anim = QVariantAnimation(self)
+        self._anim.valueChanged.connect(self._step)
+        self._anim.finished.connect(self._settled)
         self._t = QTimer(self)
         self._t.setSingleShot(True)
-        self._t.timeout.connect(self.hide)
+        self._t.timeout.connect(self._time_up)
+        self.hide()
 
-    def show_message(self, text: str, ms: int = tokens.TOAST_MS) -> None:
-        self.setText(text)
-        self.setMaximumWidth(min(tokens.TOAST_MAX_W, self.parentWidget().width() - 2 * tokens.SPACE_5))
-        self.adjustSize()
-        p = self.parentWidget()
-        self.move((p.width() - self.width()) // 2, p.height() - self.height() - tokens.SPACE_5)
+    def show_message(self, text: str, tone: str = "", ms: int = tokens.TOAST_MS) -> None:
+        self.text, self.tone = text, tone if tone in self.TONES else ""
+        self._ms = max(ms, len(text) * tokens.TOAST_MS_PER_CHAR)
+        self.place()
         self.raise_()
+        # already up (progress, say): just new words, no new entrance
+        if not self.isVisible() or self._leaving:
+            self._leaving = False
+            self._go(1.0, tokens.TOAST_IN_MS, QEasingCurve.Type.OutCubic)
         self.show()
-        self._t.start(ms)
+        self.update()
+        self._t.start(self._ms)
+
+    def dismiss(self) -> None:
+        if self.isVisible() and not self._leaving:
+            self._t.stop()
+            self._leaving = True
+            self._go(0.0, tokens.TOAST_OUT_MS, QEasingCurve.Type.InCubic)
+
+    def place(self) -> None:
+        """Size it to its words and centre it over the bottom of the list."""
+        area = self.anchor()
+        m = glass.shadow_margin()
+        icon_w = tokens.ICON + tokens.SPACE_2
+        pad_x, pad_y = tokens.SPACE_4, tokens.SPACE_3
+        widest = max(
+            tokens.ICON, min(tokens.TOAST_MAX_W, area.width() - 2 * tokens.SPACE_5) - 2 * pad_x - icon_w
+        )
+        flags = int(Qt.TextFlag.TextWordWrap)
+        box = QFontMetrics(self._font()).boundingRect(QRect(0, 0, widest, 10_000), flags, self.text)
+        w = icon_w + min(widest, box.width()) + 2 * pad_x
+        h = max(tokens.ICON, box.height()) + 2 * pad_y
+        self._pill = QRectF(m, m, w, h)
+        self.setGeometry(
+            round(area.center().x() - w / 2 - m),
+            area.bottom() - tokens.TOAST_LIFT - h - m,
+            w + 2 * m,
+            h + 2 * m,
+        )
+
+    @staticmethod
+    def _font():
+        return theme.font(tokens.TEXT_MD, tokens.WEIGHT_MEDIUM)
+
+    def _go(self, to: float, ms: int, curve) -> None:
+        self._anim.stop()
+        self._anim.setStartValue(self._shown)
+        self._anim.setEndValue(to)
+        self._anim.setDuration(ms)
+        self._anim.setEasingCurve(curve)
+        self._anim.start()
+
+    def _step(self, v) -> None:
+        self._shown = float(v)
+        self.update()
+
+    def _settled(self) -> None:
+        if self._leaving:
+            self._leaving = False
+            self.hide()
+
+    def _time_up(self) -> None:
+        if self._pill.contains(QPointF(self.mapFromGlobal(QCursor.pos()))):
+            self._t.start(tokens.TOAST_MS)  # you're reading it
+        else:
+            self.dismiss()
+
+    def paintEvent(self, _e):
+        if self._shown <= 0:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setOpacity(self._shown)
+        r = self._pill.translated(0, (1 - self._shown) * tokens.TOAST_RISE)
+        glass.paint_shadow(p, r, tokens.RADIUS_LG, tokens.TOAST_SHADOW)
+        problem = self.tone == "problem"
+        path = QPainterPath()
+        path.addRoundedRect(r, tokens.RADIUS_LG, tokens.RADIUS_LG)
+        p.fillPath(path, theme.qcolor(tokens.TOAST_PROBLEM_FILL if problem else tokens.TOAST))
+        edge = QPainterPath()
+        edge.addRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), tokens.RADIUS_LG - 0.5, tokens.RADIUS_LG - 0.5)
+        p.setPen(QPen(theme.qcolor(tokens.TOAST_PROBLEM_EDGE if problem else tokens.TOAST_EDGE), 1))
+        p.drawPath(edge)
+        name, color = self.TONES[self.tone]
+        pad_x = tokens.SPACE_4
+        icon = theme.icon(name, getattr(tokens, color), tokens.ICON).pixmap(
+            QSize(tokens.ICON, tokens.ICON), self.devicePixelRatioF()
+        )
+        p.drawPixmap(QPointF(r.left() + pad_x, r.center().y() - tokens.ICON / 2), icon)
+        text = r.adjusted(pad_x + tokens.ICON + tokens.SPACE_2, 0, -pad_x, 0)
+        p.setFont(self._font())
+        p.setPen(theme.qcolor(tokens.TOAST_TEXT))
+        p.drawText(text, int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignVCenter), self.text)
+        p.end()
 
 
 # ------------------------------------------------------------------ dropdowns

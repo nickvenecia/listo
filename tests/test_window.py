@@ -85,6 +85,39 @@ def test_the_empty_list_shows_the_ways_to_start(qapp, clips):
         w.close()
 
 
+def test_toasts(qapp):
+    from listo.ui.window.main_window import MainWindow
+
+    w = MainWindow()
+    w._restored = True
+    w.show()
+    try:
+        t = w.toaster
+        w.toast("Backed up to Listo Backup.zip.", "done")
+        assert t.isVisible() and (t.text, t.tone) == ("Backed up to Listo Backup.zip.", "done")
+        pill = t._pill.translated(t.pos().x(), t.pos().y())
+        area = w._toast_area()
+        assert area.contains(pill.toRect()) and abs(pill.center().x() - area.center().x()) <= 2
+        w.toast("Something odd.", "sparkly")  # an unknown tone is plain news
+        assert t.tone == ""
+
+        def wait(ms):
+            stop = time.monotonic() + ms / 1000
+            while time.monotonic() < stop:
+                qapp.processEvents()
+                time.sleep(0.01)
+
+        t.dismiss()
+        w.toast("That doesn't look like a link.", "problem")  # a new one while the last fades away stays up
+        wait(500)
+        assert t.isVisible() and t.tone == "problem"
+        t.dismiss()
+        wait(500)
+        assert not t.isVisible()
+    finally:
+        w.close()
+
+
 def test_a_start_tile_is_picked_by_click_space_or_return(qapp):
     from PySide6.QtTest import QTest
 

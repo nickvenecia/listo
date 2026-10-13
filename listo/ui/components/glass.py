@@ -46,10 +46,11 @@ def paint_backdrop(p: QPainter, rect: QRectF, size) -> None:
     p.fillRect(rect, g)
 
 
-def paint_shadow(p: QPainter, r: QRectF) -> None:
-    """A soft, wide, faint shadow all round a panel, so it floats (the Mac's, never a dark smudge)."""
-    rad = tokens.GLASS_R
-    base = theme.qcolor(tokens.GLASS_SHADOW)
+def paint_shadow(p: QPainter, r: QRectF, rad: float = 0, color: str = "") -> None:
+    """A soft, wide, faint shadow all round a panel, so it floats (the Mac's, never a dark smudge). `rad` and
+    `color`: a smaller shape's corners, a deeper shadow (a toast's)."""
+    rad = rad or tokens.GLASS_R
+    base = theme.qcolor(color or tokens.GLASS_SHADOW)
     steps, spread = tokens.GLASS_SHADOW_STEPS, tokens.GLASS_SHADOW_SPREAD
     p.setPen(Qt.PenStyle.NoPen)
     for i in range(steps, 0, -1):
@@ -84,7 +85,7 @@ def paint_glass(p: QPainter, r: QRectF) -> None:
     p.drawPath(line)
 
 
-def _shadow_margin() -> int:
+def shadow_margin() -> int:
     return tokens.GLASS_SHADOW_SPREAD + tokens.GLASS_SHADOW_DROP + 2
 
 
@@ -134,7 +135,7 @@ class GlassRoot(QWidget):
         dpr = self.devicePixelRatioF()
         key = (d.size(), _look(), dpr)
         if self._shadow is None or key != self._shadow_key:
-            m = _shadow_margin()
+            m = shadow_margin()
             pix = _canvas(d.width() + 2 * m, d.height() + 2 * m, dpr)
             p = QPainter(pix)
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -148,7 +149,7 @@ class GlassRoot(QWidget):
         p.drawPixmap(0, 0, self._backdrop())
         d = self.dock
         if d is not None and d.isVisible():
-            m = _shadow_margin()
+            m = shadow_margin()
             p.drawPixmap(d.x() - m, d.y() - m, self.dock_shadow())
         p.end()
 
@@ -194,13 +195,13 @@ class Dock(QWidget):
 
     def _place(self) -> None:
         rest = self._rest()
-        away = self.root.width() + _shadow_margin()  # just past the window's right edge
+        away = self.root.width() + shadow_margin()  # just past the window's right edge
         x = round(away + (rest.x() - away) * self._t)
         old = self.geometry()
         self.setGeometry(x, rest.y(), rest.width(), rest.height())
         self.content.setGeometry(0, 0, rest.width(), rest.height())
         # the shadow moves with it: redraw just around the old and new spots
-        m = _shadow_margin()
+        m = shadow_margin()
         if old.isValid():
             self.root.update(old.adjusted(-m, -m, m, m))
         self.root.update(self.geometry().adjusted(-m, -m, m, m))

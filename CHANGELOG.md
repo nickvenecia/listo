@@ -19,6 +19,7 @@
 - **Starting is one click**: an empty list shows three tiles, **Add Files…**, **Add a Folder…** and **Add a Link…** (or drop files anywhere on the window)
 - **The bar under the list is calmer while converting**: how far along it is sits beside the title ("3 of 9 done · About 2 min left") with the progress bar under both, and Pause and Stop are round icons. The time left is for the whole batch and stays steady: no more flipping back to "working out how long this will take" each time a new file starts, and paused time doesn't count
 - **More room around each file's picture** in the list
+- **Messages are easier to notice.** They float over your list, just above the bar, and rise in and fade away: a green check when something worked, a yellow sign on a yellow card when it didn't, and a dark card on the white page in the light look. Long ones stay up long enough to read, resting the pointer on one keeps it up, and they never get in the way of a click
 - **What's new reads better** in the update window: a dot before each change, small section labels, links in the accent color, in Listo's own type
 - Pasted and dropped links are checked more strictly before they're downloaded
 
