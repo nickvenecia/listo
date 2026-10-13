@@ -185,10 +185,6 @@ class ConvertSettings(QWidget):
     def _tab(self, key: str) -> None:
         self.stack.setCurrentIndex(["video", "photo", "audio"].index(key))
 
-    def show_tab(self, key: str) -> None:
-        self.tabs.set_value(key)
-        self._tab(key)
-
     def _build_video(self) -> None:
         page, lay = _page()
         fmt = Section("Format")

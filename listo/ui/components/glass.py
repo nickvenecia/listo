@@ -173,7 +173,6 @@ class Dock(QWidget):
         self.opened = False
         self._t = 0.0  # 0 = out of sight, 1 = in place
         self._frozen = None
-        self._after: list = []  # run once it's out of sight
         self._pix: QPixmap | None = None
         self._pix_key = None
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)  # nothing behind it needs drawing
@@ -229,16 +228,7 @@ class Dock(QWidget):
         self._place()
 
     # ------------------------------------------------------------------ opening and closing
-    def after_close(self, fn) -> None:
-        """Run `fn` once the dock is out of sight (now, if it is); dropped if it opens again first."""
-        if self.isVisible():
-            self._after.append(fn)
-        else:
-            fn()
-
     def set_open(self, on: bool, animate: bool = True) -> None:
-        if on:
-            self._after.clear()
         if on == self.opened:
             return
         self.opened = on
@@ -274,9 +264,6 @@ class Dock(QWidget):
             self.hide()
             self._place()
             self.root.update()
-            after, self._after = self._after, []
-            for fn in after:
-                fn()
 
     # ------------------------------------------------------------------ drawing
     def _sheet(self) -> QPixmap:

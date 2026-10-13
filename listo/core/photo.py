@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 from PIL import Image, ImageOps
 
@@ -215,18 +214,5 @@ def convert(src: str, out: str, s: Settings) -> list[str]:
     return notes
 
 
-def supported_note() -> str:
-    parts = []
-    if not HEIF_OK:
-        parts.append("HEIC")
-    if not RAW_OK:
-        parts.append("RAW")
-    return ("Missing support for: " + ", ".join(parts)) if parts else ""
-
-
 def is_heic_encodable() -> bool:
     return HEIF_OK
-
-
-def suffix_for(path: str) -> str:
-    return Path(path).suffix

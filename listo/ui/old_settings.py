@@ -16,6 +16,7 @@ from listo.core.log import get_logger
 log = get_logger(__name__)
 
 DONE = "copied_old_settings"  # in settings.json once it's been done
+RENAMED = {"updates/auto": "auto_update"}  # older names -> today's (the old value is kept beside it)
 
 
 def old_store() -> QSettings:
@@ -27,6 +28,8 @@ def bring_over() -> int:
     """Copy the old settings into settings.json (once). Returns how many values came over."""
     data = store.prefs()
     if data.get(DONE):
+        if _rename(data):
+            store.save_prefs(data)
         return 0
     old = old_store()
     n = 0
@@ -42,9 +45,20 @@ def bring_over() -> int:
         data[key] = value
         n += 1
     data[DONE] = True
+    _rename(data)
     store.save_prefs(data)
     if n:
         log.info(
             "copied %d settings from the old settings store into settings.json (the old store is kept)", n
         )
     return n
+
+
+def _rename(data: dict) -> bool:
+    """Give values kept under an older name today's name too (never over one already set)."""
+    changed = False
+    for was, now in RENAMED.items():
+        if was in data and now not in data:
+            data[now] = data[was]
+            changed = True
+    return changed

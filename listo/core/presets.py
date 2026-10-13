@@ -157,7 +157,6 @@ VIDEO_PRESETS = tuple(
         key=lambda p: _ORDER.index(p.key),
     )
 )
-VIDEO_GROUPS = (("edit", "For Editing"), ("share", "For Sharing"), ("extract", "Pull Out"))
 VIDEO_BY_KEY = {p.key: p for p in VIDEO_PRESETS}
 
 
@@ -223,11 +222,6 @@ DEINTERLACE = (
     Choice("film", "Deinterlace — Film Look (29.97p)"),
     Choice("off", "Leave Interlaced"),
 )
-DESTINATIONS = (  # the Where dropdown (ui/export_panel.WHERE + the folders picked before)
-    Choice("source", "In Source Folder"),
-    Choice("subfolder", "Create Subfolder"),
-    Choice("folder", "Choose a Destination…"),
-)
 DESQUEEZE = (
     Choice("1", "No Desqueeze"),
     Choice("1.33", "Desqueeze 1.33×"),
@@ -251,26 +245,12 @@ ASPECT_CHOICES = (
     Choice("2.35:1", "2.35:1 · Scope"),
     Choice("2.39:1", "2.39:1 · Scope (Modern)"),
 )
-ASPECT_FIT = (
-    Choice("crop", "Crop to Fill"),
-    Choice("bars", "Add Black Bars"),
-    Choice("matte", "Cinema Bars on Top"),
-)
-BURN_STYLES = (
-    Choice("clean", "Clean"),
-    Choice("vhs", "VHS Camcorder"),
-)
 # How clips WITHOUT their own timecode (camcorders, phones) are counted, burned in and stored.
 # Clips with real timecode always keep theirs.
 TIMECODE_MODES = (
     Choice("continuous", "Continuous Timecode"),  # one Convert = one tape: runs on from clip to clip
     Choice("restart", "Restart Timecode Each Clip"),  # every clip from 00:00:00:00
     Choice("record", "Match Record Time"),  # the time of day it was shot (time-of-day timecode)
-)
-COLLISIONS = (
-    Choice("number", "Add a Number"),
-    Choice("skip", "Skip That File"),
-    Choice("replace", "Replace It"),
 )
 
 
@@ -299,7 +279,7 @@ class Settings:
     timecode_mode: str = "continuous"  # see TIMECODE_MODES (burned in and stored in the file)
     burn_filename: bool = False
     burn_datetime: bool = False  # the clip's own date + a running clock
-    burn_style: str = "clean"  # see BURN_STYLES
+    burn_style: str = "clean"  # "clean" or "vhs" (the VHS Camcorder Look)
     burn_badge: str = "play"  # VHS style: "play" (PLAY ► blinks, then goes), "rec" (● REC), "none"
     burn_stop: bool = False  # VHS style: STOP ■ on the last moment of the video (and its end screen)
     desqueeze: str = "1"  # anamorphic squeeze factor, see DESQUEEZE
@@ -322,11 +302,6 @@ class Settings:
     tape_glitches: str = "off"
     verify: bool = True
     parallel: bool = False
-
-    @property
-    def overlays(self) -> bool:
-        """Anything drawn over the picture (burn-ins or captions)."""
-        return self.burns or self.captions
 
     @property
     def burns(self) -> bool:

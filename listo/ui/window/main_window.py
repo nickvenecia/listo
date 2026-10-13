@@ -363,7 +363,6 @@ class MainWindow(QMainWindow):
         right.addWidget(self.btn_add)
         grid.addLayout(right, 0, 2)
         lay.addWidget(bar)
-        self.toolbar = bar
 
         self.pages = QStackedWidget()
         self.empty = EmptyPage(  # before any files are in: the ways to start
@@ -622,10 +621,7 @@ class MainWindow(QMainWindow):
 
     def auto_update(self) -> bool:
         """Check for updates on their own (Settings › General); on unless switched off."""
-        saved = store.prefs().get("auto_update")
-        if isinstance(saved, bool):
-            return saved
-        return bool(self.qs.value("updates/auto", True, bool))  # (where it was kept before settings.json)
+        return store.prefs().get("auto_update") is not False
 
     def set_look(self, appearance: str) -> None:
         """Light, Dark, or Match the System."""
@@ -792,7 +788,6 @@ class MainWindow(QMainWindow):
         known = str(self.qs.value("updates/latest", "") or "")
         if known and update.is_newer(known, __version__):
             self._show_update_button(known)  # found earlier; the window knows without asking again
-        self.qs.setValue("updates/last", time.time())
         self.check_updates(quiet=True)
 
     def check_updates(self, quiet: bool = False) -> None:
@@ -852,10 +847,6 @@ class MainWindow(QMainWindow):
 
     def _shut_down(self) -> bool:
         return getattr(self, "_shut", False)
-
-    def open_storage(self) -> None:
-        """What Listo keeps on this computer, and deleting it (Settings › Your Data)."""
-        self.open_settings("data")
 
     def _storage_busy(self, key: str) -> str:
         if key in ("models", "captions") and self.tx is not None:

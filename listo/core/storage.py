@@ -79,10 +79,6 @@ def kind_size(k: Kind) -> int:
     return sum(size_of(p) for p in k.paths)
 
 
-def total_size() -> int:
-    return sum(kind_size(k) for k in kinds())
-
-
 def human(n: int) -> str:
     """1.6 GB, 470 MB, 12 KB."""
     size = float(n)

@@ -71,19 +71,6 @@ def style_for(template: str) -> str:
     return "custom"
 
 
-def summary(s: Settings) -> tuple[str, str]:
-    """Short (where, name) text for the bottom bar."""
-    if s.destination == "folder" and s.dest_folder:
-        where = Path(s.dest_folder).name or s.dest_folder
-    elif s.destination == "subfolder":
-        where = f"“{s.subfolder_name or 'Listo'}” subfolders"
-    else:
-        where = "In Source Folders"
-    style = style_for(s.naming)
-    name = s.naming if style == "custom" else dict((k, t) for k, t, _ in NAME_STYLES)[style]
-    return where, name
-
-
 def picture_width(panel_w: int) -> int:
     """The preview's width in a right panel this wide (its padding and scroll bar room taken off)."""
     return panel_w - 2 * SPACE_4 - SCROLL_GUTTER

@@ -1,6 +1,6 @@
 """The debug console: a terminal window that follows Listo's log files live.
 
-Help › Open Debug Console (or the terminal icon in the bottom bar) calls open_console(). It opens
+Help › Open Debug Console (or Settings › Your Data) calls open_console(). It opens
 the system's own terminal (Terminal on a Mac, PowerShell on Windows, the usual terminal on Linux)
 showing the last lines of listo.log, listo-captions.log and crash.log, and everything new as it
 happens. Opening it also turns on detailed logging for the rest of the session (every preview frame,

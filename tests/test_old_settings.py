@@ -48,6 +48,7 @@ def test_old_settings_come_across_once_and_stay(qapp, tmp_path, data_folder):
     assert data[DONE] is True
     assert json.loads(data["settings"])["subfolder_name"] == "Dailies"
     assert data["geometry"] == "01d9d0cb"  # bytes kept as text
+    assert data["auto_update"] is False  # kept under an older name: today's name too
     assert sorted(old.allKeys()) == keys_before  # the old store is a backup: never changed
     assert old.value("settings") == json.dumps(OLD_SETTINGS)
 

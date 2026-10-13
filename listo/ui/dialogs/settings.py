@@ -85,9 +85,6 @@ class SettingsDialog(QDialog):
         self.stack.setCurrentIndex([k for k, _l, _i in PANES].index(key))
         self.setWindowTitle(dict((k, label) for k, label, _i in PANES)[key])
 
-    def current_pane(self) -> str:
-        return PANES[self.stack.currentIndex()][0]
-
     def _fill(self, key: str, w: QWidget, scroll: bool = True) -> None:
         """Put `w` in a section (replacing what was there)."""
         holder = self.panes[key]

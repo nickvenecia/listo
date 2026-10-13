@@ -38,11 +38,6 @@ def can_join(s: Settings) -> bool:
     return s.video_preset != "gif"
 
 
-def joins(s: Settings, kind: str) -> bool:
-    """Does a file of this kind become part of the joined video with these settings?"""
-    return s.join and can_join(s) and kind == "video"
-
-
 def conform_for(info: MediaInfo, s: Settings) -> video.Conform:
     """What every part must match: taken from the first clip."""
     sr = info.audio[0].sample_rate if info.audio and info.audio[0].sample_rate else 48000

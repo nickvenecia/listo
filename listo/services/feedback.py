@@ -89,6 +89,7 @@ def send(fb: Feedback) -> bool:
         try:
             sender().send(fb)
             log.info("feedback sent")
+            send_waiting()  # anything kept while it couldn't go goes with it
             return True
         except OSError:
             log.info("feedback didn't send; keeping it in the outbox")

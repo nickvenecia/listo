@@ -115,9 +115,6 @@ class ElidedLabel(QLabel):
         self._elide()
         self.updateGeometry()  # its room in the layout follows the new text
 
-    def full_text(self) -> str:
-        return self._full
-
     def _elide(self) -> None:
         shown = self.fontMetrics().elidedText(self._full, self._mode, max(1, self.width()))
         self.setText(shown)
@@ -541,36 +538,6 @@ class ComboItemDelegate(QStyledItemDelegate):
         super().paint(painter, option, index)
 
 
-class Embeddable:
-    """A dialog that can also sit inside another window (a Settings pane): no title of its own, no Cancel,
-    and finishing tells its host instead of closing. Dialogs name the parts: `title_label` and `cancel_btn`."""
-
-    embedded = False
-
-    def embed(self) -> None:
-        self.embedded = True
-        self.setWindowFlags(Qt.WindowType.Widget)
-        self.setObjectName("Embedded")  # no background of its own: the window's shows through
-        for name in ("title_label", "cancel_btn"):
-            w = getattr(self, name, None)
-            if w is not None:
-                w.hide()
-
-    def keyPressEvent(self, e) -> None:
-        if self.embedded and e.key() == Qt.Key.Key_Escape:
-            e.ignore()  # Esc closes the window it sits in, not the pane
-            return
-        super().keyPressEvent(e)
-
-    def done(self, r: int) -> None:
-        if not self.embedded:
-            super().done(r)
-            return
-        self.setResult(r)
-        self.finished.emit(r)
-        (self.accepted if r else self.rejected).emit()
-
-
 class SearchField(QLineEdit):
     """The toolbar's search: asks for SEARCH_W, gives way down to SEARCH_MIN on a narrow window."""
 
@@ -641,13 +608,6 @@ class PanelHeader(QFrame):
         b = circle_button("x", tip)
         self.layout().addWidget(b)
         return b
-
-
-class StepHeader(PanelHeader):
-    """(The old numbered panel top; the window now uses PanelHeader. Kept so a panel built either way works.)"""
-
-    def __init__(self, _number: int, title: str, parent: QWidget | None = None):
-        super().__init__(title, parent)
 
 
 class ToggleRow(QAbstractButton):
@@ -730,13 +690,6 @@ class TextBox(QPlainTextEdit):
     def text(self) -> str:
         return self.toPlainText()
 
-    def set_text(self, text: str) -> None:
-        if text == self.toPlainText():
-            return
-        self._quiet = True
-        self.setPlainText(text)
-        self._quiet = False
-
 
 def button_row() -> QHBoxLayout:
     """The row of buttons at the bottom of a dialog: right-aligned (add the main one last), SPACE_4 below
@@ -793,11 +746,13 @@ def circle_button(name: str, tip: str, color: str = "") -> QToolButton:
 
 
 def icon_button(name: str, tip: str, color: str = "", size: int = tokens.ICON_SM) -> QToolButton:
-    """A small icon button inside a row or a card: round, no frame until you point at it.
-    Always has a tooltip. Without a `color` it's the muted grey of the look in use."""
+    """A small icon button inside a row, a card or a player: round, no frame until you point at it.
+    Always has a tooltip. Without a `color` it's the muted grey of the look in use; "" = set the icon later."""
     b = QToolButton()
     b.setObjectName("IconBtn")
-    b.setIcon(theme.icon(name, color or theme.MUTED, size))
+    if name:
+        b.setIcon(theme.icon(name, color or theme.MUTED, size))
+    b.setIconSize(QSize(size, size))
     b.setToolTip(tip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     return b
@@ -808,23 +763,6 @@ def chip(text: str = "", tone: str = "") -> QLabel:
     lbl.setObjectName("Chip")
     lbl.setProperty("tone", tone)
     return lbl
-
-
-def set_tone(lbl: QLabel, tone: str, text: str) -> None:
-    if lbl.property("tone") != tone:
-        lbl.setProperty("tone", tone)
-        repolish(lbl)
-    lbl.setText(text)
-    lbl.setVisible(bool(text))
-
-
-def add_chip(text: str, icon: str = "plus") -> QPushButton:
-    """A tinted capsule with a small icon (+ Add Caption): the app's "add something" button."""
-    b = QPushButton(text)
-    b.setObjectName("AddChip")
-    b.setCursor(Qt.CursorShape.PointingHandCursor)
-    b.setIcon(theme.icon(icon, theme.ACCENT, tokens.ICON_SM))
-    return b
 
 
 class FlowLayout(QLayout):

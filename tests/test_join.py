@@ -108,8 +108,7 @@ def test_rewrap_only_joins_clips_that_already_match(tmp_path: Path):
 
 def test_gif_never_joins():
     assert not join.can_join(Settings(video_preset="gif"))
-    assert join.joins(Settings(video_preset="h264", join=True), "video")
-    assert not join.joins(Settings(video_preset="h264", join=True), "photo")
+    assert join.can_join(Settings(video_preset="h264"))
 
 
 def test_burn_ins_and_a_silent_clip_join(tmp_path: Path):

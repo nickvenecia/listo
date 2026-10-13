@@ -15,8 +15,8 @@ How it works
 - prepare(): unpacks what needs unpacking and writes a small helper script that waits for Listo to
   quit, puts the new version where the old one was, and opens it again. MainWindow runs it and quits.
 
-Nothing is sent except the request for the release list (no IDs, no usage data). The check runs at
-most once a day, and can be turned off.
+Nothing is sent except the request for the release list (no IDs, no usage data). The check runs each
+time Listo opens, and can be turned off (Settings › General).
 """
 
 from __future__ import annotations
@@ -49,7 +49,6 @@ log = get_logger(__name__)
 REPO = "nickvenecia/listo"  # github.com/<owner>/<repo> the releases come from
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 PAGE = f"https://github.com/{REPO}/releases/latest"
-CHECK_EVERY_S = 20 * 3600  # the automatic check: at most about once a day
 
 
 class Canceled(Exception):

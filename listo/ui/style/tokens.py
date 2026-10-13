@@ -17,7 +17,6 @@ SPACE_5 = 24  # padding of dialogs and empty states
 CONTROL_H = 34  # EVERY button, dropdown, text field, segmented control and round icon button
 SMALL_H = 24  # small round icon buttons inside rows and cards, chips, naming tokens
 SECTION_ADD = 20  # a sidebar section's plain + (a gray glyph, the Mac's size)
-CHIP_H = 28  # a tinted capsule button
 CHIP_SM_H = SMALL_H - 6  # a small status chip
 INDICATOR = 16  # checkbox box
 TOGGLE_ROW_H = 32  # an on/off setting: label left, switch right
@@ -66,7 +65,6 @@ TRACK_BRAND = -0.5  # letter spacing (px): the wordmark
 TRACK_TITLEBAR = -0.3
 TRACK_TITLE = -0.4  # page titles
 ICON_STROKE = 2.0  # the icon set's line width
-LINE_STROKE = 1.8  # drawn chevrons
 
 # ---------------------------------------------------------------- layout
 WINDOW_SIZE = (1600, 1000)
@@ -80,7 +78,7 @@ SIDEBAR_W = 232  # the left panel: your files by kind
 INSPECTOR_W = 420  # the right panel: Convert To, or the clip you picked
 INSPECTOR_MIN = 360  # …on a smaller window
 INSPECTOR_SHARE = 0.27  # of the window's width, between those two
-TOOLBAR_H = 64  # the bar above the list: title, search, filter, +
+TOOLBAR_H = 64  # the bar above the list: title, search, +
 HEADER_H = 52  # a panel header that isn't level with a toolbar
 TITLEBAR_H = 32  # Listo's own Mac title bar (fitted to the real one once the window shows)
 SEARCH_W = 440  # the search capsule asks for this much room…
@@ -140,7 +138,6 @@ LIFT_ROWS_SHOWN = 3  # rows drawn on the lifted card when several move
 LIFT_SHADOW_STEPS = 6
 UPDATE_CHECK_DELAY_MS = 1500  # the automatic update check, just after the window is up (every launch)
 UPDATE_WAIT_MS = 1500  # a found update waits this long between looks while another window is open
-QUIT_WAIT_MS = 1500  # how long quitting waits for an update check to finish
 
 # ---------------------------------------------------------------- colors: a dark and a light set
 # Listo follows the system (or Settings › General › Appearance). Read colors as tokens.X when drawing,
@@ -187,14 +184,10 @@ DARK = {
     "GLASS_EDGE": "rgba(255, 255, 255, 0.18)",  # …a little brighter along the top, where light catches it
     "GLASS_SHADOW": "rgba(0, 0, 0, 0.35)",  # soft and wide
     "CHIP": "rgba(245, 165, 36, 0.16)",  # a tinted capsule (+ Add)
-    "CHIP_HOVER": "rgba(245, 165, 36, 0.26)",
     "FIELD": "rgba(255, 255, 255, 0.07)",  # a text field or dropdown: lightly frosted
     "FIELD_BORDER": "rgba(255, 255, 255, 0.08)",
     "BLOCK": "rgba(255, 255, 255, 0.045)",  # a card inside a glass panel: a soft tint, no outline
     "FILL": "rgba(255, 255, 255, 0.045)",  # a soft fill on the page: a switch's track, a placeholder
-    "DIVIDER": "#3E321F",  # a band in the list
-    "DIVIDER_TEXT": "#FACE87",
-    "DIVIDER_HOVER": "#49391F",
 }
 LIGHT = {
     "BG": "#FFFFFF",
@@ -238,14 +231,10 @@ LIGHT = {
     "GLASS_EDGE": "rgba(0, 0, 0, 0.04)",  # (fainter still along the top)
     "GLASS_SHADOW": "rgba(0, 0, 0, 0.08)",  # soft and wide
     "CHIP": "rgba(168, 99, 0, 0.1)",
-    "CHIP_HOVER": "rgba(168, 99, 0, 0.18)",
     "FIELD": "rgba(255, 255, 255, 1.0)",
     "FIELD_BORDER": "rgba(0, 0, 0, 0.10)",
     "BLOCK": "rgba(255, 255, 255, 0.85)",  # white cards on the gray glass
     "FILL": "rgba(0, 0, 0, 0.045)",  # light gray on white
-    "DIVIDER": "#F2E8D9",
-    "DIVIDER_TEXT": "#8F5400",
-    "DIVIDER_HOVER": "#ECDDC7",
 }
 COLORS = tuple(DARK)
 
@@ -318,11 +307,7 @@ def accent_set(base: str, scheme: str) -> dict[str, str]:
             "ACCENT_TINT": _rgba(base, 0.09),
             "ACCENT_EDGE": _rgba(base, 0.45),
             "CARD_SELECTED": _mix(base, "#FFFFFF", 0.1),
-            "DIVIDER": _mix(base, "#FFFFFF", 0.15),
-            "DIVIDER_TEXT": _mix(base, "#000000", 0.85),
-            "DIVIDER_HOVER": _mix(base, "#FFFFFF", 0.22),
             "CHIP": _rgba(base, 0.10),
-            "CHIP_HOVER": _rgba(base, 0.18),
         }
     return {
         "ACCENT": base,
@@ -334,11 +319,7 @@ def accent_set(base: str, scheme: str) -> dict[str, str]:
         "ACCENT_TINT": _rgba(base, 0.15),
         "ACCENT_EDGE": _rgba(_mix(base, "#FFFFFF", 0.85), 0.55),
         "CARD_SELECTED": _mix(base, DARK["CARD"], 0.12),
-        "DIVIDER": _mix(base, DARK["BG"], 0.15),
-        "DIVIDER_TEXT": _mix(base, "#FFFFFF", 0.55),
-        "DIVIDER_HOVER": _mix(base, DARK["BG"], 0.2),
         "CHIP": _rgba(base, 0.16),
-        "CHIP_HOVER": _rgba(base, 0.26),
     }
 
 

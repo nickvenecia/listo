@@ -90,7 +90,6 @@ QWidget {{ color: {tokens.TEXT}; font-size: {TEXT_MD}px; }}
 QMainWindow, #Root {{ background: {tokens.BG}; }}
 *[glass="true"] {{ background: transparent; border: none; }}
 QDialog {{ background: {tokens.PANEL}; }}
-QDialog#Embedded {{ background: transparent; }}
 QToolTip {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border: 1px solid {tokens.BORDER_STRONG};
     padding: {SPACE_1}px {SPACE_2}px; border-radius: {RADIUS_SM}px; font-size: {TEXT_SM}px; }}
 
@@ -102,7 +101,6 @@ QToolTip {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border: 1px solid
 #SectionLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #Hint {{ color: {tokens.FAINT}; font-size: {TEXT_SM}px; }}
 #Muted {{ color: {tokens.MUTED}; }}
-#Meta {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 
 /* ---------- areas */
 #PanelHeader {{ border: none; }}
@@ -123,17 +121,11 @@ QPushButton#Primary:pressed {{ background: {tokens.ACCENT_PRESS}; border-color: 
 QPushButton#Primary:disabled {{ background: {tokens.ACCENT_OFF}; border-color: {tokens.ACCENT_OFF}; color: {tokens.ACCENT_OFF_TEXT}; }}
 QPushButton#Ghost {{ background: transparent; border-color: transparent; color: {tokens.MUTED}; }}
 QPushButton#Ghost:hover {{ background: {tokens.CARD_HOVER}; color: {tokens.TEXT}; }}
-QPushButton#AddChip {{ background: {tokens.CHIP}; border: 1px solid transparent; color: {tokens.ACCENT}; padding: 0 {SPACE_3}px 0 {SPACE_2}px; font-weight: {WEIGHT_SEMIBOLD}; }}
-QPushButton#AddChip:hover {{ background: {tokens.CHIP_HOVER}; }}
-QPushButton#AddChip:pressed {{ background: {tokens.ACCENT_TINT}; }}
 QToolButton#SectionAdd {{ background: transparent; border: none; border-radius: {tokens.SECTION_ADD // 2}px;
     min-width: {tokens.SECTION_ADD}px; max-width: {tokens.SECTION_ADD}px;
     min-height: {tokens.SECTION_ADD}px; max-height: {tokens.SECTION_ADD}px; }}
 QToolButton#SectionAdd:hover {{ background: {tokens.CARD_HOVER}; }}
 *[capsule="true"] {{ border-radius: {_INNER // 2}px; padding-left: {SPACE_4}px; }}
-QPushButton#LinkBtn {{ background: transparent; border: none; padding: 0; color: {tokens.ACCENT}; text-align: left; }}
-QPushButton#LinkBtn:hover {{ color: {tokens.ACCENT_HOVER}; }}
-QPushButton#LinkBtn:disabled {{ color: {tokens.FAINT}; background: transparent; }}
 QPushButton#Disclosure {{ background: transparent; border: none; border-radius: 0; padding: 0; text-align: left;
     color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; min-height: {SMALL_H}px; max-height: {SMALL_H}px; }}
 QPushButton#Disclosure:hover {{ color: {tokens.TEXT}; background: transparent; }}
@@ -155,14 +147,12 @@ QToolButton#Circle:hover {{ background: {tokens.RAISED_HOVER}; }}
 QToolButton#CirclePrimary {{ background: {tokens.ACCENT}; border: 1px solid {tokens.ACCENT}; }}
 QToolButton#CirclePrimary:hover {{ background: {tokens.ACCENT_HOVER}; border-color: {tokens.ACCENT_HOVER}; }}
 QToolButton#CirclePrimary:pressed {{ background: {tokens.ACCENT_PRESS}; }}
-QToolButton#Circle[active="true"] {{ background: {tokens.ACCENT_TINT}; border-color: {tokens.ACCENT_EDGE}; }}
 #Alert {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; }}
 #AlertTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 QPushButton#DangerFill {{ background: {tokens.BAD}; border: 1px solid {tokens.BAD}; color: {tokens.ON_BAD}; font-weight: {WEIGHT_SEMIBOLD}; }}
 QPushButton#DangerFill:hover {{ background: {tokens.BAD}; border-color: {tokens.BAD}; }}
 #KeyCap {{ background: {tokens.CHIP}; color: {tokens.MUTED}; border-radius: {RADIUS_SM}px; padding: 2px {SPACE_2}px;
     font-weight: {WEIGHT_MEDIUM}; }}
-#MenuHeading {{ color: {tokens.FAINT}; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD}; padding: {SPACE_1}px {SPACE_2}px 0 {SPACE_2}px; }}
 
 /* ---------- fields + dropdowns: all CONTROL_H tall */
 QComboBox {{ combobox-popup: 0; }}
@@ -218,12 +208,6 @@ QScrollBar:vertical:disabled, QScrollBar::handle:vertical:disabled {{ background
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; background: none; }}
 
 /* ---------- status words and chips: the color comes from the tone */
-#Status {{ font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; color: {tokens.MUTED}; }}
-#Status[tone="probing"] {{ color: {tokens.FAINT}; }}
-#Status[tone="converting"], #Status[tone="downloading"], #Status[tone="transcribing"] {{ color: {tokens.ACCENT}; }}
-#Status[tone="paused"], #Status[tone="warning"] {{ color: {tokens.WARN}; }}
-#Status[tone="done"] {{ color: {tokens.GOOD}; }}
-#Status[tone="failed"], #Status[tone="unsupported"] {{ color: {tokens.BAD}; }}
 #Chip {{ border-radius: {RADIUS_SM}px; padding: 0 {SPACE_2}px; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD};
     min-height: {CHIP_SM_H}px; max-height: {CHIP_SM_H}px; border: 1px solid {tokens.BORDER_STRONG}; color: {tokens.MUTED}; }}
 #Chip[tone="custom"] {{ color: {tokens.ACCENT}; border-color: {tokens.ACCENT_EDGE}; background: {tokens.ACCENT_TINT}; }}
@@ -243,17 +227,15 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Avatar {{ background: {tokens.ACCENT_TINT}; color: {tokens.ACCENT}; border-radius: {AVATAR // 2}px;
     font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #ProfileName {{ font-weight: {WEIGHT_SEMIBOLD}; }}
-#ProfileSub {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #Nav {{ background: transparent; border-radius: {tokens.NAV_R}px; }}
 #Nav:hover {{ background: {tokens.CARD_HOVER}; }}
 #Nav[selected="true"] {{ background: {tokens.ACCENT_TINT}; }}
 #NavLabel {{ color: {tokens.TEXT}; font-weight: {WEIGHT_MEDIUM}; }}
-#NavSub {{ color: {tokens.TEXT}; }}
 QToolButton#NavArrow {{ background: transparent; border: none; padding: 0; }}
 QToolButton#NavArrow:hover {{ background: {tokens.CARD_HOVER}; border-radius: {RADIUS_XS}px; }}
 #NavHead {{ background: transparent; }}
 #NavHead:hover #SectionLabel {{ color: {tokens.TEXT}; }}
-#Nav[selected="true"] #NavLabel, #Nav[selected="true"] #NavSub {{ color: {tokens.ACCENT_HOVER}; }}
+#Nav[selected="true"] #NavLabel {{ color: {tokens.ACCENT_HOVER}; }}
 #NavCount {{ color: {tokens.FAINT}; font-size: {TEXT_SM}px; }}
 #NavCount[tone="converting"] {{ color: {tokens.ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
 #NavCount[tone="failed"] {{ color: {tokens.BAD}; font-weight: {WEIGHT_SEMIBOLD}; }}
@@ -275,13 +257,12 @@ QListView#FileList {{ background: transparent; border: none; outline: none; }}
 
 /* ---------- the right panel */
 #Details {{ background: transparent; border: none; }}
-#PanelFoot {{ background: transparent; border: none; }}
 #Example {{ background: {tokens.BLOCK}; border: none; border-radius: {RADIUS_LG}px; }}
 #ExFrom {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #ExTo {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 
 /* ---------- pictures sit on black in both looks, like a monitor */
-#Thumb, #TrimPreview {{ background: {tokens.SCREEN}; border-radius: {RADIUS}px; }}
+#TrimPreview {{ background: {tokens.SCREEN}; border-radius: {RADIUS}px; }}
 #Player {{ background: {tokens.SCREEN}; border-radius: {RADIUS}px; }}
 
 /* ---------- Check the Captions */
@@ -319,36 +300,27 @@ QMenu::section {{ color: {tokens.FAINT}; padding: {SPACE_2}px {SPACE_2}px 0 {SPA
 _SVG = {
     "alert": '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
     "arrow-down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
-    "arrow-up": '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
     "audio": '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
     "box": '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
-    "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-    "camera": '<path d="M3 8a2 2 0 0 1 2-2h2l2-2h6l2 2h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="12.5" r="3.5"/>',
     "captions": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10.5a2 2 0 1 0 0 3M16 10.5a2 2 0 1 0 0 3"/>',
     "check": '<path d="M20 6 9 17l-5-5"/>',
     "chevron": '<path d="m6 9 6 6 6-6"/>',
     "chevron-left": '<path d="m15 6-6 6 6 6"/>',
     "chevron-right": '<path d="m9 6 6 6-6 6"/>',
-    "chevron-up": '<path d="m6 15 6-6 6 6"/>',
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     "cog": '<circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="12" r="6.2"/><path d="M12 2.6v3.2M12 18.2v3.2M2.6 12h3.2M18.2 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M5.4 18.6l2.2-2.2M16.4 7.6l2.2-2.2"/>',
     "copy": '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
     "edit": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-    "export": '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5"/>',
     "eye": '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
     "file": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
     "film": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 7.5h4M3 12h18M3 16.5h4M17 7.5h4M17 16.5h4"/>',
-    "filter": '<path d="M4 7h16M7 12h10M10 17h4"/>',
     "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
     "image": '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>',
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/>',
     "keyboard": '<rect x="2.5" y="6" width="19" height="12" rx="2.5"/><path d="M6.5 10h.01M10 10h.01M14 10h.01M17.5 10h.01M8 14h8"/>',
     "link": '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     "list-x": '<path d="M11 12H3M16 6H3M16 18H3"/><path d="m15 10 4 4M19 10l-4 4"/>',
-    "mail": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     "message": '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-    "moon": '<path d="M20.5 14.1A8.5 8.5 0 1 1 9.9 3.5a6.6 6.6 0 0 0 10.6 10.6z"/>',
-    "more": '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
     "pause": '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
     "play": '<path d="M6 4l14 8-14 8z"/>',
     "plus": '<path d="M12 5v14M5 12h14"/>',
@@ -357,11 +329,7 @@ _SVG = {
     "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
     "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     "share": '<path d="M12 3.5v10"/><path d="m8 7.5 4-4 4 4"/><path d="M6 11.5H5.5A1.5 1.5 0 0 0 4 13v5.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V13a1.5 1.5 0 0 0-1.5-1.5H18"/>',
-    "sliders": '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
     "stop": '<rect x="6" y="6" width="12" height="12" rx="2"/>',
-    "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-    "terminal": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>',
-    "trash": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',
     "updown": '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/>',
     "x": '<path d="M18 6 6 18M6 6l12 12"/>',
@@ -513,15 +481,6 @@ def font(size: int = TEXT_MD, weight: int = WEIGHT_REGULAR):
     f = QFont(QApplication.font())
     f.setPixelSize(size)
     f.setWeight(QFont.Weight(weight))
-    return f
-
-
-def mono_font(size: int = TEXT_XS):
-    """IBM Plex Mono, for codes only (logs, commands, checksums)."""
-    from PySide6.QtGui import QFont
-
-    f = QFont(MONO_FAMILY)
-    f.setPixelSize(size)
     return f
 
 

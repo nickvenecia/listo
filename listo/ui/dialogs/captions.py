@@ -111,7 +111,7 @@ class CaptionEditor(QDialog):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFixedWidth(CAPTION_LIST_W)
-        self.scroll.setFixedHeight(EDITOR_PIC_H + 24)
+        self.scroll.setFixedHeight(EDITOR_PIC_H + SPACE_5)  # as tall as the picture and its time line
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right.addWidget(self.scroll)
         self.btn_add = QPushButton("Add Caption")

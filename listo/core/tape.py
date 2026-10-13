@@ -196,7 +196,6 @@ def audio_filters(windows: list[tuple[float, float]]) -> list[str]:
 STOP_FRAMES_S = 0.1  # with a screen: STOP shows on the last couple of frames, then on the end screen
 STOP_SHOWS_S = 1.6  # and stays on the end screen this long
 STOP_ALONE_S = 1.0  # without a screen: STOP shows for the video's last second
-SCREENS = ("blue", "black", "bars", "color")
 
 
 def vhs(s: Settings) -> bool:

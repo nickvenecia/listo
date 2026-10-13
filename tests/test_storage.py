@@ -40,7 +40,7 @@ def test_sizes_and_deleting_each_kind(tmp_path: Path, monkeypatch):
     assert not (tmp_path / "logs" / "listo.log.1").exists()
     for k in ("captions", "tools", "extras"):
         storage.clear(k)
-    assert storage.total_size() == 0
+    assert sum(storage.kind_size(k) for k in storage.kinds()) == 0
     assert keep.read_text() == "keep me"
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import ClassVar
 
 import pytest
 from PySide6.QtCore import Qt
@@ -154,7 +155,7 @@ def test_settings_saves_the_look_and_accent(qapp, data_folder):
         w.close()
 
 
-def test_feedback_waits_in_the_outbox(data_folder):
+def test_feedback_waits_in_the_outbox(data_folder, monkeypatch):
     from listo.services import feedback
 
     fb = feedback.make("idea", "  A button to do the thing  ", "someone@example.com", include_details=True)
@@ -164,6 +165,17 @@ def test_feedback_waits_in_the_outbox(data_folder):
     assert len(kept) == 1 and json.loads(kept[0].read_text())["message"] == fb.message
     with pytest.raises(feedback.FeedbackError):
         feedback.make("idea", "   ")
+
+    class Connected(feedback.FeedbackSender):  # once sending is switched on, the kept ones go too
+        connected = True
+        sent: ClassVar[list] = []
+
+        def send(self, f):
+            self.sent.append(f.message)
+
+    monkeypatch.setattr(feedback, "_sender", Connected())
+    assert feedback.send(feedback.make("problem", "It froze")) is True
+    assert Connected.sent == ["It froze", fb.message] and feedback.waiting() == []
 
 
 def test_undo_redo_and_reorder(qapp, clips, monkeypatch):

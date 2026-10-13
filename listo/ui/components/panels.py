@@ -4,8 +4,7 @@ LeftPanel   every list of places on the left (the main sidebar, Settings' sectio
             (NavRow) inset NAV_INSET from its edges so their corners curve with the glass, an optional top
             (the wordmark), a list that scrolls, an optional foot (the profile card)
 SidePanel   every panel on the right (Convert To): the same header everywhere (title, your own round buttons,
-            ⋯ when it has a menu, then the round ✕ at the far right), a body that scrolls or not, and a footer
-            for its one main action
+            then the round ✕ at the far right) and a body that scrolls
 
 Subclass them; change what's inside, never the frame.
 """
@@ -13,7 +12,7 @@ Subclass them; change what's inside, never the frame.
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, Qt, Signal
-from PySide6.QtWidgets import QFrame, QLabel, QMenu, QPushButton, QToolButton, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QToolButton, QWidget
 
 from listo.ui.components.glass import glass
 from listo.ui.components.widgets import (
@@ -41,7 +40,6 @@ class NavRow(QFrame):
         """`foldable=False`: a plain list row (Settings) with no room kept for a fold arrow."""
         super().__init__(parent)
         self.key = key
-        self.icon_name = icon
         self.setObjectName("Nav")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -82,11 +80,6 @@ class NavRow(QFrame):
     def set_folded(self, on: bool) -> None:
         self.folded = on
         self.recolor()
-
-    def as_child(self) -> None:
-        """A row under another: its name starts where the row above's icon is."""
-        self.icon.hide()
-        self.label.setObjectName("NavSub")
 
     def set_count(self, n: int | str, tone: str = "") -> None:
         text = str(n) if n not in (0, "") else ""
@@ -164,58 +157,29 @@ class LeftPanel(QFrame):
 
 
 class SidePanel(QFrame):
-    """A panel on the right. `more`: a ⋯ menu in the header (`more_menu`); `scroll`: the body scrolls."""
+    """A panel on the right: the header, then a body that scrolls (`lay`)."""
 
     close_wanted = Signal()  # its round ✕
 
-    def __init__(self, title: str, more: bool = False, scroll: bool = True, parent: QWidget | None = None):
+    def __init__(self, title: str, parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("Details")
         self.setFixedWidth(tokens.INSPECTOR_W)
         outer = vbox(self, 0, 0)
         self.header = PanelHeader(title)
         self.header.setFixedHeight(tokens.TOOLBAR_H)  # lines up with the list's toolbar
-        self.more_menu: QMenu | None = None
-        self.more: QToolButton | None = None
-        if more:
-            self.more_menu = QMenu(self)
-            self.more = circle_button("more", "More")
-            self.more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-            self.more.setMenu(self.more_menu)
-            self.header.actions.addWidget(self.more)
         self.close_btn = self.header.add_close()
         self.close_btn.clicked.connect(self.close_wanted.emit)
         outer.addWidget(self.header)
         body = QWidget()
         pad = tokens.SPACE_4
-        if scroll:
-            self.lay = vbox(body, (pad, 0, pad - tokens.SCROLL_GUTTER, pad), tokens.SPACE_3)
-            self.scroll = FitScroll()
-            self.scroll.setWidget(body)
-            outer.addWidget(self.scroll, 1)
-        else:
-            self.lay = vbox(body, (pad, 0, pad, pad), tokens.SPACE_3)
-            self.scroll = None
-            outer.addWidget(body, 1)
-        self.footer = QFrame()
-        self.footer.setObjectName("PanelFoot")
-        self.footer_lay = hbox(self.footer, tokens.SPACE_4, tokens.SPACE_2)
-        self.footer.hide()
-        outer.addWidget(self.footer)
+        self.lay = vbox(body, (pad, 0, pad - tokens.SCROLL_GUTTER, pad), tokens.SPACE_3)
+        self.scroll = FitScroll()
+        self.scroll.setWidget(body)
+        outer.addWidget(self.scroll, 1)
 
     def header_icon(self, icon: str, tip: str) -> QToolButton:
-        """A round button in the header, before the ⋯ and the ✕."""
+        """A round button in the header, before the ✕."""
         b = circle_button(icon, tip)
         self.header.actions.insertWidget(0, b)
-        return b
-
-    def footer_button(self, text: str, icon: str = "", primary: bool = True) -> QPushButton:
-        """The panel's one main action, across the bottom, with its icon."""
-        b = QPushButton(text)
-        if primary:
-            b.setObjectName("Primary")
-        if icon:
-            b.setIcon(theme.icon(icon, theme.ON_ACCENT if primary else theme.TEXT, tokens.ICON_SM))
-        self.footer_lay.addWidget(b, 1)
-        self.footer.show()
         return b

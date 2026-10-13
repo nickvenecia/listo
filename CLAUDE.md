@@ -74,7 +74,7 @@ listo/
                    menu_icon(name) (a _Themed engine maps the color back to its token, so icons follow the look)
     components/widgets.py  Section, Card, Disclosure, ElidedLabel, Segmented, ToggleRow, AccentPicker, combo/set_combo,
                    PathCombo (every file / folder setting; DESIGN.md §6), SearchField, Toast, TextBox, IconLabel,
-                   circle_button / icon_button / add_chip, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
+                   circle_button / icon_button, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
     components/panels.py   LeftPanel + NavRow (the sidebar, Settings' sections), SidePanel (the right panel)
     components/glass.py    GlassRoot (backdrop + glass behind floating panels), Dock (the right panel sliding in/out)
     components/empty.py    EmptyPage + StartTile: the empty list's start tiles (Add Files… / a Folder… / a Link…);

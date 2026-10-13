@@ -18,7 +18,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 IS_WIN = sys.platform.startswith("win")
-IS_MAC = sys.platform == "darwin"
 EXE = ".exe" if IS_WIN else ""
 
 

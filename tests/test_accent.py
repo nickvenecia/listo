@@ -12,7 +12,7 @@ COLOR = re.compile(r"^(#[0-9A-F]{6}|rgba\(\d+, \d+, \d+, [0-9.]+\))$")
 
 
 def test_every_choice_has_every_shade_and_reads():
-    keys = {k for k in tokens.DARK if k.startswith(("ACCENT", "DIVIDER", "CHIP")) or k == "ON_ACCENT"}
+    keys = {k for k in tokens.DARK if k.startswith(("ACCENT", "CHIP")) or k == "ON_ACCENT"}
     for name, dark, light in tokens.ACCENTS.values():
         for base, scheme in ((dark, "dark"), (light, "light")):
             shades = tokens.accent_set(base, scheme)
@@ -40,7 +40,7 @@ def test_use_switches_and_comes_back():
         tokens.use("light")  # keeps the accent
         assert tokens.ACCENTS["green"][2] == tokens.ACCENT
         tokens.use("dark", "")  # Listo's own: the hand-set shades, exactly
-        assert tokens.DARK["ACCENT"] == tokens.ACCENT and tokens.DARK["DIVIDER"] == tokens.DIVIDER
+        assert tokens.DARK["ACCENT"] == tokens.ACCENT and tokens.DARK["CHIP"] == tokens.CHIP
         tokens.use("dark", "no-such-color")
         assert tokens.ACCENT_KEY == tokens.APP_ACCENT
     finally:

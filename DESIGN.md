@@ -152,7 +152,7 @@ the computer, also while it's open, unless Settings › General › Appearance p
 | `ON_ACCENT` | Words and icons on the accent (dark on a light accent: never assume white) |
 | `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A disabled primary button |
 | `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the drop target) |
-| `CHIP` / `CHIP_HOVER` | Tinted capsules, the gap where a dragged row will land |
+| `CHIP` | Key caps in Keyboard Shortcuts, the gap where a dragged row will land |
 | `GOOD` / `WARN` / `BAD` (+ `BAD_TINT`, `BAD_EDGE`, `ON_BAD`) | Done / needs a look / failed (a danger button's hover, words on the alert's red button) |
 
 - **The accent** comes from `tokens.use(scheme, accent)`: marigold (`APP_ACCENT`) is hand-set in both looks; the
@@ -181,9 +181,8 @@ Use these; never build a control's look by hand.
 | Quiet | `Ghost` | Small helpers inside a card, "Update to …" |
 | Danger | `Danger` | Destructive actions in a form (Stop, Delete All): red words |
 | Alert's yes | `DangerFill` | Only the destructive button inside an alert |
-| Add | `widgets.add_chip("Caption")` | Adding a part at the end of a list |
 | Round icon button | `widgets.circle_button(icon, tip)` (`CirclePrimary` for the +) | Every icon button in the toolbar or a panel header |
-| Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | Icon buttons inside a row or card |
+| Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | Icon buttons inside a row, a card or a player (play, ‹ ›) |
 | Section + | `SectionAdd` | The plain gray + beside a sidebar heading |
 
 Every icon-only button has a tooltip. "…" when a button opens a window or a picker.

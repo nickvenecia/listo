@@ -25,7 +25,7 @@ from __future__ import annotations
 import io
 import os
 
-from PySide6.QtCore import QRectF, QSize, QSizeF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QRectF, QSizeF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 from listo.core import burnin, naming
 from listo.core.presets import Settings
 from listo.core.probe import MediaInfo
-from listo.ui.components.widgets import hbox, vbox
+from listo.ui.components.widgets import hbox, icon_button, vbox
 from listo.ui.dialogs.trim import fmt_clock
 from listo.ui.style import theme
 from listo.ui.style.tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
@@ -166,11 +166,7 @@ class ClipPlayer(QWidget):
         tr = hbox(self.transport, spacing=SPACE_1)
         self.btn_prev = self._nav_button("chevron-left", "Previous clip", -1)
         tr.addWidget(self.btn_prev)
-        self.btn_play = QToolButton()
-        self.btn_play.setObjectName("IconBtn")
-        self.btn_play.setIconSize(QSize(ICON, ICON))
-        self.btn_play.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_play.setToolTip("Play / Pause")
+        self.btn_play = icon_button("", "Play / Pause", size=ICON)  # its icon follows playing / paused
         self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_play.clicked.connect(self.toggle)
         tr.addWidget(self.btn_play)
@@ -215,12 +211,7 @@ class ClipPlayer(QWidget):
         self._state()
 
     def _nav_button(self, icon: str, tip: str, direction: int) -> QToolButton:
-        b = QToolButton()
-        b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(icon, theme.TEXT))
-        b.setIconSize(QSize(ICON, ICON))
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setToolTip(tip)
+        b = icon_button(icon, tip, theme.TEXT, ICON)
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         b.clicked.connect(lambda: self.step.emit(direction))
         b.hide()  # until the owner says there's more than one clip
