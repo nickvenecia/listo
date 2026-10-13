@@ -74,12 +74,22 @@ from listo.core.probe import (
     kind_from_ext,
     probe,
 )
+from listo.core.progress import BatchClock, time_left
 from listo.core.sample import sample_clip, sample_clip_if_made
 from listo.core.tools import capabilities
 from listo.ui.components import titlebar
+from listo.ui.components.empty import EmptyPage
 from listo.ui.components.glass import Dock, GlassRoot, glass
 from listo.ui.components.player import space_plays
-from listo.ui.components.widgets import ElidedLabel, IconLabel, SearchField, Toast, hbox, hint, repolish, vbox
+from listo.ui.components.widgets import (
+    ElidedLabel,
+    SearchField,
+    Toast,
+    circle_button,
+    hbox,
+    hint,
+    vbox,
+)
 from listo.ui.dialogs.captions import CaptionEditor
 from listo.ui.dialogs.common import about, confirm, notice
 from listo.ui.dialogs.preview import PreviewDialog
@@ -169,74 +179,6 @@ class Item:
         return 0.0
 
 
-class EmptyList(QFrame):
-    """What the middle shows before any files are in: drop them here, add them, or paste a link."""
-
-    def __init__(self, on_files, on_folder, on_link):
-        super().__init__()
-        self.setObjectName("DropZone")
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        lay = vbox(self, tokens.SPACE_5, tokens.SPACE_2)
-        lay.addStretch(1)
-        self.icon = IconLabel("drop", "ACCENT", tokens.ICON_XL, 1.6)
-        row = hbox()
-        row.addStretch(1)
-        row.addWidget(self.icon)
-        row.addStretch(1)
-        lay.addLayout(row)
-        lay.addSpacing(tokens.SPACE_2)
-        title = QLabel("Drop Videos, Photos or Audio Here")
-        title.setObjectName("EmptyTitle")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(title)
-        fmts = hint(
-            "MOV · MP4 · MTS · MXF · AVI · MKV · MOD · MPG · HEIC · RAW · JPG · PNG · WAV · AIFF · MP3 …"
-        )
-        fmts.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lay.addWidget(fmts)
-        lay.addSpacing(tokens.SPACE_3)
-        buttons = hbox(spacing=tokens.SPACE_2)
-        buttons.addStretch(1)
-        add = QPushButton("Add Files…")
-        add.setObjectName("Primary")
-        add.setCursor(Qt.CursorShape.PointingHandCursor)
-        add.clicked.connect(on_files)
-        folder = QPushButton("Add a Folder…")
-        folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        folder.clicked.connect(on_folder)
-        buttons.addWidget(add)
-        buttons.addWidget(folder)
-        buttons.addStretch(1)
-        lay.addLayout(buttons)
-        lay.addSpacing(tokens.SPACE_3)
-        row = hbox(spacing=tokens.SPACE_2)
-        row.addStretch(1)
-        self.link = QLineEdit()
-        self.link.setPlaceholderText("Or paste a video link (YouTube, Vimeo, Instagram…)")
-        self.link.setFixedWidth(tokens.LINK_BOX_W)
-        go = QPushButton("Add")
-        go.setCursor(Qt.CursorShape.PointingHandCursor)
-
-        def submit() -> None:
-            text = self.link.text().strip()
-            if text:
-                on_link(text)
-                self.link.clear()
-
-        self.link.returnPressed.connect(submit)
-        go.clicked.connect(submit)
-        row.addWidget(self.link)
-        row.addWidget(go)
-        row.addStretch(1)
-        lay.addLayout(row)
-        lay.addStretch(2)
-
-    def set_hot(self, on: bool) -> None:
-        if bool(self.property("hot") == "true") != on:
-            self.setProperty("hot", "true" if on else "false")
-            repolish(self)
-
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -270,6 +212,7 @@ class MainWindow(QMainWindow):
         self.reserved: set[str] = set()
         self.counter = 0
         self._tape_s = 0.0  # Continuous Timecode: how much of this Convert's "tape" is used
+        self._clock = BatchClock(time.monotonic())  # the batch's time left (started again by each Convert)
         self.active: dict[int, ConvertThread] = {}
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
@@ -423,8 +366,25 @@ class MainWindow(QMainWindow):
         self.toolbar = bar
 
         self.pages = QStackedWidget()
-        self.empty = EmptyList(self.pick_files, self.pick_folder, self._link_typed)
-        self.drop = self.empty
+        self.empty = EmptyPage(  # before any files are in: the ways to start
+            (
+                (
+                    "film",
+                    "Add Files…",
+                    "Videos, photos or audio",
+                    "Or drop them anywhere on this window.",
+                    self.pick_files,
+                ),
+                ("folder", "Add a Folder…", "Everything inside it", "", self.pick_folder),
+                (
+                    "link",
+                    "Add a Link…",
+                    "A video on the web",
+                    "YouTube, Vimeo, Instagram and more. Or just paste a link.",
+                    self.ask_link,
+                ),
+            )
+        )
         self.table = FileList()
         self.table.pressed.connect(self._card_pressed)
         self.table.opened.connect(self.play_item)
@@ -449,29 +409,35 @@ class MainWindow(QMainWindow):
         footer = QFrame()
         footer.setObjectName("Totals")
         self.footer = footer
-        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_2, 0), tokens.SPACE_2)
+        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_2, tokens.SPACE_3), tokens.SPACE_2)
         texts = QVBoxLayout()
         texts.setSpacing(tokens.SPACE_1)
+        top = hbox(spacing=tokens.SPACE_3)
         self.f_title = QLabel()
         self.f_title.setObjectName("TotalValue")
+        self.f_time = QLabel()  # while converting: "3 of 9 done · About 2 min left", at the bar's right end
+        self.f_time.setObjectName("TotalLabel")
+        self.f_time.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        top.addWidget(self.f_title)
+        top.addStretch(1)
+        top.addWidget(self.f_time)
         self.f_sub = QLabel()
         self.f_sub.setObjectName("TotalLabel")
         self.f_bar = QProgressBar()
         self.f_bar.setRange(0, 1000)
         self.f_bar.setTextVisible(False)
         self.f_bar.hide()
-        texts.addWidget(self.f_title)
+        texts.addLayout(top)
         texts.addWidget(self.f_sub)
         texts.addWidget(self.f_bar)
         f.addLayout(texts, 1)
+        f.addSpacing(tokens.SPACE_3)
         self.btn_show = QPushButton("Show Files")
         self.btn_show.clicked.connect(self._show_outputs)
         self.btn_show.hide()
-        self.btn_pause = QPushButton("Pause")
-        self.btn_pause.setIcon(theme.icon("pause", theme.TEXT, tokens.ICON_SM))
+        self.btn_pause = circle_button("pause", "Pause")
         self.btn_pause.clicked.connect(self.toggle_pause)
-        self.btn_cancel = QPushButton("Stop")
-        self.btn_cancel.setObjectName("Danger")
+        self.btn_cancel = circle_button("stop", "Stop", theme.BAD)
         self.btn_cancel.clicked.connect(self.stop)
         self.btn_check = QPushButton("Check Captions")
         self.btn_check.setIcon(theme.icon("captions", theme.TEXT, tokens.ICON_SM))
@@ -612,6 +578,7 @@ class MainWindow(QMainWindow):
         self._show_count()
 
     def _show_page(self) -> None:
+        self.search.setVisible(bool(self.items))  # nothing to search yet
         if not self.items:
             self.pages.setCurrentWidget(self.empty)
         elif not self.table.shown_ids():
@@ -991,13 +958,6 @@ class MainWindow(QMainWindow):
                 self.add_links(links)
             elif edit_.text().strip():
                 self.toast.show_message("That doesn't look like a link.")
-
-    def _link_typed(self, text: str) -> None:
-        links = [w for w in text.split() if is_link(w)]
-        if links:
-            self.add_links(links)
-        else:
-            self.toast.show_message("That doesn't look like a link — it should start with https://")
 
     def _paste(self) -> None:
         focus = QApplication.focusWidget()
@@ -2046,6 +2006,7 @@ class MainWindow(QMainWindow):
                     self._tape_s = sum(it.length for it in vids)
         self.batch = []
         self.running, self.paused = True, False
+        self._clock = BatchClock(time.monotonic())  # the time left, for the whole batch
         # Every file in the list counts as "taken": Replace can never overwrite another original.
         self.reserved = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         self.counter = 0
@@ -2149,8 +2110,7 @@ class MainWindow(QMainWindow):
         th.finished_item.connect(self._finished)
         self.active[it.id] = th
         th.start()
-        self.btn_pause.setText("Pause")
-        self.btn_pause.setIcon(theme.icon("pause", theme.TEXT, tokens.ICON_SM))
+        self._pause_button(False)
         if len(self.active) == 1:
             self._scroll_to(it.id)
 
@@ -2190,9 +2150,6 @@ class MainWindow(QMainWindow):
         for it, tc in zip(pending, tcs, strict=True):
             out[it.id] = (it.trim[0] if it.trim else 0.0, tc)
         return out
-
-    def _total_speed(self) -> float:
-        return sum(self.items[i].speed for i in self.active if i in self.items)
 
     def _progress(self, iid: int, processed: float, speed: float) -> None:
         it = self.items.get(iid)
@@ -2348,8 +2305,8 @@ class MainWindow(QMainWindow):
                         it.card.set_state("paused")
             if paused_any or convs:
                 self.paused = True
-                self.btn_pause.setText("Resume")
-                self.btn_pause.setIcon(theme.icon("play", theme.TEXT, tokens.ICON_SM))
+                self._clock.pause(time.monotonic())
+                self._pause_button(True)
         else:
             self.paused = False
             for it, c in convs:
@@ -2358,10 +2315,14 @@ class MainWindow(QMainWindow):
                     it.state = "converting"
                     it.started = time.monotonic() - (it.processed / it.speed if it.speed > 0 else 0)
                     it.card.set_state("converting", f"{int(it.frac * 100)}%")
-            self.btn_pause.setText("Pause")
-            self.btn_pause.setIcon(theme.icon("pause", theme.TEXT, tokens.ICON_SM))
+            self._clock.resume(time.monotonic())
+            self._pause_button(False)
             self._kick()
         self._refresh_footer()
+
+    def _pause_button(self, paused: bool) -> None:
+        self.btn_pause.setIcon(theme.icon("play" if paused else "pause", theme.MUTED))
+        self.btn_pause.setToolTip("Resume" if paused else "Pause")
 
     def stop(self) -> None:
         self._convert_after_captions = False
@@ -2488,15 +2449,17 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         convertible = [it for it in items if it.state not in ("unsupported",)]
+        self.f_time.setVisible(self.running)
+        self.f_sub.setVisible(not self.running)
         if self._convert_after_captions and not self.running:
-            self.f_title.setText("Waiting for captions")
-            self.f_sub.setText("Listo converts as soon as they're ready.")
+            self.f_title.setText("Waiting for Captions")
+            self.f_sub.setText("Converts as soon as they're ready.")
         job = self.join_job
         if self.running and job is not None and job.thread is not None:
             self.f_bar.show()
             self.f_bar.setValue(int(min(1.0, job.done_s / job.total_s) * 1000) if job.total_s else 0)
-            self.f_title.setText(f"Joining {len(job.parts)} clips into one video")
-            self.f_sub.setText("Putting the converted clips together, without re-encoding…")
+            self.f_title.setText(f"Joining {len(job.parts)} Clips into One Video")
+            self.f_time.setText("")
             self.btn_start.setEnabled(False)
             self.btn_pause.hide()
             self.btn_cancel.show()
@@ -2508,24 +2471,13 @@ class MainWindow(QMainWindow):
             finished_n = sum(1 for it in batch if it.state in FINAL)
             self.f_bar.show()
             self.f_bar.setValue(int(done_w / total_w * 1000))
-            busy = len(self.active)
-            what = (
-                f"{busy} files at once" if busy > 1 else f"{min(finished_n + 1, len(batch))} of {len(batch)}"
-            )
-            self.f_title.setText(("Paused — " if self.paused else "Converting ") + what)
-            remaining_media = sum(
-                it.length * (1 - it.frac)
-                for it in batch
-                if it.state not in FINAL and it.kind in ("video", "audio")
-            )
-            photos_left = sum(1 for it in batch if it.state not in FINAL and it.kind == "photo")
-            speed = self._total_speed()
-            if speed > 0 and not self.paused:
-                self.f_sub.setText(
-                    f"{finished_n} of {len(batch)} done · about {_eta(remaining_media / speed + photos_left * 0.6)} left · {speed:.1f}× speed"
-                )
-            else:
-                self.f_sub.setText("Working out how long this will take…" if not self.paused else "Paused")
+            n = len(batch)
+            self.f_title.setText("Paused" if self.paused else f"Converting {n} File{'s' if n != 1 else ''}")
+            left = self._clock.left(done_w, total_w, time.monotonic())
+            bits = [f"{finished_n} of {n} done"]
+            if left is not None and not self.paused:
+                bits.append(time_left(left))
+            self.f_time.setText(" · ".join(bits))
             self.btn_start.setEnabled(False)
             self.btn_start.setText("Converting…")
 
@@ -2611,13 +2563,13 @@ class MainWindow(QMainWindow):
         md = e.mimeData()
         if md.hasUrls() or is_link(md.text()):
             e.acceptProposedAction()
-            self.drop.set_hot(True)
+            self.empty.set_hot(True)
 
     def dragLeaveEvent(self, e) -> None:
-        self.drop.set_hot(False)
+        self.empty.set_hot(False)
 
     def dropEvent(self, e: QDropEvent) -> None:
-        self.drop.set_hot(False)
+        self.empty.set_hot(False)
         urls = e.mimeData().urls()
         paths = [u.toLocalFile() for u in urls if u.isLocalFile()]
         links = [u.toString() for u in urls if not u.isLocalFile() and is_link(u.toString())]

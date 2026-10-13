@@ -312,28 +312,12 @@ jobs:
             echo "go=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Release notes (downloads, then this version's CHANGELOG)
+      - name: Release notes (this version's CHANGELOG, then the downloads)
         if: steps.tag.outputs.go == 'true'
+        # The update window shows the What's New part, so the changelog's own words are what people read.
         run: |
-          {
-            echo "## Download"
-            echo "| Your computer | File |"
-            echo "|---|---|"
-            echo "| Mac with Apple Silicon (M1 and newer) | \`Listo-mac-apple-silicon.dmg\` |"
-            echo "| Intel Mac | \`Listo-mac-intel.dmg\` |"
-            echo "| Windows (installer) | \`Listo-windows-setup.exe\` |"
-            echo "| Windows (no install) | \`Listo-windows-portable.zip\` |"
-            echo "| Linux (one file, double-click to run) | \`Listo-linux-x64.AppImage\` |"
-            echo "| Linux (folder + install script) | \`Listo-linux-x64.tar.gz\` |"
-            echo
-            echo "Everything Listo needs (including ffmpeg) is inside, nothing else to install."
-            echo "**First launch on Mac:** if macOS says it can't check the app, open **System Settings → Privacy & Security** and click **Open Anyway**."
-            echo "**First launch on Windows:** if SmartScreen appears, click **More info → Run anyway**."
-            echo
-            echo "## What's New in $VERSION"
-            awk -v v="$VERSION" '$0 ~ "^## " { if (on) exit; if ($2 == v) { on = 1; next } } on' CHANGELOG.md
-          } > notes.md
-          cat notes.md
+          python3 scripts/release_notes.py "$TAG" > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         if: steps.tag.outputs.go == 'true'
@@ -347,6 +331,6 @@ jobs:
           tag_name: ${{ needs.lint.outputs.tag }}
           target_commitish: ${{ github.sha }}
           name: Listo ${{ needs.lint.outputs.version }}
-          body_path: notes.md
+          body_path: ${{ runner.temp }}/release-notes.md
           files: artifacts/*
           fail_on_unmatched_files: true

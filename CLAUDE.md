@@ -55,7 +55,10 @@ listo/
     update.py      Updates: check() GitHub's latest release of REPO, install_kind() (mac-app / windows-installed /
                    windows-portable / appimage / linux-folder / source), download() (size + SHA-256 from GitHub's
                    digest), prepare() writes a helper script that waits for Listo to quit, swaps the new version in
-                   and reopens it; run() starts it detached
+                   and reopens it; run() starts it detached; whats_new(notes) -> ("heading" | "item" | "text", words)
+                   blocks without the download table or what GitHub adds (credits, Full Changelog)
+    progress.py    BatchClock: time left for the whole batch (done / worked, smoothed, paused time left out; once it
+                   has an answer it never goes back to none); time_left() rounded words ("About 4 min left")
     sample.py      the sample clip (test pattern + timecode + date + tone) the live preview uses when the list is empty
     store.py       settings.json (Prefs: value/setValue like QSettings; prefs()/save_pref()), atomic write_json /
                    write_text, set_aside (unreadable files kept as <name>.unreadable-<time>), loads(), back_up()
@@ -74,12 +77,15 @@ listo/
                    circle_button / icon_button / add_chip, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
     components/panels.py   LeftPanel + NavRow (the sidebar, Settings' sections), SidePanel (the right panel)
     components/glass.py    GlassRoot (backdrop + glass behind floating panels), Dock (the right panel sliding in/out)
+    components/empty.py    EmptyPage + StartTile: the empty list's start tiles (Add Files… / a Folder… / a Link…);
+                   set_hot() lights the files tile while files are dragged over the window
     components/titlebar.py Mac only: Listo's own title bar (ExpandedClientAreaHint; macOS moves the window;
                    double-click fills the screen or goes to the smallest size, animated)
     components/player.py   ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
                    result frame while paused (owners render it on `settled`); set_size() follows the panel's width
-    window/main_window.py  the controller: Items, batches, the toolbar, the empty list, the bar under the list
-                   (status, Show Files / Pause / Stop / Check Captions / Convert), menus, undo / redo, updates
+    window/main_window.py  the controller: Items, batches, the toolbar (the search hides while the list is empty),
+                   the bar under the list (title + "3 of 9 done · About 2 min left" beside it, the bar under both;
+                   Show Files, round Pause / Stop icons, Check Captions, Convert), menus, undo / redo, updates
     window/sidebar.py      places: Files (All Files / Videos / Photos / Audio) and Progress (To Convert / Done /
                    Need a Look) with counts (in_place() decides), the section +, ProfileCard (feedback, updates, Settings)
     window/tables.py       FileList (QListView + RowPainter): one painted row per file; Row = it.card (set_state,
@@ -97,7 +103,9 @@ listo/
     dialogs/captions.py    "Check the Captions": plays the clip, lights up the current line, click a line to jump,
                    Add Caption at the playhead; accepting marks clips reviewed
     dialogs/preview.py     "Preview": ClipPlayer at full size, converted vs original; double-clicking a clip opens it playing
-    dialogs/update.py      Update window (what's new, Update Now -> download -> Restart Listo); CheckThread
+    dialogs/update.py      Update window (what's new, Update Now -> download -> Restart Listo); CheckThread; Notes
+                   (QTextBrowser#WhatsNew: _html escapes every word, _inline keeps **bold** / `code` / https links;
+                   open_url opens https only; recolor() on look_changed)
     dialogs/trim.py, feedback.py, shortcuts.py
     old_settings.py  bring_over(): copies what older versions kept in QSettings into settings.json once (old store untouched)
   cli.py           `python -m listo cli ...`: same engine, no UI (great for testing)
@@ -105,6 +113,7 @@ listo/
                    popups / plain-text labels (_RoundPopups), single-instance hand-off, --smoke-test (throwaway data folder)
 scripts/make_icon.py      draws listo/assets/icon.png ("l." on the dark tile, the dot in the accent) from the tokens and Inter
 scripts/fetch_ffmpeg.py   downloads static ffmpeg for the current OS into vendor/ffmpeg (gitignored)
+scripts/release_notes.py  a Release's text: "## What's New" (this version's CHANGELOG entries), then the download table
 listo.spec                PyInstaller recipe
 packaging/                mac entitlements, Windows Inno Setup script, Linux .desktop + install.sh + build_appimage.sh
 .github/workflows/build.yml  lint (+ "is this a release?"), build + test + smoke-test on 4 runners, release (see Releasing)
@@ -255,7 +264,8 @@ pyinstaller listo.spec --noconfirm     # build the app into dist/
 - When that pull request is merged, build.yml's run on main sees that tag vX.Y.Z doesn't exist yet ("Is this a
   release?" in the lint job), builds and smoke-tests every platform, then the release job tags that exact commit
   (making the tag through the API is the lock: two quick merges can't release one version twice; the release job
-  also runs one at a time) and publishes the Release with the downloads and the version's CHANGELOG section, in
+  also runs one at a time) and publishes the Release with the downloads and the version's CHANGELOG section
+  (scripts/release_notes.py; the update window shows those entries, so write them for the people updating), in
   the same run (a tag made by the workflow's own token doesn't start other workflows). Pull requests never release.
   Nobody tags or releases by hand; a tag pushed by hand still works, but only if it matches `__version__`.
   A failed release job can simply be re-run (the tag already on that commit is reused).

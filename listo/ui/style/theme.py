@@ -264,9 +264,14 @@ QToolButton#NavArrow:hover {{ background: {tokens.CARD_HOVER}; border-radius: {R
 QListView#FileList {{ background: transparent; border: none; outline: none; }}
 
 /* ---------- empty states */
-#EmptyTitle {{ font-size: {TEXT_XL}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #EmptyText {{ color: {tokens.MUTED}; }}
-#DropZone[hot="true"] {{ background: {tokens.ACCENT_TINT}; border-radius: {tokens.GLASS_R}px; }}
+#StartBadge {{ background: {tokens.ACCENT_TINT}; border: none; border-radius: {tokens.START_BADGE // 2}px; }}
+#StartTile {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS_LG}px; }}
+#StartTile:hover {{ background: {tokens.RAISED_HOVER}; border-color: {tokens.BORDER_HOVER}; }}
+#StartTile:focus, #StartTile[hot="true"] {{ border-color: {tokens.ACCENT}; }}
+#StartTile[hot="true"] {{ background: {tokens.ACCENT_TINT}; }}
+#StartTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#StartDetail {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 
 /* ---------- the right panel */
 #Details {{ background: transparent; border: none; }}
@@ -291,8 +296,7 @@ QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {tokens.ACCENT
 
 /* ---------- popups, logs, toasts */
 #Toast {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; padding: {SPACE_2}px {SPACE_4}px; }}
-QTextBrowser#Notes {{ background: {tokens.WELL}; color: {tokens.TEXT}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS}px;
-    padding: {SPACE_2}px; }}
+QTextBrowser#WhatsNew {{ background: {tokens.FILL}; color: {tokens.TEXT}; border: none; border-radius: {RADIUS_LG}px; }}
 QPlainTextEdit#Field {{ background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
     padding: {SPACE_1}px {SPACE_2}px; color: {tokens.TEXT}; font-size: {TEXT_MD}px; font-family: "{FONT_FAMILY}"; }}
 QPlainTextEdit#Field:hover {{ border-color: {tokens.BORDER_HOVER}; }}
@@ -329,7 +333,6 @@ _SVG = {
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     "cog": '<circle cx="12" cy="12" r="2.6"/><circle cx="12" cy="12" r="6.2"/><path d="M12 2.6v3.2M12 18.2v3.2M2.6 12h3.2M18.2 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M5.4 18.6l2.2-2.2M16.4 7.6l2.2-2.2"/>',
     "copy": '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
-    "drop": '<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/>',
     "edit": '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     "export": '<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M20 14v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-5"/>',
     "eye": '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
@@ -355,6 +358,7 @@ _SVG = {
     "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     "share": '<path d="M12 3.5v10"/><path d="m8 7.5 4-4 4 4"/><path d="M6 11.5H5.5A1.5 1.5 0 0 0 4 13v5.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V13a1.5 1.5 0 0 0-1.5-1.5H18"/>',
     "sliders": '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+    "stop": '<rect x="6" y="6" width="12" height="12" rx="2"/>',
     "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     "terminal": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>',
     "trash": '<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>',

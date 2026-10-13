@@ -26,7 +26,6 @@ TOGGLE_INSET = 3  # gap between the switch's track and its knob
 ICON = 16  # icons in buttons and menus
 ICON_SM = 14  # icons in small buttons
 ICON_LG = 20  # a hero icon that must fill its circle
-ICON_XL = 44  # the empty list's arrow
 BAR_H = 6  # progress bars
 TRACK_H = 4  # slider groove
 HANDLE = 14  # slider handle
@@ -100,14 +99,17 @@ LIST_ROW_H = NAV_H
 LIST_GAP = NAV_GAP
 AVATAR = 32  # the initials at the bottom of the sidebar
 PROFILE_CARD_H = 48
-TABLE_ROW_H = 64  # one file in the list: a 16:9 thumbnail beside three short lines
+TABLE_ROW_H = 76  # one file in the list: a 16:9 thumbnail with room above and below, three short lines
 ROW_INSET = 2  # a row's rounded highlight sits this far inside the row
 THUMB_W, THUMB_H = 96, 54  # a file's 16:9 thumbnail in the list
 GRIP_W = 20  # the grip at a row's left that you drag it by (list order is join and timecode order)
 GRIP_GAP = 5  # between the grip's dots
 GRIP_DOT = 1.2  # the radius of a dot in the grip
 STATUS_W = 200  # the list's status column (Ready, Converting 42%…)
-LINK_BOX_W = 380  # the link field on the empty list
+START_TILE_W = (
+    184  # one way to start on the empty list (three fit beside the open panel on the smallest window)
+)
+START_BADGE = 40  # the circle behind a start tile's icon
 PREVIEW_W, PREVIEW_H = 240, 135  # trim previews (16:9)
 VIEWER_W, VIEWER_H = 768, 432  # the Preview window's picture area (16:9)
 EDITOR_PIC_W, EDITOR_PIC_H = 512, 288  # the picture in Check the Captions (16:9)
@@ -123,7 +125,8 @@ SETTINGS_MIN = (680, 480)
 SETTINGS_SIDE_W = 210  # its sidebar
 ALERT_W = 300  # an alert (Remove …?), narrow like a Mac's
 ALERT_ICON = 56  # the app icon at the top of it
-NOTES_H = 220  # what's new, in the update window
+NOTES_H = 320  # what's new, in the update window: as tall as its words, up to this (then it scrolls)
+NOTES_LINE = 140  # what's new: the line height, in % of the font size
 TOAST_MAX_W = 520
 
 # ---------------------------------------------------------------- timing (ms)

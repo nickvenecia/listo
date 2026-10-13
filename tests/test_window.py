@@ -61,6 +61,46 @@ def test_places_filter_the_list(qapp, clips):
         w.close()
 
 
+def test_the_empty_list_shows_the_ways_to_start(qapp, clips):
+    from listo.ui.window.main_window import MainWindow
+
+    w = MainWindow()
+    w._restored = True
+    w.show()
+    try:
+        assert w.pages.currentWidget() is w.empty and not w.search.isVisible()  # nothing to search yet
+        tiles = w.empty.tiles
+        assert [t.findChild(type(w.title), "StartTitle").text() for t in tiles] == [
+            "Add Files…",
+            "Add a Folder…",
+            "Add a Link…",
+        ]
+        w.empty.set_hot(True)  # files dragged over the window light the files tile
+        assert tiles[0].property("hot") is True
+        w.empty.set_hot(False)
+        w.add_paths([str(clips[0])])
+        assert w.pages.currentWidget() is w.table and w.search.isVisible()
+    finally:
+        w.close()
+
+
+def test_a_start_tile_is_picked_by_click_space_or_return(qapp):
+    from PySide6.QtTest import QTest
+
+    from listo.ui.components.empty import EmptyPage
+
+    picked = []
+    page = EmptyPage((("folder", "Add a Folder…", "Everything inside it", "", lambda: picked.append(1)),))
+    page.show()
+    tile = page.tiles[0]
+    QTest.mouseClick(tile, Qt.MouseButton.LeftButton)
+    QTest.keyClick(tile, Qt.Key.Key_Space)
+    QTest.keyClick(tile, Qt.Key.Key_Return)
+    QTest.mouseClick(tile, Qt.MouseButton.RightButton)
+    assert picked == [1, 1, 1]
+    page.close()
+
+
 def test_the_right_panel_and_esc(qapp, clips):
     from listo.ui.window.main_window import MainWindow
 

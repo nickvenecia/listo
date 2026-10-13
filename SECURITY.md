@@ -18,5 +18,5 @@ a reply, and a fix in a release, as soon as possible.
 | Text on screen | File names and anything else from outside are always shown as plain text, never as formatting |
 | Running programs | ffmpeg, ffprobe and the downloader get their arguments as a list, never through a shell |
 | The single-instance socket | This user's account only; it can only hand files to the open window and bring it forward |
-| Updates | Only from this repository's releases; the SHA-256 must match before anything is replaced |
+| Updates | Only from this repository's releases; the SHA-256 must match before anything is replaced. What's new is shown as plain words, never as HTML, and only https links in it open |
 | The build | GitHub Actions pinned to exact commits; the signing certificate only in the signing step; dependencies pinned, with Dependabot proposing updates |

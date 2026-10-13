@@ -49,8 +49,16 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
   row). Left to right: the grip (drag to reorder), a 16:9 thumbnail on `SCREEN`, the name, what the file is,
   then its format chip, a trim and the new name; on the right its status word (colored by tone) and progress
   bar, and its buttons (captions, trim, details, try again, show the new file), shown while the pointer is over
-  the row or it's picked. Under the list, the **bar**: what's in the list (or the batch's progress), Show Files,
-  Pause, Stop, Check Captions, and **Convert N Files**, the one primary button.
+  the row or it's picked. Under the list, the **bar**: what's in the list, with Check Captions and **Convert N
+  Files**, the one primary button. While converting: the title ("Converting 9 Files") with how far along beside
+  it ("3 of 9 done · About 2 min left"), the progress bar under both, and round icon buttons for Pause (Resume)
+  and Stop. The time left is for the whole batch, rounded ("Less than a minute left", "About 4 min left"); it
+  says nothing until there's enough to go on and never goes back to saying nothing (`core/progress.BatchClock`).
+- **The empty list** (`components/empty.EmptyPage`): before any files are in, the middle shows only the ways to
+  start, as tiles (`StartTile`, `START_TILE_W`), a little above the centre: **Add Files…**, **Add a Folder…**,
+  **Add a Link…**. Each is an icon in a circle of the accent's tint (`START_BADGE`), a title and a few words; a
+  click, Space or Return picks it. No headline, no search (there's nothing to search). Files dragged over the
+  window light the Add Files tile.
 - **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**. On top,
   the live preview (the picked clip, or the first, exactly as it will come out; the sample test pattern when the
   list is empty). Then Recipe, the Video / Photo / Audio tabs, the format card, the fold-away **Image**,
@@ -77,9 +85,11 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
 | `TOGGLE_ROW_H` · `TOGGLE_W`×`TOGGLE_H` | 32 · 36×20 | An on/off row and its switch |
 | `BAR_H` · `TRACK_H` · `HANDLE` | 6 · 4 · 14 | Progress bars · slider groove · slider handle |
 | `NAV_H` · `NAV_GAP` | 30 · 2 | A sidebar row and the gap between rows |
-| `TABLE_ROW_H` · `THUMB_W`×`THUMB_H` · `GRIP_W` · `STATUS_W` | 64 · 96×54 · 20 · 200 | A file row, its thumbnail, grip and status column |
+| `TABLE_ROW_H` · `THUMB_W`×`THUMB_H` · `GRIP_W` · `STATUS_W` | 76 · 96×54 · 20 · 200 | A file row, its thumbnail, grip and status column |
 | `SIDEBAR_W` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 232 · 420 / 360 · 64 | The window's parts |
-| `ICON_SM` · `ICON` · `ICON_LG` · `ICON_XL` | 14 · 16 · 20 · 44 | Icons in small buttons · buttons and menus · placeholders · the empty list's arrow |
+| `ICON_SM` · `ICON` · `ICON_LG` | 14 · 16 · 20 | Icons in small buttons · buttons and menus · placeholders and start tiles |
+| `START_TILE_W` · `START_BADGE` | 184 · 40 | A start tile on the empty list (three fit beside the open panel) · its icon's circle |
+| `NOTES_H` · `NOTES_LINE` | 320 · 140% | What's new in the update window: as tall as its words up to this, then it scrolls · its line height |
 
 - A button, a dropdown and a text field side by side line up exactly. Never set a height on one control.
 - Buttons size to their words (capsules). Never a fixed width.
@@ -109,7 +119,7 @@ Build layouts with `widgets.vbox(widget, margins, spacing)` / `hbox(...)`. Margi
 | `TEXT_SM` | 12 | Section labels (`MUTED`, semibold), secondary text, tooltips, status words |
 | `TEXT_MD` | 13 | Body text and every control (the default) |
 | `TEXT_LG` | 14 | Panel titles, alert titles, the bar's title |
-| `TEXT_XL` | 18 | Dialog titles, the empty list's headline |
+| `TEXT_XL` | 18 | Dialog titles |
 | `TEXT_TITLE` | 24 | The page's large title in the toolbar and Settings |
 | `TEXT_BRAND` | 21 | The "listo." wordmark only |
 
@@ -132,9 +142,9 @@ the computer, also while it's open, unless Settings › General › Appearance p
 | `BG` / `PANEL` | Window background / dialogs |
 | `BLOCK` | A card inside a panel (a soft tint, no outline) |
 | `CARD` / `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Surfaces, hover, a picked row |
-| `FIELD` / `FIELD_BORDER` / `FILL` | Text fields and dropdowns / their outline / segmented controls, bar tracks |
+| `FIELD` / `FIELD_BORDER` / `FILL` | Text fields and dropdowns / their outline / segmented controls, bar tracks, what's new |
 | `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups, the lifted row |
-| `WELL` | Sunken text: the log, release notes |
+| `WELL` | Sunken text: the log |
 | `SCREEN` / `SCREEN_TEXT` / `SCREEN_FAINT` | Behind pictures (players, previews, thumbnails): **black in both looks** |
 | `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, outlines, hover, an empty checkbox |
 | `TEXT` / `MUTED` / `FAINT` | Main text / secondary text / hints, counts, disabled |
@@ -195,6 +205,7 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 | `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
 | `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
 | `glass.GlassRoot` · `Dock` · `glass()` | The backdrop, the sliding right panel, marking a widget as glass |
+| `empty.EmptyPage` · `StartTile` | The empty list: the ways to start, as tiles |
 
 **Picking a file or folder** (`widgets.PathCombo`), always the same three parts: the fixed choices first ("No LUT";
 "In Source Folder", "Create Subfolder"); a separator and the files or folders picked before, most recent first
@@ -230,7 +241,11 @@ subfolder's name) shows under it only for that choice.
   Space plays and pauses when you're not typing.
 - **Updates**: every launch (unless switched off in Settings › General), Listo checks for a newer version just
   after the window is up; if there is one, the update window opens by itself (never over another window, a menu
-  or a batch that's converting), and "Update to …" stays at the bottom of the sidebar.
+  or a batch that's converting), and "Update to …" stays at the bottom of the sidebar. The update window shows
+  what's new in Listo's own type (`dialogs/update.Notes`): small section labels, a dot before each change, links in
+  the accent, as tall as its words (up to `NOTES_H`). It's the version's CHANGELOG entries (the release's text, made
+  by `scripts/release_notes.py`), without the download table or anything GitHub adds. A release's text is never
+  read as HTML, and only https links open.
 
 ## 8. Motion
 

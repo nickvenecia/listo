@@ -5,10 +5,13 @@ core/update.py does the work; this window only shows it. MainWindow.check_update
 
 from __future__ import annotations
 
+import html
+import math
+import re
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QUrl, Signal
+from PySide6.QtCore import QSize, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,13 +27,27 @@ from listo import __version__
 from listo.core import update
 from listo.core.log import get_logger
 from listo.ui.components.widgets import hbox, hint, vbox
-from listo.ui.style.tokens import DIALOG_W, SPACE_2, SPACE_3, SPACE_5
+from listo.ui.style import theme, tokens
+from listo.ui.style.tokens import (
+    DIALOG_W_XWIDE,
+    NOTES_H,
+    NOTES_LINE,
+    SPACE_2,
+    SPACE_3,
+    SPACE_4,
+    SPACE_5,
+    TEXT_MD,
+    TEXT_SM,
+    WEIGHT_SEMIBOLD,
+)
 
 log = get_logger(__name__)
 
 
 def open_url(url: str) -> None:
-    QDesktopServices.openUrl(QUrl(url))
+    """Open a web page in the browser (only https: release notes are written by other people too)."""
+    if QUrl(url).scheme() == "https":
+        QDesktopServices.openUrl(QUrl(url))
 
 
 class CheckThread(QThread):
@@ -84,18 +101,14 @@ class UpdateDialog(QDialog):
         self.plan: update.Plan | None = None
         self.thread: DownloadThread | None = None
         self.setWindowTitle("Update Listo")
-        self.setMinimumWidth(DIALOG_W + 2 * SPACE_5 * 3)
+        self.setMinimumWidth(DIALOG_W_XWIDE)
         lay = vbox(self, SPACE_5, SPACE_3)
         title = QLabel(f"Listo {release.version} is here")
         title.setObjectName("DialogTitle")
         lay.addWidget(title)
         lay.addWidget(hint(f"You have {__version__}. Your settings and recipes stay as they are."))
-        notes = QTextBrowser()
-        notes.setObjectName("Notes")
-        notes.setOpenExternalLinks(True)
-        notes.setMarkdown(_whats_new(release.notes))
-        notes.setMinimumHeight(220)
-        lay.addWidget(notes, 1)
+        self.notes = Notes(update.whats_new(release.notes))
+        lay.addWidget(self.notes, 1)
         self.status = hint("")
         self.status.hide()
         lay.addWidget(self.status)
@@ -129,6 +142,9 @@ class UpdateDialog(QDialog):
             self.btn_go.clicked.connect(lambda: (open_url(release.page), self.accept()))
             if self.kind == "source":
                 self.btn_go.hide()
+
+    def look_changed(self) -> None:
+        self.notes.recolor()
 
     def _say(self, text: str) -> None:
         self.status.setText(text)
@@ -183,20 +199,68 @@ class UpdateDialog(QDialog):
         super().done(r)
 
 
-def _whats_new(body: str) -> str:
-    """The release text without the download table (the app already knows which file it needs)."""
-    keep = []
-    skipping = False
-    for line in body.splitlines():
-        if line.strip().lower().startswith("## download"):
-            skipping = True
-            continue
-        if skipping and line.startswith("## "):
-            skipping = False
-        if not skipping:
-            keep.append(line)
-    text = "\n".join(keep).strip()
-    return text or "Fixes and improvements."
+class Notes(QTextBrowser):
+    """What's new, in the app's own type: small section labels, a dot before each change, links in the accent.
+    As tall as what it says (up to NOTES_H, then it scrolls)."""
+
+    def __init__(self, blocks: list[tuple[str, str]], parent: QWidget | None = None):
+        super().__init__(parent)
+        self.blocks = blocks or [("text", "Fixes and improvements.")]
+        self.setObjectName("WhatsNew")
+        self.setOpenLinks(False)  # links go through open_url, which only opens https pages
+        self.anchorClicked.connect(lambda u: open_url(u.toString()))
+        self.document().setDocumentMargin(SPACE_4)
+        self.recolor()
+
+    def recolor(self) -> None:
+        """Draw the notes again in the current light or dark colors."""
+        self.document().setDefaultFont(theme.font(TEXT_MD))
+        self.document().setDefaultStyleSheet(
+            f"a {{ color: {tokens.ACCENT}; text-decoration: none; }}"
+            f"p {{ margin: 0; line-height: {NOTES_LINE}%; }}"
+            f".dot {{ color: {tokens.ACCENT}; }}"
+            f".label {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}"
+        )
+        self.setHtml(_html(self.blocks))
+
+    def sizeHint(self) -> QSize:
+        doc = self.document().clone(self)
+        doc.setTextWidth(DIALOG_W_XWIDE - 2 * SPACE_5)  # the window opens this wide (words wrap the same)
+        tall = math.ceil(doc.size().height()) + 2 * self.frameWidth()
+        doc.deleteLater()
+        return QSize(DIALOG_W_XWIDE - 2 * SPACE_5, min(tall, NOTES_H))
+
+
+def _html(blocks: list[tuple[str, str]]) -> str:
+    """The notes as rich text. Every word is escaped first: a release's text is never read as HTML."""
+    out = []
+    for n, (kind, words) in enumerate(blocks):
+        before = blocks[n - 1][0] if n else ""
+        # space only above each block: a new section, a label's first line, the next line
+        top = 0 if not n else SPACE_5 if kind == "heading" else SPACE_2 if before == "heading" else SPACE_3
+        style = f' style="margin-top: {top}px"'
+        text = _inline(words)
+        if kind == "heading":
+            out.append(f'<p class="label"{style}>{text}</p>')
+        elif kind == "item":  # a dot, then the words (a list's own bullet sits too close to them)
+            out.append(
+                f'<table width="100%" cellspacing="0" cellpadding="0"{style}><tr>'
+                f'<td width="{SPACE_4}"><p class="dot">•</p></td><td><p>{text}</p></td></tr></table>'
+            )
+        else:
+            out.append(f"<p{style}>{text}</p>")
+    return "".join(out)
+
+
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_CODE = re.compile(r"`([^`]+)`")
+_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+
+
+def _inline(words: str) -> str:
+    """**bold**, `code` (as plain words) and [links](https://…) (other links keep only their words)."""
+    text = _CODE.sub(r"\1", _BOLD.sub(r"<b>\1</b>", html.escape(words)))
+    return _LINK.sub(lambda m: f'<a href="{m[2]}">{m[1]}</a>' if m[2].startswith("https://") else m[1], text)
 
 
 def restart_into(plan: update.Plan) -> None:

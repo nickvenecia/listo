@@ -24,7 +24,7 @@ listo/
   app.py       Starts the window (fonts, the saved look and accent, single-instance hand-off, --smoke-test)
   cli.py       Same engine without a window: `python -m listo cli ...`
 tests/         One test file per area (test_<area>.py); conftest.py gives every test its own data folder
-scripts/       Build helpers (fetch_ffmpeg.py, make_icon.py)
+scripts/       Build helpers (fetch_ffmpeg.py, make_icon.py, release_notes.py: a Release's text from the CHANGELOG)
 packaging/     Installer files per OS
 ```
 

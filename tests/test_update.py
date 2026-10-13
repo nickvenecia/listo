@@ -173,17 +173,67 @@ def test_update_window(monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from listo.ui.dialogs.update import UpdateDialog, _whats_new
+    from listo.ui.dialogs.update import UpdateDialog
 
     app = QApplication.instance() or QApplication([])
-    assert "Download" not in _whats_new(GITHUB_ANSWER["body"]) and "Faster glitches" in _whats_new(
-        GITHUB_ANSWER["body"]
-    )
     d = UpdateDialog(update.parse_release(GITHUB_ANSWER))
     assert "9.1.0" in d.findChild(type(d.status), "DialogTitle").text()
+    shown = d.notes.toPlainText()
+    assert "Faster glitches" in shown and "Download" not in shown
     assert d.btn_go.isHidden() and "GitHub Desktop" in d.status.text()  # from the code: nothing to install
     d.close()
     app.processEvents()
+
+
+def test_whats_new_is_the_words_without_downloads_or_github_credits():
+    generated = (
+        "## Download\n| a | b |\n**First launch on Mac:** open it.\n\n"
+        "## What's Changed\n"
+        "* Start tiles by @someone in https://github.com/nickvenecia/listo/pull/7\n"
+        "<!-- generated -->\n\n"
+        "## New Contributors\n* @someone made their first contribution in https://x\n\n"
+        "**Full Changelog**: https://github.com/nickvenecia/listo/compare/v2.3.1...v2.3.2"
+    )
+    assert update.whats_new(generated) == [("heading", "What's Changed"), ("item", "Start tiles")]
+    written = "The first one.\n\n## What's New\n\n- A long line\n  carried on.\n1. Two\n\n## Empty\n## Download\n| x |"
+    assert update.whats_new(written) == [
+        ("text", "The first one."),
+        ("heading", "What's New"),
+        ("item", "A long line carried on."),
+        ("item", "Two"),
+    ]
+    assert update.whats_new("") == []
+
+
+def test_release_text_is_never_read_as_html(qapp):
+    from listo.ui.dialogs.update import Notes
+
+    n = Notes([("item", "<b>x</b> **bold** `code` [page](https://example.com/a?b=1&c=2) [run](file:///etc)")])
+    page = n.toHtml()
+    assert "&lt;b&gt;x&lt;/b&gt;" in page and "bold" in page and "`" not in n.toPlainText()
+    assert 'href="https://example.com/a?b=1&amp;c=2"' in page and "file:" not in page
+    assert Notes([]).toPlainText() == "Fixes and improvements."
+
+
+def test_release_notes_are_the_changelog_entries():
+    import importlib.util
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("release_notes", root / "scripts" / "release_notes.py")
+    rn = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rn)
+    log = "# Changelog\n\n## 2.0.1\n\n- Fixed it.\n\n## 2.0.0\n\n- Made it.\n"
+    body = rn.notes(log, "v2.0.1")
+    assert update.whats_new(body) == [("heading", "What's New"), ("item", "Fixed it.")]
+    assert "Listo-mac-apple-silicon.dmg" in body and "Made it." not in body
+    assert (
+        update.whats_new(rn.notes(log, "3.0.0")) == []
+    )  # no entries: the window says "Fixes and improvements."
+    assert rn.changes(rn.CHANGELOG.read_text(encoding="utf-8"), __version__)  # this version has its entries
+    kinds = ("windows-installed", "windows-portable", "appimage", "linux-folder")
+    names = [update.asset_name(k) for k in kinds] + [update.asset_name("mac-app", "arm64")]
+    for name in names:
+        assert name in body  # every download the updater looks for is listed
 
 
 def test_window_offers_the_update(tmp_path: Path, monkeypatch):

@@ -75,6 +75,26 @@ def main() -> None:
 
     steps.append((100, settings("general", "07-settings-general")))
     steps.append((600, settings("data", "08-settings-data")))
+
+    def update_window():
+        import importlib.util
+
+        from listo import __version__
+        from listo.core import update
+        from listo.ui.dialogs.update import UpdateDialog
+
+        root = Path(__file__).resolve().parent.parent
+        spec = importlib.util.spec_from_file_location("release_notes", root / "scripts" / "release_notes.py")
+        rn = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rn)
+        body = rn.notes(rn.CHANGELOG.read_text(encoding="utf-8"), __version__)
+        d = UpdateDialog(update.parse_release({"tag_name": f"v{__version__}", "body": body}), parent=w)
+        d.show()
+        QTimer.singleShot(
+            300, lambda: (d.grab().save(str(out / "09-update.png")), print("saved update"), d.close())
+        )
+
+    steps.append((600, update_window))
     steps.append((600, lambda: None))
     if samples:
         files = sorted(str(p) for p in samples.iterdir() if p.is_file())
