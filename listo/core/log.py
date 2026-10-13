@@ -11,7 +11,7 @@ import logging
 import logging.handlers
 import sys
 
-from .paths import log_dir
+from listo.core.paths import log_dir
 
 _configured = False
 

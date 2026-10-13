@@ -6,9 +6,9 @@ import os
 import re
 from pathlib import Path
 
-from .frame import frame_filters, resized
-from .presets import VIDEO_BY_KEY, Settings, output_ext, preset_tag
-from .probe import MediaInfo, file_date
+from listo.core.frame import frame_filters, resized
+from listo.core.presets import Settings, output_ext, preset_tag
+from listo.core.probe import MediaInfo, file_date
 
 TOKENS: tuple[tuple[str, str], ...] = (
     ("name", "Original file name"),
@@ -185,7 +185,3 @@ def resolve_output(src: str | Path, target: Path, policy: str, reserved: set[str
 
 def reserve_key(p: Path) -> str:
     return _key(p)
-
-
-def is_edit_preset(s: Settings) -> bool:
-    return VIDEO_BY_KEY[s.video_preset].edit_format

@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0
+- **A new window.** On the left, your files by kind (All Files, Videos, Photos, Audio) and by how far along they are (To Convert, Done, Need a Look), each with a count. In the middle, the list, with a search at the top and the progress and **Convert** under it. On the right, **Convert To** slides in with everything about how the files come out: the live preview on top, then the recipe, format, Image, Burn-In, Encoding and where they're saved. Close it with its ✕ or Esc; it comes back when you click a file
+- **Light and dark, your way**: Listo follows your computer (and switches with it while it's open), or pick Light or Dark in **Settings › General**. Pictures, previews and thumbnails always sit on black, like a monitor
+- **Pick an accent color** in Settings › General. Marigold is Listo's own; there are eight others
+- **Settings** (⌘, or the menu at the bottom of the sidebar): General (appearance, accent color, automatic updates), Keyboard Shortcuts (every key), and Your Data (where Listo keeps its files, **Back Up…**, Storage & Cache, the debug console and the log)
+- **Undo and redo** (⌘Z / ⇧⌘Z, Ctrl+Y on Windows): take back a change to the settings, files taken off the list, their order, or one file's format or trim
+- **Drag files into order** by the grip at the left of each row. The order is the order a joined video plays in and the order Continuous Timecode runs in
+- **Removing asks first**: Delete or Backspace names the files before taking them off the list (your files themselves are never touched), and ⌘Z puts them back. Right-click a file for everything you can do with it
+- **The file list is faster** with hundreds of clips: it's drawn in one go instead of one widget per file
+- **Updates show themselves**: every time Listo opens it checks for a new version, and if there is one the update window opens by itself (Later closes it; Update to … stays at the bottom of the sidebar)
+- **Send Feedback** (the sidebar's menu or Help): an idea or a problem, kept on your computer until sending is switched on
+- **Your settings are in one file**, settings.json in Listo's folder, written safely so a crash can never leave it half-saved. Settings and recipes from earlier versions come across by themselves the first time (the old copy is left as it was). Anything that can't be read is kept aside, never overwritten, and that includes captions you checked by hand
+- **Timecode choice** (Burn-In › Clip Info) for clips without their own timecode (camcorders, phones): **Continuous Timecode** (one Convert is one tape: each clip carries on where the last one ended, now for separate files too, not just a joined video), **Restart Timecode Each Clip** (every clip from 00:00:00:00, also inside a joined video) or **Match Record Time** (the time of day it was shot, like a pro camera's time-of-day timecode). It's burned in and stored in the file, so Resolve and Premiere read the same numbers, and the previews show it. Clips with real timecode keep theirs. Command line: `--timecode continuous|restart|record`
+- **Where** reads like the LUT dropdown: **In Source Folder**, **Create Subfolder**, the folders you picked before, then **Choose a Destination…**. No more Change… button
+- The LUT dropdown lists the LUTs you picked before, then **Choose a LUT File…**; the LUT folder option is gone
+- A new app icon: "l." on a dark tile, the dot in marigold
+- **Starting is one click**: an empty list shows three tiles, **Add Files…**, **Add a Folder…** and **Add a Link…** (or drop files anywhere on the window)
+- **The bar under the list is calmer while converting**: how far along it is sits beside the title ("3 of 9 done · About 2 min left") with the progress bar under both, and Pause and Stop are round icons. The time left is for the whole batch and stays steady: no more flipping back to "working out how long this will take" each time a new file starts, and paused time doesn't count
+- **More room around each file's picture** in the list
+- **Messages are easier to notice.** They float over your list, just above the bar, and rise in and fade away: a green check when something worked, a yellow sign on a yellow card when it didn't, and a dark card on the white page in the light look. Long ones stay up long enough to read, resting the pointer on one keeps it up, and they never get in the way of a click
+- **What's new reads better** in the update window: a dot before each change, small section labels, links in the accent color, in Listo's own type
+- Pasted and dropped links are checked more strictly before they're downloaded
+
 ## 2.3.2
 - **The recording date and time travel inside the file**: every video Listo makes (MP4, MOV, WebM) now stores when it was shot, in the places Apple Photos, Finder, DaVinci Resolve, Premiere and Listo read: the standard creation time and Apple's creation date with your time zone. Camcorder .MOD clips get the date from their .MOI (with this computer's time zone for that day, daylight saving included), so you can upload, email or copy the new file, delete the .MOD and .MOI, and the real date stays. It's the same time the Date & Time burn-in shows: a trimmed clip gets the time of its new first frame, a joined video its first clip's time, and a clip that already had a creation time keeps it. File dates (Finder's "Created") are still copied as before
 

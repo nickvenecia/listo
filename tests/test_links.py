@@ -46,3 +46,25 @@ def test_verified_rejects_tampered_download():
         links._verified(b"something else", sums, "tool")
     with pytest.raises(links.LinkError):
         links._verified(good, b"no hashes here", "tool")
+
+
+def test_only_plain_web_links_go_to_the_downloader():
+    from listo.core.links import LinkDownload
+    from listo.core.web import web_link
+
+    assert web_link("https://youtu.be/abc123xyz") == "https://youtu.be/abc123xyz"
+    assert web_link("  http://vimeo.com/123  ") == "http://vimeo.com/123"
+    for bad in (
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+        "https://youtube.com@evil.example/watch",  # really goes to evil.example
+        "clip.mov",  # a file name in pasted text, not a website
+        "smb://server/share/a.mov",
+        "https://localhost/x",
+        "https://exa mple.com",
+        "-o/tmp/x https://youtu.be/a",
+        "",
+    ):
+        assert not web_link(bad), bad
+    with pytest.raises(ValueError):
+        LinkDownload("--exec=rm https://youtu.be/a")

@@ -19,10 +19,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core.probe import MediaInfo
-from . import tokens
-from .widgets import section_label
-from .workers import FrameSignals, FrameTask
+from listo.core.probe import MediaInfo
+from listo.ui.components.widgets import section_label
+from listo.ui.style import tokens
+from listo.ui.window.jobs import FrameSignals, FrameTask
 
 PREVIEW_W, PREVIEW_H = tokens.PREVIEW_W, tokens.PREVIEW_H
 STEP = 10  # slider units per second (0.1 s precision)

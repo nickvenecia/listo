@@ -108,8 +108,7 @@ def test_rewrap_only_joins_clips_that_already_match(tmp_path: Path):
 
 def test_gif_never_joins():
     assert not join.can_join(Settings(video_preset="gif"))
-    assert join.joins(Settings(video_preset="h264", join=True), "video")
-    assert not join.joins(Settings(video_preset="h264", join=True), "photo")
+    assert join.can_join(Settings(video_preset="h264"))
 
 
 def test_burn_ins_and_a_silent_clip_join(tmp_path: Path):
@@ -129,16 +128,11 @@ def test_window_joins_the_list_into_one_video(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.panels.export as ep
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     src = tmp_path / "src"
     src.mkdir()
@@ -223,16 +217,10 @@ def test_play_badge_only_starts_the_joined_video(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel as ep
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     badges, tcs = [], []
     real = mw.Conversion
 

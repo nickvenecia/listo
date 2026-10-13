@@ -18,14 +18,14 @@ from collections.abc import Callable
 from fractions import Fraction
 from pathlib import Path
 
-from . import naming, tape, video
-from .engine import Result, _plan_lock
-from .fileutil import copy_dates
-from .log import get_logger
-from .presets import AUDIO_BY_KEY, Settings
-from .probe import MediaInfo, Shot, fmt_duration, probe, recorded
-from .runner import Canceled, FFmpegFailed, FFmpegRun
-from .tools import Capabilities
+from listo.core import naming, tape, video
+from listo.core.engine import Result, _plan_lock
+from listo.core.fileutil import copy_dates
+from listo.core.log import get_logger
+from listo.core.presets import AUDIO_BY_KEY, Settings
+from listo.core.probe import MediaInfo, Shot, fmt_duration, probe, recorded
+from listo.core.runner import Canceled, FFmpegFailed, FFmpegRun
+from listo.core.tools import Capabilities
 
 log = get_logger(__name__)
 
@@ -36,11 +36,6 @@ MUXERS.update({f.ext: f.muxer for f in AUDIO_BY_KEY.values()})
 def can_join(s: Settings) -> bool:
     """A GIF can't be glued from parts (each has its own palette); everything else can."""
     return s.video_preset != "gif"
-
-
-def joins(s: Settings, kind: str) -> bool:
-    """Does a file of this kind become part of the joined video with these settings?"""
-    return s.join and can_join(s) and kind == "video"
 
 
 def conform_for(info: MediaInfo, s: Settings) -> video.Conform:
@@ -55,22 +50,19 @@ def conform_for(info: MediaInfo, s: Settings) -> video.Conform:
     return video.Conform(w, h, rate, 48000, 2)
 
 
-def running_timecodes(clips: list[tuple[MediaInfo, float]]) -> list[str]:
-    """Where each clip's timecode starts in a joined video: (info, length) in list order.
+def running_timecodes(clips: list[tuple[MediaInfo, float]], start: float = 0.0) -> list[str]:
+    """Continuous Timecode: where each clip's timecode starts, (info, kept length) in list order,
+    `start` seconds into the tape. Used for a joined video and for separate files alike.
 
     One Convert = one tape: clips without their own timecode (camcorder .MOD, phones) get a counter
-    that keeps running from clip to clip through the whole joined video, from 00:00:00:00 (even
-    across days: it's often one event). Clips with real timecode (pro cameras) keep it ("")."""
-    from .probe import tc_add
+    that keeps running from clip to clip, from 00:00:00:00 (even across days: it's often one event).
+    Clips with real timecode (pro cameras) keep it (""); the counter runs on through them."""
+    from listo.core.probe import tc_add, zero_tc
 
     out: list[str] = []
-    running = 0.0
+    running = start
     for info, length in clips:
-        if info.timecode or not info.rate:
-            out.append("")
-        else:
-            ntsc = info.rate in ("30000/1001", "60000/1001")
-            out.append(tc_add("00:00:00;00" if ntsc else "00:00:00:00", running, info.rate))
+        out.append("" if info.timecode or not info.rate else tc_add(zero_tc(info.rate), running, info.rate))
         running += max(0.0, length)
     return out
 
@@ -199,7 +191,7 @@ class Join:
                 shutil.rmtree(f, ignore_errors=True)
 
     def _write_srt(self, target: Path, lengths: list[float], notes: list[str]) -> None:
-        from .captions import Cue, to_srt
+        from listo.core.captions import Cue, to_srt
 
         srt = target.with_suffix(".srt")
         if srt.exists() or naming.reserve_key(srt) in self.reserved:

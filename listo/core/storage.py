@@ -11,8 +11,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from .log import get_logger
-from .paths import data_dir, log_dir, tools_dir
+from listo.core.log import get_logger
+from listo.core.paths import data_dir, log_dir, tools_dir
 
 log = get_logger(__name__)
 
@@ -77,10 +77,6 @@ def size_of(path: Path) -> int:
 
 def kind_size(k: Kind) -> int:
     return sum(size_of(p) for p in k.paths)
-
-
-def total_size() -> int:
-    return sum(kind_size(k) for k in kinds())
 
 
 def human(n: int) -> str:

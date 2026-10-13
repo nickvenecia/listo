@@ -19,10 +19,10 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from .log import get_logger
-from .paths import data_dir
-from .probe import MediaInfo
-from .tools import capabilities, popen_kwargs
+from listo.core.log import get_logger
+from listo.core.paths import data_dir
+from listo.core.probe import MediaInfo
+from listo.core.tools import capabilities, popen_kwargs
 
 log = get_logger(__name__)
 
@@ -125,20 +125,25 @@ def store_key(src: str | Path) -> str:
 
 
 def load(src: str | Path) -> Transcript | None:
+    """The captions kept for this clip, or None. A file that can't be read is set aside (never overwritten)."""
+    from listo.core.store import set_aside
+
     f = _store_dir() / f"{store_key(src)}.json"
+    if not f.exists():
+        return None
     try:
         return Transcript.from_json(f.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError, KeyError):
+        log.warning("couldn't read the captions kept in %s", f.name, exc_info=True)
+        set_aside(f, "unreadable")
         return None
 
 
 def save(t: Transcript) -> None:
-    d = _store_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    f = d / f"{store_key(t.source)}.json"
-    tmp = f.with_suffix(".part")
-    tmp.write_text(t.to_json(), encoding="utf-8")
-    tmp.replace(f)
+    """Keep these captions (a temp file beside them, then swapped in: never half-written)."""
+    from listo.core.store import write_text
+
+    write_text(_store_dir() / f"{store_key(t.source)}.json", t.to_json())
 
 
 # ---------------------------------------------------------------------------- layout

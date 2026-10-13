@@ -11,11 +11,11 @@ import threading
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
-from ..core.captions_worker import serve as serve_captions
-from ..core.engine import Conversion, Result
-from ..core.log import get_logger
-from ..core.probe import MediaInfo, probe
-from ..core.tools import capabilities, detect_hardware, popen_kwargs
+from listo.core.captions_worker import serve as serve_captions
+from listo.core.engine import Conversion, Result
+from listo.core.log import get_logger
+from listo.core.probe import MediaInfo, probe
+from listo.core.tools import capabilities, detect_hardware, popen_kwargs
 
 log = get_logger(__name__)
 
@@ -62,7 +62,7 @@ def video_thumb(path: str, info: MediaInfo, width: int = 240) -> bytes:
 
 
 def photo_thumb(path: str) -> bytes:
-    from ..core import photo
+    from listo.core import photo
 
     im = photo.thumbnail(path, 240)
     if im is None:
@@ -176,13 +176,13 @@ class DownloadThread(QThread):
 
     def __init__(self, item_id: int, url: str):
         super().__init__()
-        from ..core.links import LinkDownload
+        from listo.core.links import LinkDownload
 
         self.item_id = item_id
         self.job = LinkDownload(url)
 
     def run(self) -> None:
-        from ..core.links import Canceled, LinkError
+        from listo.core.links import Canceled, LinkError
 
         try:
             path = self.job.run(
@@ -250,9 +250,11 @@ class PreviewTask(QRunnable):
         original: bool,
         signals: PreviewSignals,
         captions: list | None = None,
+        clock: tuple[float, str] | None = None,
     ):
         super().__init__()
         self.captions = captions
+        self.clock = clock  # (t, timecode): Continuous Timecode, see video.preview_plan
         self.seq, self.path, self.info, self.s = seq, path, info, settings
         self.at, self.original, self.signals = at, original, signals
         self.setAutoDelete(True)
@@ -261,12 +263,12 @@ class PreviewTask(QRunnable):
         import tempfile
         from pathlib import Path
 
-        from ..core.video import PlanError, original_frame_args, preview_plan
+        from listo.core.video import PlanError, original_frame_args, preview_plan
 
         caps = capabilities()
         data, error, plan = b"", "", None
         if not self.path:  # nothing in the list: show the settings on the sample clip
-            from ..core.sample import sample_clip
+            from listo.core.sample import sample_clip
 
             sample = sample_clip()
             if not sample:
@@ -279,7 +281,9 @@ class PreviewTask(QRunnable):
             if self.original:
                 args = original_frame_args(self.path, self.info, self.at, name)
             else:
-                args, plan = preview_plan(self.path, self.info, self.s, caps, self.at, name, self.captions)
+                args, plan = preview_plan(
+                    self.path, self.info, self.s, caps, self.at, name, self.captions, self.clock
+                )
             log.debug("preview frame at %.2f s of %s", self.at, self.path)
             cp = subprocess.run(
                 [caps.ffmpeg, *args],
@@ -380,7 +384,7 @@ class TranscribeThread(QThread):
 
     def _one(self, iid: int, path: str, s) -> tuple[object | None, str]:
         """Send one clip to the worker and relay what it says until it's done."""
-        from ..core import captions
+        from listo.core import captions
 
         if self._proc is None or not self._proc.is_alive():
             self._start_worker()
@@ -412,7 +416,7 @@ class TranscribeThread(QThread):
                 return None, str(value)
 
     def run(self) -> None:
-        from ..core import captions
+        from listo.core import captions
 
         try:
             while True:

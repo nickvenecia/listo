@@ -18,9 +18,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from .frame import FULL, Area
-from .presets import Settings
-from .probe import MediaInfo
+from listo.core.frame import FULL, Area
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
 
 FONTS = Path(__file__).resolve().parent.parent / "assets" / "fonts"
 CLEAN_FONT = FONTS / "Inter-SemiBold.otf"
@@ -556,7 +556,7 @@ def _caption_setup(s: Settings, frame: tuple[int, int]) -> tuple[Look, int]:
 def caption_lines(text: str, s: Settings) -> list[str]:
     """How a caption reads on screen. Closed captions on tape were ALL CAPS (white on black);
     the clean look keeps the words as spoken."""
-    from .captions import wrap
+    from listo.core.captions import wrap
 
     return wrap(text.upper() if s.caption_style == "vhs" else text, s.caption_words)
 
@@ -574,6 +574,6 @@ def caption_still(text: str, s: Settings, frame: tuple[int, int]) -> tuple[Image
 
 
 def shot_start(src: str, info: MediaInfo, start_s: float) -> datetime:
-    from .probe import file_date
+    from listo.core.probe import file_date
 
     return file_date(src, info) + timedelta(seconds=start_s)

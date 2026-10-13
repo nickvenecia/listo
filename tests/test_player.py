@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from listo.ui.trim_dialog import fmt_clock
+from listo.core.store import Prefs
+from listo.ui.dialogs.trim import fmt_clock
 
 from .helpers import HAS_FFMPEG, ff
 
@@ -24,16 +25,11 @@ def test_clock_reads_like_time():
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_arrows_step_through_the_clips(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.preview_dialog as pd
-    import listo.ui.sidebar as sb
+    import listo.ui.dialogs.preview as pd
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     one = tmp_path / "a.mov"
     ff("-f", "lavfi", "-i", "testsrc2=s=160x120:d=1", "-c:v", "libx264", str(one))
@@ -70,22 +66,16 @@ def test_arrows_step_through_the_clips(tmp_path: Path, monkeypatch):
 
 def test_heavy_settings_start_off_each_launch(tmp_path: Path, monkeypatch):
     """Everything is remembered except captions and joining (heavy / surprising when forgotten)."""
-    import json
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.window.main_window as mw
     from listo.core.presets import Settings
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     last = Settings(video_preset="h264", captions=True, join=True, caption_model="best", burn_timecode=True)
-    QSettings(ini, QSettings.Format.IniFormat).setValue("settings", json.dumps(last.to_dict()))
+    Prefs().setValue("settings", last.to_dict())
     w = mw.MainWindow()
     s = w.settings
     assert not s.captions and not s.join  # off on a fresh start
@@ -101,7 +91,7 @@ def test_space_plays_and_pauses_even_with_a_dropdown_focused(tmp_path: Path):
     from PySide6.QtGui import QShortcut
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.preview_dialog as pd
+    import listo.ui.dialogs.preview as pd
     from listo.core.presets import Settings
     from listo.core.probe import probe
 

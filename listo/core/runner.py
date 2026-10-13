@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 import psutil
 
-from .tools import popen_kwargs
+from listo.core.tools import popen_kwargs
 
 
 class Canceled(Exception):

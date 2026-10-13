@@ -48,7 +48,7 @@ def test_photo_thumbnail():
 
     from PIL import Image
 
-    from listo.ui import workers
+    from listo.ui.window import jobs as workers
 
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "t.png"
@@ -62,24 +62,13 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.export_panel
-    import listo.ui.main_window
-    import listo.ui.sidebar
-
-    # Never touch the real Listo preferences on this computer.
-    ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.main_window, listo.ui.sidebar, listo.ui.export_panel):
-        if hasattr(mod, "QSettings"):
-            monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
-
-    from listo.ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
     w = MainWindow()
-    sb = w.sidebar
+    sb = w.convert
     sb.v_aspect.setCurrentIndex(sb.v_aspect.findData("2.35:1"))
     sb.v_fit.setCurrentIndex(sb.v_fit.findData("matte"))
     sb.matte_q.setValue(60)
@@ -96,7 +85,7 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.g_picture.set_open(True)
     assert sb.matte_row.isVisibleTo(sb)
     from listo.core.presets import Settings
-    from listo.ui.sidebar import GROUPS
+    from listo.ui.panels.convert import GROUPS
 
     for group, key in ((sb.g_picture, "picture"), (sb.g_text, "text")):
         n = sum(1 for k in GROUPS[key] if getattr(s, k) != getattr(Settings(), k))
@@ -121,12 +110,13 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.burn_style.setCurrentIndex(sb.burn_style.findData("clean"))
     assert not sb.sec_tape.isVisibleTo(sb)  # VHS only
     sb.burn_style.setCurrentIndex(sb.burn_style.findData("vhs"))
-    w._fill_trash_menu()
-    assert [a.text() for a in w.trash_menu.actions() if a.text()] == [
-        "Remove Selected",
+    m = w._list_menu(0)  # right-click on empty space: only clearing the list (never the files)
+    assert [a.text() for a in m.actions() if a.text()] == [
+        "Remove from the List…",
         "Clear Finished",
-        "Clear All",
+        "Clear All…",
     ]
+    assert not any(a.isEnabled() for a in m.actions() if a.text())  # nothing in the list yet
     w.close()
     app.processEvents()
 
@@ -168,16 +158,9 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window
-    import listo.ui.sidebar
-
-    ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.main_window, listo.ui.sidebar):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
-    from listo.ui.main_window import MainWindow
+    from listo.ui.window.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
     folder = tmp_path / "SD_VIDEO"
@@ -188,14 +171,14 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     w.add_paths([str(folder)])
     names = sorted(Path(it.path).name for it in w.items.values())
     assert names == ["MOV01A.MOD"]
-    assert "skipped 1 file that isn't" in w.toast.text().lower()  # only notes.txt counts as skipped
+    assert "skipped 1 file that isn't" in w.toaster.text.lower()  # only notes.txt counts as skipped
     w.add_paths([str(folder / "MOV01A.MOI")])  # dropped on its own: still not listed
     assert len(w.items) == 1
     second = tmp_path / "PRG002"
     second.mkdir()
     (second / "MOV01A.MOD").write_bytes(b"x")
     w.add_paths([str(second / "MOV01A.MOD")])
-    assert sorted(it.card.name.text() for it in w.items.values()) == [
+    assert sorted(it.card.name for it in w.items.values()) == [
         "PRG002 / MOV01A.MOD",
         "SD_VIDEO / MOV01A.MOD",
     ]
@@ -209,17 +192,12 @@ def test_preview_window_opens_for_clips_and_for_an_empty_list(tmp_path: Path, mo
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.preview_dialog as pd
-    import listo.ui.sidebar as sb
+    import listo.ui.dialogs.preview as pd
+    import listo.ui.window.main_window as mw
     from listo.core import sample
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(sample, "data_dir", lambda: tmp_path / "data")
     shown = []
     monkeypatch.setattr(pd.PreviewDialog, "exec", lambda self: shown.append([c[0] for c in self.clips]) or 0)

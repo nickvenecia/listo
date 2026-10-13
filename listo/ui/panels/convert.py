@@ -1,30 +1,25 @@
-"""The settings panel on the right: recipe picker + Video / Photo / Audio settings."""
+"""Convert To, in the right panel: the recipe, then the Video / Photo / Audio settings (format first, then the
+Image, Burn-In and Encoding cards)."""
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog,
     QComboBox,
     QFileDialog,
-    QFrame,
-    QInputDialog,
     QLabel,
-    QMessageBox,
-    QScrollArea,
     QSlider,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from ..core.captions import LANGUAGES
-from ..core.captions import MODELS as CAPTION_MODELS
-from ..core.presets import (
+from listo.core.captions import LANGUAGES
+from listo.core.captions import MODELS as CAPTION_MODELS
+from listo.core.presets import (
     ASPECT_CHOICES,
     AUDIO_FORMATS,
     BUILTIN_RECIPES,
@@ -37,15 +32,15 @@ from ..core.presets import (
     VIDEO_PRESETS,
     Settings,
 )
-from ..core.tape import BLUE, NO_EFFECTS
-from ..core.tools import Capabilities
-from .tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
-from .widgets import (
+from listo.core.store import Prefs, loads
+from listo.core.tape import BLUE, NO_EFFECTS
+from listo.core.tools import Capabilities
+from listo.ui.components.widgets import (
+    Card,
     Disclosure,
-    FitScroll,
+    PathCombo,
     Section,
     Segmented,
-    StepHeader,
     ToggleRow,
     combo,
     disable_item,
@@ -53,10 +48,11 @@ from .widgets import (
     set_combo,
     vbox,
 )
+from listo.ui.dialogs.common import ask_name, confirm
+from listo.ui.style.tokens import ICON, SPACE_1, SPACE_3
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
-LUT_FILE, LUT_FOLDER = "__lut_file__", "__lut_folder__"
-LUT_EXTS = {".cube", ".3dl", ".dat", ".m3d", ".csp"}
+LUT_TIP = "Apply a LUT to every video — handy for review copies"
 
 PHOTO_TIPS = {
     "jpeg": "Smallest, works everywhere",
@@ -75,20 +71,35 @@ AUDIO_TIPS = {
 }
 
 
-def _page() -> tuple[QScrollArea, QVBoxLayout]:
-    """A scrolling settings page. Sections go in it; the layout spaces them SPACE_3 apart."""
-    area = FitScroll()
-    area.setWidgetResizable(True)
-    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    inner = QWidget()
-    lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
-    area.setWidget(inner)
-    return area, lay
+def _page() -> tuple[QWidget, QVBoxLayout]:
+    """A settings page (the right panel scrolls them all). Cards go in it, SPACE_3 apart."""
+    page = QWidget()
+    return page, vbox(page, 0, SPACE_3)
 
 
-def _checks(*rows: ToggleRow, row: bool = False) -> QVBoxLayout:
-    """On/off settings stacked as full-width rows (label left, switch right). `row` is ignored:
-    side-by-side boxes made the panel look cluttered and left-leaning."""
+class _Pages(QWidget):
+    """Video / Photo / Audio: only the chosen page shows (and takes room), so the panel scrolls just as far
+    as that page needs."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.lay = vbox(self, 0, 0)
+        self.pages: list[QWidget] = []
+        self._i = 0
+
+    def addWidget(self, w: QWidget) -> None:
+        self.pages.append(w)
+        self.lay.addWidget(w)
+        w.setVisible(len(self.pages) - 1 == self._i)
+
+    def setCurrentIndex(self, i: int) -> None:
+        self._i = i
+        for n, w in enumerate(self.pages):
+            w.setVisible(n == i)
+
+
+def _checks(*rows: ToggleRow) -> QVBoxLayout:
+    """On/off settings stacked as full-width rows (label left, switch right)."""
     lay = vbox(spacing=0)
     for r in rows:
         lay.addWidget(r)
@@ -108,6 +119,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "picture": ("desqueeze", "aspect", "deinterlace", "lut_path"),
     "text": (
         "burn_timecode",
+        "timecode_mode",
         "burn_filename",
         "burn_datetime",
         "burn_stop",
@@ -120,16 +132,14 @@ GROUPS: dict[str, tuple[str, ...]] = {
 }
 
 
-class Sidebar(QFrame):
+class ConvertSettings(QWidget):
     changed = Signal()
     recipe_applied = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setObjectName("Sidebar")
-        self.setFixedWidth(SIDEBAR_W)
         self.s = settings
-        self.qs = QSettings("Listo", "Listo")
+        self.qs = Prefs()
         self._loading = False
         self._hw_ok: bool | None = None  # None until the hardware check finishes
         self._has_interlaced = False  # any interlaced file in the list
@@ -140,8 +150,7 @@ class Sidebar(QFrame):
         self._emit_timer.timeout.connect(self._emit_changed)
 
         lay = vbox(self, 0, SPACE_3)
-        lay.addWidget(StepHeader(2, "Convert To"))
-        top = vbox(margins=(SPACE_4, 0, SPACE_4, 0), spacing=SPACE_3)
+        top = vbox(spacing=SPACE_3)
         recipe = Section("Recipe")
         self.recipe = QComboBox()
         self.recipe.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -154,8 +163,8 @@ class Sidebar(QFrame):
         self.tabs = Segmented([("video", "Video"), ("photo", "Photo"), ("audio", "Audio")])
         top.addWidget(self.tabs)
         lay.addLayout(top)
-        self.stack = QStackedWidget()
-        lay.addWidget(self.stack, 1)
+        self.stack = _Pages()
+        lay.addWidget(self.stack)
 
         self._build_video()
         self._build_photo()
@@ -171,10 +180,6 @@ class Sidebar(QFrame):
     # ------------------------------------------------------------------ pages
     def _tab(self, key: str) -> None:
         self.stack.setCurrentIndex(["video", "photo", "audio"].index(key))
-
-    def show_tab(self, key: str) -> None:
-        self.tabs.set_value(key)
-        self._tab(key)
 
     def _build_video(self) -> None:
         page, lay = _page()
@@ -253,10 +258,10 @@ class Sidebar(QFrame):
         self.sec_deint.add(self.v_deint)
 
         self.sec_lut = Section("LUT")
-        self.lut = QComboBox()
-        self.lut.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.lut.setToolTip("Apply a LUT to every video — handy for review copies")
-        self.lut.activated.connect(self._lut_picked)
+        self.lut = PathCombo(
+            self.qs, "recent_luts", [("", "No LUT", "")], "Choose a LUT File…", self._ask_lut
+        )
+        self.lut.picked.connect(self._lut_picked)
         self.sec_lut.add(self.lut)
 
         self.sec_burn = Section("Clip Info")
@@ -271,6 +276,33 @@ class Sidebar(QFrame):
             "When the clip was shot, read from the clip itself, with a clock that runs as it plays",
         )
         self.sec_burn.add(_checks(self.burn_tc, self.burn_name, self.burn_dt))
+        # Clips without their own timecode: burned in AND stored in the file, so it shows even when
+        # the Timecode burn-in is off.
+        self.tc_mode = combo(
+            [
+                (
+                    "continuous",
+                    "Continuous Timecode",
+                    "One Convert is one tape: each clip carries on where the last one ended, "
+                    "as separate files or joined into one video",
+                ),
+                ("restart", "Restart Timecode Each Clip", "Every clip starts at 00:00:00:00"),
+                (
+                    "record",
+                    "Match Record Time",
+                    "Each clip's timecode is the time of day it was shot, like a camera's time-of-day timecode",
+                ),
+            ],
+            self.s.timecode_mode,
+        )
+        self.tc_mode.setToolTip(
+            "For clips without their own timecode (camcorders, phones); clips with real timecode keep it. "
+            "Burned in and stored in the file for editing apps"
+        )
+        self.tc_mode.currentIndexChanged.connect(
+            lambda: self._set("timecode_mode", self.tc_mode.currentData())
+        )
+        self.sec_burn.add(self.tc_mode)
         self.burn_style = combo(
             [
                 ("clean", "Clean Look", "Small labels on dark boxes in the corners"),
@@ -441,8 +473,10 @@ class Sidebar(QFrame):
         )
         self.sec_audio.add(self.v_tracks)
 
+        card = Card()
         for sec in (fmt, self.sec_variant, self.sec_size):
-            lay.addWidget(sec)
+            card.add(sec)
+        lay.addWidget(card)
         self.g_picture = self._group("Image", "picture")
         for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
             self.g_picture.add(sec)
@@ -454,7 +488,6 @@ class Sidebar(QFrame):
             self.g_sound.add(sec)
         for g in (self.g_picture, self.g_text, self.g_sound):
             lay.addWidget(g)
-        lay.addStretch(1)
         self.stack.addWidget(page)
         self._sync_lut()
 
@@ -487,17 +520,18 @@ class Sidebar(QFrame):
 
         meta = Section("Metadata")
         self.p_meta = _checkbox(
-            "Keep camera info and color profile",
+            "Keep Camera Info and Color Profile",
             self.s.photo_keep_metadata,
             lambda v: self._set("photo_keep_metadata", v),
         )
         meta.add(self.p_meta)
+        card = Card()
         for sec in (fmt, self.sec_quality, size):
-            lay.addWidget(sec)
+            card.add(sec)
+        lay.addWidget(card)
         self.p_adv = self._group("More", "photo")
         self.p_adv.add(meta)
         lay.addWidget(self.p_adv)
-        lay.addStretch(1)
         self.stack.addWidget(page)
 
     def _build_audio(self) -> None:
@@ -509,8 +543,9 @@ class Sidebar(QFrame):
         )
         self.a_fmt.currentIndexChanged.connect(lambda: self._set("audio_format", self.a_fmt.currentData()))
         fmt.add(self.a_fmt)
-        lay.addWidget(fmt)
-        lay.addStretch(1)
+        card = Card()
+        card.add(fmt)
+        lay.addWidget(card)
         self.stack.addWidget(page)
 
     # ------------------------------------------------------------------ behavior
@@ -548,8 +583,8 @@ class Sidebar(QFrame):
         self.changed.emit()
 
     def notify_external_change(self) -> None:
-        """Settings changed elsewhere (e.g. Export options) — keep the recipe picker honest."""
-        self._sync_text()  # (joining shows "Glitch Between Joined Clips")
+        """Settings changed (here, in Saves To, or by undo): keep the recipe picker honest."""
+        self._sync_text()
         self._match_recipe()
 
     def _video_preset(self, key: str) -> None:
@@ -632,55 +667,20 @@ class Sidebar(QFrame):
         self.sec_quality.set_title(f"Quality · {v}")
         self._set("photo_quality", v)
 
-    # ---- LUTs: a dropdown of your LUT folder + recently used LUTs
-    def _recent_luts(self) -> list[str]:
-        try:
-            data = json.loads(self.qs.value("recent_luts", "[]") or "[]")
-        except (ValueError, TypeError):
-            data = []
-        return [p for p in data if isinstance(p, str) and Path(p).is_file()]
-
-    def _folder_luts(self) -> list[str]:
-        folder = str(self.qs.value("lut_folder", "") or "")
-        if not folder or not Path(folder).is_dir():
-            return []
-        try:
-            return sorted(
-                (str(p) for p in Path(folder).rglob("*") if p.suffix.lower() in LUT_EXTS and p.is_file()),
-                key=lambda p: Path(p).name.lower(),
-            )[:300]
-        except OSError:
-            return []
-
-    def _remember_lut(self, path: str) -> None:
-        recent = [path] + [p for p in self._recent_luts() if p != path]
-        self.qs.setValue("recent_luts", json.dumps(recent[:10]))
-
+    # ---- LUTs: a PathCombo of the LUTs picked before
     def _sync_lut(self) -> None:
-        c = self.lut
-        c.blockSignals(True)
-        c.clear()
-        c.addItem("No LUT", "")
-        folder = self._folder_luts()
-        recent = [p for p in self._recent_luts() if p not in folder]
-        current = self.s.lut_path
-        if current and current not in folder and current not in recent:
-            recent.insert(0, current)
-        for group in (recent, folder):
-            if group:
-                c.insertSeparator(c.count())
-                for p in group:
-                    c.addItem(Path(p).stem, p)
-                    c.setItemData(c.count() - 1, p, Qt.ItemDataRole.ToolTipRole)
-        c.insertSeparator(c.count())
-        c.addItem("Choose a LUT File…", LUT_FILE)
-        lut_folder = str(self.qs.value("lut_folder", "") or "")
-        c.addItem(
-            f"Change LUT folder ({Path(lut_folder).name})…" if lut_folder else "Use a LUT Folder…", LUT_FOLDER
+        self.lut.set_value(self.s.lut_path)
+        self.lut.setToolTip(self.s.lut_path or LUT_TIP)
+
+    def _ask_lut(self, start: str) -> str:
+        f, _ = QFileDialog.getOpenFileName(
+            self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)"
         )
-        c.setCurrentIndex(max(0, c.findData(current)))
-        c.setToolTip(current or "Apply a LUT to every video — handy for review copies")
-        c.blockSignals(False)
+        return f
+
+    def _lut_picked(self, path: str) -> None:
+        self._set("lut_path", path)
+        self._sync_lut()
 
     def _screen_key(self) -> str:
         return self.s.tape_screen if self.s.tape_blue else "none"
@@ -711,36 +711,27 @@ class Sidebar(QFrame):
         else:
             self.tape_screen.setItemIcon(i, QIcon())
 
-    def _lut_picked(self, index: int) -> None:
-        data = self.lut.itemData(index)
-        if data == LUT_FILE:
-            start = str(Path(self.s.lut_path).parent) if self.s.lut_path else str(Path.home())
-            f, _ = QFileDialog.getOpenFileName(
-                self, "Choose a LUT", start, "LUT files (*.cube *.3dl *.dat *.m3d *.csp);;All files (*)"
-            )
-            if f:
-                self._remember_lut(f)
-                self._set("lut_path", f)
-        elif data == LUT_FOLDER:
-            start = str(self.qs.value("lut_folder", "") or Path.home())
-            d = QFileDialog.getExistingDirectory(self, "Choose Your LUT Folder", start)
-            if d:
-                self.qs.setValue("lut_folder", d)
-        elif data is not None:
-            if data:
-                self._remember_lut(data)
-            self._set("lut_path", data)
-        self._sync_lut()
-
     # ------------------------------------------------------------------ recipes
     def _user_recipes(self) -> list[dict]:
-        try:
-            data = json.loads(self.qs.value("recipes", "[]") or "[]")
-            return [
-                r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)
-            ]
-        except (ValueError, TypeError):
-            return []
+        data = loads(self.qs.value("recipes", []), [])
+        return [
+            r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)
+        ]
+
+    def _save_recipes(self, recipes: list[dict]) -> None:
+        """Save the recipe list. If what's saved couldn't be read, it's kept beside it first (never lost)."""
+        raw = self.qs.value("recipes")
+        readable = raw is None or isinstance(raw, list)
+        if isinstance(raw, str):
+            try:
+                readable = isinstance(json.loads(raw or "[]"), list)
+            except ValueError:
+                readable = False
+        if not readable:
+            import time
+
+            self.qs.setValue(f"recipes.unreadable-{int(time.time())}", raw)
+        self.qs.setValue("recipes", recipes)
 
     def _all_recipes(self) -> list[tuple[str, dict, bool]]:
         out = [(n, v, False) for n, v in BUILTIN_RECIPES]
@@ -784,10 +775,7 @@ class Sidebar(QFrame):
         elif data == ACTION_UPDATE and current:
             self._store_recipe(current)
         elif data == ACTION_DELETE and current:
-            if (
-                QMessageBox.question(self, "Delete Recipe", f"Delete the recipe “{current}”?")
-                == QMessageBox.StandardButton.Yes
-            ):
+            if confirm(self, f"Delete the Recipe “{current}”?", "Your files aren't touched.", "Delete"):
                 self._delete_recipe(current)
         elif data:
             vals = next((v for n, v, _ in self._all_recipes() if n == data), None)
@@ -803,9 +791,8 @@ class Sidebar(QFrame):
         self._match_recipe()  # put the picker back on the right entry
 
     def _save_recipe(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Recipe", "Name this recipe:")
-        name = name.strip()
-        if not ok or not name:
+        name = ask_name(self, "Save as a Recipe", "Save", placeholder="Client Review, Proxies…")
+        if not name:
             return
         if name in (ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE):
             return
@@ -816,18 +803,18 @@ class Sidebar(QFrame):
         values = self.s.to_dict()
         values["video_variant"] = {p.key: self.s.variant_for(p.key) for p in VIDEO_PRESETS if p.variants}
         recipes.append({"name": name, "values": values})
-        self.qs.setValue("recipes", json.dumps(recipes))
+        self._save_recipes(recipes)
         self._current_recipe = name
         self._match_recipe()
 
     def _delete_recipe(self, name: str) -> None:
         recipes = [r for r in self._user_recipes() if r["name"] != name]
-        self.qs.setValue("recipes", json.dumps(recipes))
+        self._save_recipes(recipes)
         self._current_recipe = None
         self._match_recipe()
 
     def reload(self) -> None:
-        """Refresh every control from the settings (after a recipe is applied)."""
+        """Refresh every control from the settings (after a recipe is applied, or undo / redo)."""
         self._loading = True
         try:
             for box, key in (
@@ -838,6 +825,7 @@ class Sidebar(QFrame):
                 (self.v_aspect, self.s.aspect),
                 (self.v_fit, self.s.aspect_fit),
                 (self.burn_style, self.s.burn_style),
+                (self.tc_mode, self.s.timecode_mode),
                 (self.burn_badge, self.s.burn_badge),
                 (self.tape_glitches, self.s.tape_glitches),
                 (self.tape_screen, self._screen_key()),
@@ -890,8 +878,8 @@ class Sidebar(QFrame):
 
     # ------------------------------------------------------------------ capabilities
     def apply_capabilities(self, caps: Capabilities) -> None:
-        from ..core.photo import is_heic_encodable
-        from ..core.video import preset_available
+        from listo.core.photo import is_heic_encodable
+        from listo.core.video import preset_available
 
         for p in VIDEO_PRESETS:
             ok = preset_available(p.key, caps) if p.needs else caps.ok

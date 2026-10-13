@@ -15,15 +15,10 @@ from .helpers import HAS_FFMPEG, ff
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_reading_many_files_bundles_the_refreshes(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     one = tmp_path / "one.mov"
     ff("-f", "lavfi", "-i", "testsrc2=s=160x120:d=1", "-f", "lavfi", "-i", "sine=d=1", "-shortest",
@@ -33,7 +28,7 @@ def test_reading_many_files_bundles_the_refreshes(tmp_path: Path, monkeypatch):
         f = tmp_path / f"C{i:03d}.mov"
         shutil.copy(one, f)
         files.append(str(f))
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
     from tests import speech_standin
 
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))

@@ -128,19 +128,14 @@ def test_convert_waits_for_captions_then_converts(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QDialog
 
-    import listo.ui.caption_editor as ed
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.dialogs.captions as ed
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
     from tests import speech_standin
 
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
@@ -172,6 +167,8 @@ def test_convert_waits_for_captions_then_converts(tmp_path: Path, monkeypatch):
 
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
     w.start()
+    if w._convert_after_captions:  # still making them: the bar says so until they're done
+        assert w.f_title.text() == "Waiting for Captions" and not w.btn_start.isEnabled()
     assert wait(lambda: any(it.state == "done" for it in w.items.values()))
     assert opened == []  # checking is its own button now
     srt = (tmp_path / "talk_cc.srt").read_text()
@@ -187,19 +184,14 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QDialog
 
-    import listo.ui.caption_editor as ed
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
+    import listo.ui.dialogs.captions as ed
+    import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
     from tests import speech_standin
 
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
@@ -249,7 +241,7 @@ def test_preview_task_draws_captions(tmp_path: Path):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    from listo.ui.workers import PreviewSignals, PreviewTask
+    from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
     app = QApplication.instance() or QApplication([])
     clip = tmp_path / "c.mov"
@@ -270,7 +262,7 @@ def test_worker_process_round_trip_and_stop(tmp_path: Path):
 
     from PySide6.QtCore import QCoreApplication, Qt
 
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
     from tests import speech_standin
 
     app = QCoreApplication.instance() or QCoreApplication([])
@@ -307,7 +299,7 @@ def test_caption_check_plays_and_lights_up_the_caption_on_screen(tmp_path: Path,
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.caption_editor as ed
+    import listo.ui.dialogs.captions as ed
 
     if not ed.HAS_PLAYER:
         pytest.skip("Qt's media player isn't installed")
@@ -367,21 +359,16 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
-    import listo.ui.workers as wk
+    import listo.ui.window.jobs as wk
+    import listo.ui.window.main_window as mw
     from tests import speech_standin
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
     answers = []
-    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a, **k: answers.pop(0))
+    monkeypatch.setattr(mw, "confirm", lambda *a, **k: answers.pop(0))
     app = QApplication.instance() or QApplication([])
     a, b = tmp_path / "a.mov", tmp_path / "b.mov"
     for c in (a, b):
@@ -403,12 +390,12 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
     assert {it.transcript.model for it in w.items.values()} == {"small"}  # Balanced
     first, second = its()
     first.transcript.edited = True  # you fixed this one by hand
-    answers.append(QMessageBox.StandardButton.No)
+    answers.append(False)
     w.settings.caption_model = "fast"
     w._settings_changed()
     assert wait(lambda: second.transcript.model == "base")  # redone with Fast
     assert first.transcript.model == "small" and not answers  # asked, kept your fixes
-    answers.append(QMessageBox.StandardButton.Yes)
+    answers.append(True)
     w.settings.caption_model = "best"
     w._settings_changed()
     assert wait(

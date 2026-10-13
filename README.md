@@ -26,7 +26,9 @@ Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…" m
 
 ffmpeg and everything else comes bundled. There's no Homebrew, Python or terminal needed.
 
-**Updates:** Listo checks for a new version once a day. When there is one, an **Update to …** button appears in the bottom bar: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo. You can also use **⋯ → Check for Updates…** (or turn the daily check off there).
+**Updates:** every time Listo opens, it checks for a new version. When there is one, the update window opens by itself: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo (**Later** closes it; **Update to …** stays at the bottom of the sidebar). You can also check any time from the menu at the bottom of the sidebar (your name) → **Check for Updates…**, and turn the automatic check off in **Settings › General**.
+
+**Your settings stay yours:** settings, recipes and checked captions are kept on your computer only, in Listo's folder (Settings › Your Data shows where, and **Back Up…** zips them). Undo (⌘Z / Ctrl+Z) takes back a change to the settings or the list.
 
 ## What it does
 
@@ -42,8 +44,10 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - Interlaced footage is detected and deinterlaced, with a choice of smooth 59.94p or film-look 29.97p.
 - ProRes/DNxHR/Rewrap keep **every audio track** as uncompressed PCM at the source bit depth.
 - **Timecode** and the **recording date and time** are carried over: every video Listo makes stores when it was shot (camcorder .MOI dates included, with your time zone), so it travels with the file when you upload, email or copy it. File dates are kept too, including "Date Created" on Mac and Windows.
+- Clips without their own timecode (camcorders, phones) get **continuous timecode** that runs on from clip to clip like one tape (separate files or joined into one video), **restart at 00:00:00:00** each clip, or **match the record time** (the time of day it was shot). Burned in and stored in the file.
 - iPhone **HDR** (HLG/PQ) is tone-mapped for H.264, WebM and GIF so it doesn't look washed out, and kept as HDR for ProRes, HEVC and AV1.
 - Odd-sized video (screen recordings, crops) just works.
+- **Light or dark**, following your computer's setting (and switching with it).
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 
@@ -54,7 +58,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Workflow:**
 - **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
-- **Look for review copies**: pick a LUT from your LUT folder (or any `.cube` file) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font). With the VHS look you can also add STOP ■ at the end and **Tape Effects**: a screen at the start and end (VCR blue, black, color bars & tone, or any color; PLAY blinks going in, STOP ■ coming out), a tracking glitch at each cut of a joined video, and random glitches if you like.
+- **Look for review copies**: pick any LUT (`.cube` and more; the ones you used before stay in the list) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font). With the VHS look you can also add STOP ■ at the end and **Tape Effects**: a screen at the start and end (VCR blue, black, color bars & tone, or any color; PLAY blinks going in, STOP ■ coming out), a tracking glitch at each cut of a joined video, and random glitches if you like.
 - **Frame**: desqueeze anamorphic footage (1.33×–2×), and change the shape to 16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35 or 2.39. Crop to fill, add black bars, or draw cinema bars over the picture with adjustable opacity.
 - **Size** means the short edge, so 1080 gives 1920×1080 for widescreen and 1080×1920 for vertical video. It scales up too (old 720×480 camcorder footage at 1080 comes out 1440×1080, in its true 4:3 shape).
 - **Captions**: Listo listens to each clip on your computer (nothing is uploaded), you check and fix the words, then they're burned in (Clean or VHS look) and/or saved as an .srt file. The speech model downloads once the first time (150 MB to 1.6 GB depending on accuracy). Check them with the Check Captions button: play the clip with sound, watch each caption light up as it's spoken, click to jump, fix or add lines.
@@ -80,7 +84,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 
 `{date}_{name}_{preset}` → `2026-10-08_A001_C003_prores422.mov`
 
-Save next to the original, in a subfolder next to it, or all in one folder. If a name is taken: add a number, skip, or replace.
+Save in the source folder, in a new subfolder next to each original, or in a destination you choose (the ones you used before stay in the list). If a name is taken: add a number, skip, or replace.
 
 ## Run from source
 
@@ -98,20 +102,18 @@ Build the app yourself: `pyinstaller listo.spec --noconfirm` → `dist/`.
 
 ## Making a release
 
-Builds run on GitHub for every push. To publish downloads:
-
-```bash
-# bump __version__ in listo/__init__.py, then:
-git tag v2.0.1 && git push --tags
-```
-
-GitHub Actions builds the Mac (Apple Silicon and Intel), Windows and Linux versions, tests each one, and attaches them to a new Release.
+**Merging is releasing.** A pull request with a change people will notice also bumps `__version__` in
+`listo/__init__.py` (the last number for fixes, the middle one for a new feature) and writes its notes in
+`CHANGELOG.md` under that version. When it's merged, GitHub Actions builds the Mac (Apple Silicon and Intel),
+Windows and Linux versions, tests each one, tags the commit `vX.Y.Z` and publishes the Release with the downloads
+and the notes, all by itself. Nobody tags or releases by hand. Pull requests themselves never release.
 
 ### Optional: signing the Mac app
 To get rid of the "can't check this app" warning you need an Apple Developer account ($99/yr). Add these repository secrets and the workflow will sign and notarize automatically: `MACOS_CERTIFICATE` (base64 .p12), `MACOS_CERTIFICATE_PWD`, `MACOS_SIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`.
 
 ## Changing the icon
-Replace `listo/assets/icon.png` with a 1024×1024 PNG (transparent corners). The Mac and Windows icons are generated from it at build time.
+The icon ("l." on a dark tile, the dot in marigold) is drawn by `python scripts/make_icon.py` into `listo/assets/icon.png`
+from the app's own colors and font. The Mac and Windows icons are generated from it at build time.
 
 ## License
 Copyright © Nick Venecia.

@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
 
-from . import burnin, tape
-from .burnin import BurnPlan
-from .frame import Area, frame_plan, resized
-from .presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings
-from .probe import MediaInfo, Shot, recorded, tc_add, tc_double_frames
-from .tools import Capabilities
+from listo.core import burnin, tape
+from listo.core.burnin import BurnPlan
+from listo.core.frame import Area, frame_plan, resized
+from listo.core.presets import AUDIO_BY_KEY, VIDEO_BY_KEY, Settings, timecode_mode
+from listo.core.probe import MediaInfo, Shot, record_timecode, recorded, tc_add, tc_double_frames
+from listo.core.tools import Capabilities
 
 
 class PlanError(Exception):
@@ -231,7 +231,8 @@ def build(
 ) -> Plan:
     """captions: the clip's reviewed cues (on the clip's own timeline); they're shifted for a trim.
     conform: this clip is one part of a joined video and must match the others (rewrap ignores it).
-    timecode: where this clip's timecode starts instead of its own (a joined video's running counter)."""
+    timecode: where this clip's timecode starts instead of its own (Continuous Timecode's counter,
+    given by whoever knows the whole list). Match Record Time is worked out here, per clip."""
     if info.kind == "audio" or (info.kind == "video" and s.video_preset == "audio"):
         return _audio_only(src, out, info, s, caps, trim, conform)
     if info.kind != "video" or info.video_index is None:
@@ -252,6 +253,8 @@ def build(
         start_tc = tc_add(info.timecode, trim[0], info.rate)
     if timecode:
         start_tc = timecode  # already counts from where the (trimmed) clip starts
+    elif not info.timecode and timecode_mode(s) == "record":
+        start_tc = record_timecode(src, info, trim[0] if trim else 0.0)
 
     # ---- audio track selection
     tracks = info.audio if (p.edit_format and s.keep_all_audio) else info.audio[:1]
@@ -290,7 +293,7 @@ def build(
         return Plan(args, "mov", notes, shot=shot)
 
     # ---- picture filters
-    from .naming import output_size
+    from listo.core.naming import output_size
 
     out_size = output_size(info, s, "video")
     vf: list[str] = []
@@ -326,7 +329,7 @@ def build(
         notes.append(f"Cinema bars added ({s.aspect})." if bars_only else f"Reshaped to {fw}×{fh}.")
     cues = None
     if s.captions and captions:
-        from .captions import for_output
+        from listo.core.captions import for_output
 
         cues = for_output(captions, trim[0] if trim else 0.0, (trim[1] - trim[0]) if trim else None)
     burn = burn_plan(
@@ -586,9 +589,11 @@ def preview_plan(
     at: float,
     out_png: str,
     captions: list | None = None,
+    clock: tuple[float, str] | None = None,
 ) -> tuple[list[str], Plan]:
     """ffmpeg args that save ONE frame at `at` seconds, with exactly the picture steps the real
-    conversion would use (LUT, frame, size, burn-ins). Call plan.cleanup() afterwards."""
+    conversion would use (LUT, frame, size, burn-ins). Call plan.cleanup() afterwards.
+    clock: (t, timecode) = the clip shows this timecode at t seconds (Continuous Timecode)."""
     if s.video_preset in ("gif", "audio"):
         s = s.copy()
         s.video_preset = "h264"  # same look; a GIF's palette step needs the whole clip
@@ -596,7 +601,12 @@ def preview_plan(
     # Stay half a second clear of the end: camera files often hold sound past their last picture
     # (MPEG program streams start the picture later), so "the last moment" can have no frame.
     at = min(max(0.0, at), max(0.0, length - min(0.5, length / 4)))
-    plan = build(src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)), captions=captions)
+    tc = ""
+    if clock and clock[1] and info.rate:
+        tc = tc_add(clock[1], max(0.0, at - clock[0]), info.rate)
+    plan = build(
+        src, out_png, info, s, caps, trim=(at, min(length, at + 1.0)), captions=captions, timecode=tc
+    )
     a = plan.args
     first_map = a.index("-map")
     args = [*a[:first_map], "-map", a[first_map + 1]]

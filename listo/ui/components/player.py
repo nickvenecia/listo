@@ -1,4 +1,4 @@
-"""ClipPlayer: plays a clip with sound inside Listo (Export preview, Preview window, caption check).
+"""ClipPlayer: plays a clip with sound inside Listo (the live preview in Convert To, the Preview window, the caption check).
 
 Layers, bottom to top:
   video     the clip as shot (Qt's player; pixel shape from MediaInfo, so DV / MOD look right)
@@ -25,7 +25,7 @@ from __future__ import annotations
 import io
 import os
 
-from PySide6.QtCore import QRectF, QSize, QSizeF, Qt, QTimer, QUrl, Signal
+from PySide6.QtCore import QRectF, QSizeF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
@@ -38,13 +38,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import burnin, naming
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from . import theme
-from .tokens import ICON, MUTED, SPACE_1, SPACE_2, TEXT_SM, WELL
-from .trim_dialog import fmt_clock
-from .widgets import hbox, vbox
+from listo.core import burnin, naming
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.ui.components.widgets import hbox, icon_button, vbox
+from listo.ui.dialogs.trim import fmt_clock
+from listo.ui.style import theme
+from listo.ui.style.tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
 
 # No hardware decoding for playback: Qt's player crashed on MPEG-2 (.MOD) when the Mac's decoder
 # refused it. "," = an empty list (Qt docs: Advanced FFmpeg Configuration). Must be set before Qt
@@ -88,15 +88,11 @@ def fit(w: float, h: float, box: QRectF) -> QRectF:
 
 class _Stage(QGraphicsView):
     clicked = Signal()
-    double_clicked = Signal()
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mouseReleaseEvent(e)
-
-    def mouseDoubleClickEvent(self, e):
-        self.double_clicked.emit()
 
     def wheelEvent(self, e):
         e.ignore()  # let the panel scroll
@@ -104,7 +100,6 @@ class _Stage(QGraphicsView):
 
 class ClipPlayer(QWidget):
     position_changed = Signal(float)  # seconds, while playing and after every move
-    playing_changed = Signal(bool)
     step = Signal(int)  # -1 previous clip, +1 next clip (owners decide what that means)
     settled = Signal(float)  # paused somewhere new: owners can show the exact result frame there
     clicked = Signal()
@@ -129,6 +124,7 @@ class ClipPlayer(QWidget):
         self._autoplay = False
         self._shown: tuple | None = None
         self._still_at: float | None = None  # where the still frame was taken (None = any time)
+        self._still_pm: QPixmap | None = None  # that frame as it came (to fit it again at a new size)
         self.video_rect = QRectF(0, 0, width, height)
         self.out_size = (width, height)
         self.out_rect = QRectF(self.video_rect)
@@ -140,7 +136,7 @@ class ClipPlayer(QWidget):
         self.stage.setFrameShape(QGraphicsView.Shape.NoFrame)
         self.stage.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.stage.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.stage.setBackgroundBrush(QBrush(QColor(WELL)))
+        self.stage.setBackgroundBrush(QBrush(QColor(SCREEN)))  # dark in both looks
         self.stage.clicked.connect(self.clicked)
         self.scene = QGraphicsScene(0, 0, width, height, self.stage)
         self.stage.setScene(self.scene)
@@ -153,7 +149,7 @@ class ClipPlayer(QWidget):
         self.still.setZValue(2)
         self.scene.addItem(self.still)
         self.message = QGraphicsSimpleTextItem()
-        self.message.setBrush(QBrush(QColor(MUTED)))
+        self.message.setBrush(QBrush(QColor(SCREEN_TEXT)))
         f = QFont(self.font())
         f.setPixelSize(TEXT_SM)
         self.message.setFont(f)
@@ -165,11 +161,7 @@ class ClipPlayer(QWidget):
         tr = hbox(self.transport, spacing=SPACE_1)
         self.btn_prev = self._nav_button("chevron-left", "Previous clip", -1)
         tr.addWidget(self.btn_prev)
-        self.btn_play = QToolButton()
-        self.btn_play.setObjectName("IconBtn")
-        self.btn_play.setIconSize(QSize(ICON, ICON))
-        self.btn_play.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_play.setToolTip("Play / Pause")
+        self.btn_play = icon_button("", "Play / Pause", size=ICON)  # its icon follows playing / paused
         self.btn_play.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.btn_play.clicked.connect(self.toggle)
         tr.addWidget(self.btn_play)
@@ -214,12 +206,7 @@ class ClipPlayer(QWidget):
         self._state()
 
     def _nav_button(self, icon: str, tip: str, direction: int) -> QToolButton:
-        b = QToolButton()
-        b.setObjectName("IconBtn")
-        b.setIcon(theme.icon(icon, theme.TEXT))
-        b.setIconSize(QSize(ICON, ICON))
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        b.setToolTip(tip)
+        b = icon_button(icon, tip, theme.TEXT, ICON)
         b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         b.clicked.connect(lambda: self.step.emit(direction))
         b.hide()  # until the owner says there's more than one clip
@@ -303,10 +290,25 @@ class ClipPlayer(QWidget):
         self._shown = None
         self._draw_caption()
 
+    def set_size(self, width: int, height: int) -> None:
+        """A new picture size (the right panel is narrower on a smaller window)."""
+        if (width, height) == (self.W, self.H) or width < 2 or height < 2:
+            return
+        self.W, self.H = width, height
+        self.stage.setFixedSize(width, height)
+        self.scene.setSceneRect(0, 0, width, height)
+        self._layout()
+        self._shown = None
+        self._draw_caption()
+        self.set_message(self.message.text())
+        if self._still_pm is not None:
+            self.set_still(self._still_pm, self._still_at)
+
     def set_still(self, pm: QPixmap | None, at: float | None = None) -> None:
         """The exact result frame at `at` seconds (shown while paused there, hidden while playing)."""
         self.message.setText("")
         self._still_at = at
+        self._still_pm = pm if pm is not None and not pm.isNull() else None
         if pm is None or pm.isNull():
             self.still.setPixmap(QPixmap())
             return
@@ -420,7 +422,6 @@ class ClipPlayer(QWidget):
             self._ticker.stop()
             self._tick()
             self._settle.start()
-        self.playing_changed.emit(playing)
 
     def _duration(self, ms: int) -> None:
         self.slider.blockSignals(True)

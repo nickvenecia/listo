@@ -14,13 +14,15 @@ from PySide6.QtCore import QEvent, QObject, Qt, QThreadPool
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QWidget
 
-from ..core import captions
-from ..core.captions import Cue, Transcript
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from . import theme
-from .player import HAS_PLAYER, ClipPlayer, space_plays
-from .tokens import (
+from listo.core import captions
+from listo.core.captions import Cue, Transcript
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.ui.components.player import HAS_PLAYER, ClipPlayer, space_plays
+from listo.ui.components.widgets import ClickLabel, combo, hbox, hint, repolish, vbox
+from listo.ui.dialogs.trim import fmt_clock
+from listo.ui.style import theme
+from listo.ui.style.tokens import (
     CAPTION_LIST_W,
     CAPTION_ROW_H,
     EDITOR_PIC_H,
@@ -31,9 +33,7 @@ from .tokens import (
     SPACE_5,
     TIME_FIELD_W,
 )
-from .trim_dialog import fmt_clock
-from .widgets import ClickLabel, combo, hbox, hint, repolish, vbox
-from .workers import PreviewSignals, PreviewTask
+from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
 __all__ = ["HAS_PLAYER", "CaptionEditor"]
 
@@ -100,10 +100,9 @@ class CaptionEditor(QDialog):
         self.player.settled.connect(self._settled)
         self.player.clicked.connect(self.player.toggle)
         left.addWidget(self.player)
-        self.help = hint(
-            "Press Play (or Space) to watch with the captions; the one on screen lights up. "
-            "Click a line to jump there and fix it. Clear a line to remove that caption."
-        )
+        self.player.setToolTip("Space plays and pauses; the caption on screen lights up on the right")
+        self.help = hint("")  # only when something needs saying (no room for a caption here)
+        self.help.hide()
         left.addWidget(self.help)
         left.addStretch(1)
         body.addLayout(left)
@@ -112,10 +111,10 @@ class CaptionEditor(QDialog):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFixedWidth(CAPTION_LIST_W)
-        self.scroll.setFixedHeight(EDITOR_PIC_H + 24)
+        self.scroll.setFixedHeight(EDITOR_PIC_H + SPACE_5)  # as tall as the picture and its time line
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right.addWidget(self.scroll)
-        self.btn_add = QPushButton(" Add Caption")
+        self.btn_add = QPushButton("Add Caption")
         self.btn_add.setIcon(theme.icon("plus", theme.TEXT))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add a caption where the clip is now (pause where the words start)")
@@ -259,7 +258,9 @@ class CaptionEditor(QDialog):
         end = min(t + NEW_CAPTION_S, nxt)
         if end - t < MIN_CAPTION_S:
             self.help.setText("No room for a caption here. Move to a gap between captions, then Add Caption.")
+            self.help.show()
             return
+        self.help.hide()
         self.player.pause()
         cue = Cue(round(t, 3), round(end, 3), "")
         cues.append(cue)

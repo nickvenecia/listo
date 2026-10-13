@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .log import get_logger
-from .presets import PHOTO_BY_KEY, Settings
-from .probe import RAW_EXTS, ext_of
+from listo.core.log import get_logger
+from listo.core.presets import PHOTO_BY_KEY, Settings
+from listo.core.probe import RAW_EXTS, ext_of
 
 try:
     import pillow_heif
@@ -215,18 +214,5 @@ def convert(src: str, out: str, s: Settings) -> list[str]:
     return notes
 
 
-def supported_note() -> str:
-    parts = []
-    if not HEIF_OK:
-        parts.append("HEIC")
-    if not RAW_OK:
-        parts.append("RAW")
-    return ("Missing support for: " + ", ".join(parts)) if parts else ""
-
-
 def is_heic_encodable() -> bool:
     return HEIF_OK
-
-
-def suffix_for(path: str) -> str:
-    return Path(path).suffix

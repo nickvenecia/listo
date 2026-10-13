@@ -15,8 +15,8 @@ How it works
 - prepare(): unpacks what needs unpacking and writes a small helper script that waits for Listo to
   quit, puts the new version where the old one was, and opens it again. MainWindow runs it and quits.
 
-Nothing is sent except the request for the release list (no IDs, no usage data). The check runs at
-most once a day, and can be turned off.
+Nothing is sent except the request for the release list (no IDs, no usage data). The check runs each
+time Listo opens, and can be turned off (Settings › General).
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shlex
 import shutil
 import stat
@@ -39,16 +40,15 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .. import __version__
-from .links import _ssl_context
-from .log import get_logger
+from listo import __version__
+from listo.core.links import _ssl_context
+from listo.core.log import get_logger
 
 log = get_logger(__name__)
 
 REPO = "nickvenecia/listo"  # github.com/<owner>/<repo> the releases come from
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
 PAGE = f"https://github.com/{REPO}/releases/latest"
-CHECK_EVERY_S = 20 * 3600  # the automatic check: at most about once a day
 
 
 class Canceled(Exception):
@@ -107,6 +107,45 @@ def parse_release(data: dict) -> Release:
         page=str(data.get("html_url") or PAGE),
         assets=assets,
     )
+
+
+_SKIP = ("download", "new contributors")  # the app knows which file it needs; GitHub's own thanks
+_HEADING = re.compile(r"#{1,6}\s+(.*?)\s*#*$")
+_ITEM = re.compile(r"\s*(?:[-*+]|\d+[.)])\s+(.*)")
+_CREDIT = re.compile(r"\s+by @[\w-]+(?: in https://\S+)?$")  # GitHub's "… by @name in <link>"
+
+
+def whats_new(notes: str) -> list[tuple[str, str]]:
+    """A release's Markdown as blocks to show: ("heading" | "item" | "text", words). Leaves out the download
+    table and what GitHub adds by itself (credits, links, Full Changelog); words keep **bold**, `code` and
+    [links](https://…) for the window to draw."""
+    blocks: list[tuple[str, str]] = []
+    skipping = joining = False
+    for raw in notes.splitlines():
+        line = raw.strip()
+        heading = _HEADING.match(line)
+        if heading:
+            skipping = heading.group(1).lower().startswith(_SKIP)
+            if not skipping:
+                blocks.append(("heading", heading.group(1)))
+            joining = False
+            continue
+        item = _ITEM.match(raw)
+        if skipping or not line or line.startswith(("|", "<!--", "---", "**Full Changelog")):
+            joining = False
+        elif item:
+            blocks.append(("item", _CREDIT.sub("", item.group(1).strip())))
+            joining = True
+        elif joining:  # a long line carried on underneath
+            blocks[-1] = (blocks[-1][0], f"{blocks[-1][1]} {line}")
+        else:
+            blocks.append(("text", line))
+            joining = True
+    # a heading with nothing under it (all of it left out) goes too
+    last = len(blocks) - 1
+    return [
+        b for n, b in enumerate(blocks) if b[0] != "heading" or (n < last and blocks[n + 1][0] != "heading")
+    ]
 
 
 def check(timeout: float = 15) -> Release:

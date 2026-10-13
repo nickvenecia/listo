@@ -1,10 +1,11 @@
-"""The export panel (right side): live preview, where files go, what they're called, and Convert."""
+"""Saves To, in the right panel: the live preview (placed at the panel's top), joining, the example name, where
+files go, what they're called, and the advanced options."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -15,26 +16,26 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..core import join, naming
-from ..core.log import get_logger
-from ..core.presets import Settings
-from ..core.probe import MediaInfo
-from .job_card import ElidedLabel
-from .player import ClipPlayer
-from .tokens import EXPORT_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
-from .widgets import (
+from listo.core import join, naming
+from listo.core.log import get_logger
+from listo.core.presets import Settings
+from listo.core.probe import MediaInfo
+from listo.core.store import Prefs
+from listo.ui.components.player import ClipPlayer
+from listo.ui.components.widgets import (
+    Card,
     Disclosure,
-    FitScroll,
+    ElidedLabel,
     FlowLayout,
+    PathCombo,
     Section,
-    StepHeader,
     ToggleRow,
     combo,
     hbox,
-    hint,
     set_combo,
     vbox,
 )
+from listo.ui.style.tokens import INSPECTOR_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 
 log = get_logger(__name__)
 
@@ -57,11 +58,10 @@ FRIENDLY_TOKENS: tuple[tuple[str, str], ...] = (
     ("folder", "Folder"),
     ("ext", "Old Extension"),
 )
-WHERE = (
-    ("source", "Next to the Original"),
-    ("subfolder", "In a Subfolder"),
-    ("folder", "In a Folder I Pick…"),
-)
+WHERE = [  # then the folders picked before, then "Choose a Destination…" (a PathCombo)
+    ("source", "In Source Folder", "Next to each original file"),
+    ("subfolder", "Create Subfolder", "A new folder next to each original, with the name you give it"),
+]
 
 
 def style_for(template: str) -> str:
@@ -71,55 +71,42 @@ def style_for(template: str) -> str:
     return "custom"
 
 
-def summary(s: Settings) -> tuple[str, str]:
-    """Short (where, name) text for the bottom bar."""
-    if s.destination == "folder" and s.dest_folder:
-        where = Path(s.dest_folder).name or s.dest_folder
-    elif s.destination == "subfolder":
-        where = f"“{s.subfolder_name or 'Listo'}” subfolders"
-    else:
-        where = "Next to Originals"
-    style = style_for(s.naming)
-    name = s.naming if style == "custom" else dict((k, t) for k, t, _ in NAME_STYLES)[style]
-    return where, name
+def picture_width(panel_w: int) -> int:
+    """The preview's width in a right panel this wide (its padding and scroll bar room taken off)."""
+    return panel_w - 2 * SPACE_4 - SCROLL_GUTTER
 
 
-class ExportPanel(QFrame):
+class ExportSettings(QWidget):
     changed = Signal()
     preview_clicked = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setObjectName("ExportPanel")
-        self.setFixedWidth(EXPORT_W)
         self.s = settings
+        self._panel_w = INSPECTOR_W
         self._sample: tuple[str, MediaInfo | None, str] | None = None
         self._custom_text = (
             settings.naming if style_for(settings.naming) == "custom" else "{name}_{preset}_{date}"
         )
 
-        outer = vbox(self, 0, 0)
-        outer.addWidget(StepHeader(3, "Export"))
-        scroll = FitScroll()
-        outer.addWidget(scroll, 1)
-        inner = QWidget()
-        scroll.setWidget(inner)
-        lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
+        lay = vbox(self, 0, SPACE_3)
 
-        # ---- live preview: the selected (or first) clip with every setting applied
-        prev = Section("Preview")
-        pic_w = EXPORT_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
+        # ---- live preview: the picked (or first) clip with every setting applied (the panel puts it on top)
+        self.preview_box = prev = QWidget()
+        vbox(prev, 0, SPACE_1)
+        pic_w = picture_width(INSPECTOR_W)
         # Paused: the exact result (MainWindow renders it). Playing: the clip with its captions, with sound.
         self.player = ClipPlayer(pic_w, round(pic_w * 9 / 16))
         self.player.stage.setCursor(Qt.CursorShape.PointingHandCursor)
         self.player.stage.setToolTip("Click for a bigger preview")
         self.player.clicked.connect(self.preview_clicked)
         self.player.set_message("Making a preview…")
-        prev.add(self.player)
-        self.picture_note = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
+        prev.layout().addWidget(self.player)
+        self.picture_note = ElidedLabel("")
         self.picture_note.setObjectName("Hint")
-        prev.add(self.picture_note)
-        lay.addWidget(prev)
+        prev.layout().addWidget(self.picture_note)
+
+        card = Card("Saves To")
 
         # ---- separate files, or every video in one (only when there are 2+ videos to join)
         self._videos = 0
@@ -136,10 +123,10 @@ class ExportPanel(QFrame):
             lambda _i: self._set("join", self.join_pick.currentData() == "join")
         )
         self.videos_sec.add(self.join_pick)
-        lay.addWidget(self.videos_sec)
+        card.add(self.videos_sec)
 
         # ---- live example of the file name
-        saves = Section("Saves As")
+        saves = Section()
         ex = QFrame()
         ex.setObjectName("Example")
         el = vbox(ex, (SPACE_4, SPACE_3, SPACE_4, SPACE_3), SPACE_1)
@@ -154,12 +141,16 @@ class ExportPanel(QFrame):
         el.addWidget(self.ex_to)
         el.addWidget(self.ex_note)
         saves.add(ex)
-        lay.addWidget(saves)
+        card.add(saves)
 
         # ---- where
         where = Section("Where")
-        self.where = combo([(k, t, "") for k, t in WHERE], self.s.destination)
-        self.where.currentIndexChanged.connect(lambda _i: self._destination(self.where.currentData()))
+        self.where = PathCombo(
+            Prefs(), "recent_folders", WHERE, "Choose a Destination…", self._ask_folder,
+            folders=True,
+        )  # fmt: skip
+        self.where.set_value(self._where_value())
+        self.where.picked.connect(self._destination)
         where.add(self.where)
         self.d_sub_row = QWidget()
         sr = hbox(self.d_sub_row, (0, SPACE_1, 0, 0))
@@ -171,19 +162,7 @@ class ExportPanel(QFrame):
         sr.addWidget(lbl)
         sr.addWidget(self.d_sub, 1)
         where.add(self.d_sub_row)
-        self.d_folder_row = QWidget()
-        fr = hbox(self.d_folder_row, (0, SPACE_1, 0, 0))
-        self.d_path = ElidedLabel("", Qt.TextElideMode.ElideLeft)
-        self.d_path.setObjectName("Muted")
-        self.d_pick = QPushButton("Change…")
-        self.d_pick.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.d_pick.clicked.connect(self._choose_folder)
-        fr.addWidget(self.d_path, 1)
-        fr.addWidget(self.d_pick)
-        where.add(self.d_folder_row)
-        self.d_proxy_hint = hint("Edit proxies go into a Proxy folder next to the original.")
-        where.add(self.d_proxy_hint)
-        lay.addWidget(where)
+        card.add(where)
 
         # ---- name
         name = Section("Name")
@@ -207,7 +186,8 @@ class ExportPanel(QFrame):
             flow.addWidget(b)
         cb.addWidget(tok_wrap)
         name.add(self.custom_box)
-        lay.addWidget(name)
+        card.add(name)
+        lay.addWidget(card)
 
         # ---- collisions + dates
         taken = Section("Name Taken")
@@ -226,9 +206,9 @@ class ExportPanel(QFrame):
         taken.add(self.collision)
         self.adv = Disclosure(
             "Advanced Options",
-            is_open=QSettings("Listo", "Listo").value("export_advanced_open", False, type=bool),
+            is_open=Prefs().value("export_advanced_open", False, type=bool),
         )
-        self.adv.toggled.connect(lambda on: QSettings("Listo", "Listo").setValue("export_advanced_open", on))
+        self.adv.toggled.connect(lambda on: Prefs().setValue("export_advanced_open", on))
         self.adv.add(taken)
 
         after = Section("After Converting")
@@ -245,13 +225,15 @@ class ExportPanel(QFrame):
         after.add(self.k_verify)
         self.adv.add(after)
         lay.addWidget(self.adv)
-        lay.addStretch(1)
+        self._sync()
 
-        # ---- the action, always visible at the bottom
-        bottom = QFrame()
-        bottom.setObjectName("PanelBottom")
-        self.bottom = vbox(bottom, SPACE_4, SPACE_2)
-        outer.addWidget(bottom)
+    def set_panel_width(self, panel_w: int) -> None:
+        """The right panel's width changed (a smaller window): the preview and the name tokens follow."""
+        if panel_w == self._panel_w:
+            return
+        self._panel_w = panel_w
+        w = picture_width(panel_w)
+        self.player.set_size(w, round(w * 9 / 16))
         self._sync()
 
     # ------------------------------------------------------------------ behavior
@@ -266,23 +248,24 @@ class ExportPanel(QFrame):
         n = sum(1 for k in ("collision", "keep_dates", "verify") if getattr(self.s, k) != getattr(base, k))
         self.adv.set_summary(f"{n} changed" if n else "")
 
-    def _destination(self, key: str) -> None:
-        if key == "folder" and not self.s.dest_folder and not self._choose_folder():
-            set_combo(self.where, self.s.destination)
-            return
-        self._set("destination", key)
-        self._sync()
+    def _where_value(self) -> str:
+        """The Where dropdown's value: "source", "subfolder" or the chosen folder."""
+        return (
+            self.s.dest_folder
+            if self.s.destination == "folder" and self.s.dest_folder
+            else self.s.destination
+        )
 
-    def _choose_folder(self) -> bool:
-        start = self.s.dest_folder or str(Path.home())
-        d = QFileDialog.getExistingDirectory(self, "Save Converted Files To…", start)
-        if d:
-            self.s.dest_folder = d
-            set_combo(self.where, "folder")
+    def _ask_folder(self, start: str) -> str:
+        return QFileDialog.getExistingDirectory(self, "Save Converted Files To…", start)
+
+    def _destination(self, value: str) -> None:
+        if value in ("source", "subfolder"):
+            self._set("destination", value)
+        else:
+            self.s.dest_folder = value
             self._set("destination", "folder")
-            self._sync()
-            return True
-        return False
+        self._sync()
 
     def _style(self, key: str) -> None:
         if key == "custom":
@@ -302,21 +285,19 @@ class ExportPanel(QFrame):
     def _sync(self) -> None:
         dest = self.s.destination
         self.d_sub_row.setVisible(dest == "subfolder")
-        self.d_folder_row.setVisible(dest == "folder")
-        self.d_path.setText(self.s.dest_folder or "No Folder Chosen")
-        self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
         self.videos_sec.setVisible(self._videos >= 2 and join.can_join(self.s))
         self._update_advanced()
-        # The dialog sizes itself before it knows its width; reserve room for every wrapped row.
+        # The panel lays out before the naming chips wrap; reserve room for every wrapped row.
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):
             self.tok_flow.itemAt(i).widget().ensurePolished()
-        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(EXPORT_W - 2 * SPACE_4 - SPACE_2))
+        room = picture_width(self._panel_w) - 2 * SPACE_3  # inside the Saves To card
+        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(room))
         self._update_example()
 
     def reload(self) -> None:
-        """Refresh controls from the settings (after a recipe is applied)."""
+        """Refresh controls from the settings (after a recipe is applied, or undo / redo)."""
         widgets = (
             self.join_pick,
             self.where,
@@ -331,7 +312,7 @@ class ExportPanel(QFrame):
             w.blockSignals(True)
         try:
             set_combo(self.join_pick, "join" if self.s.join else "separate")
-            set_combo(self.where, self.s.destination)
+            self.where.set_value(self._where_value())
             self.d_sub.setText(self.s.subfolder_name)
             style = style_for(self.s.naming)
             set_combo(self.styles, style)
@@ -395,7 +376,7 @@ class ExportPanel(QFrame):
                 name = naming.planned_name(path, info, self.s, kind, 1)
         except Exception:
             out_dir, name = p.parent, "?"
-        self.ex_from.setText(
+        self.ex_from.set_full_text(
             f"{p.name} … {Path(self._last_video).name} ({self._videos} clips)"
             if joined
             else f"{p.parent.name}/{p.name}"
@@ -415,7 +396,7 @@ class ExportPanel(QFrame):
                 name = target.name
         except Exception:
             log.debug("example name failed", exc_info=True)
-        self.ex_to.setText(f"→  {out_dir.name}/{name}")
+        self.ex_to.set_full_text(f"→  {out_dir.name}/{name}")
         self.ex_note.setText(note)
         self.ex_note.setVisible(bool(note))
         for i, (_key, _, tpl) in enumerate(NAME_STYLES):  # hover an item to see its result
@@ -431,4 +412,4 @@ class ExportPanel(QFrame):
         else:
             self.player.set_still(None)
             self.player.set_message(note or "No preview")
-        self.picture_note.setText(note if png else "")
+        self.picture_note.set_full_text(note if png else "")

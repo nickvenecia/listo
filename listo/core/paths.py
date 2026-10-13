@@ -6,9 +6,24 @@ import os
 import sys
 from pathlib import Path
 
+_override: Path | None = None
+
+ASSETS = Path(__file__).resolve().parent.parent / "assets"  # fonts, icon: shipped inside the app
+
+
+def use_data_dir(path: Path | None) -> None:
+    """Point Listo at another data folder (tests, the smoke test). None goes back to the normal one."""
+    global _override
+    _override = path
+
 
 def data_dir() -> Path:
-    """Per-user folder for Listo's tools and logs (never inside the app bundle)."""
+    """Per-user folder for Listo's settings, tools, speech models, captions and logs (never inside the app)."""
+    if _override is not None:
+        return _override
+    env = os.environ.get("LISTO_DATA_DIR")
+    if env:
+        return Path(env)
     home = Path.home()
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "Listo"

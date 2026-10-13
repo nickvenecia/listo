@@ -11,16 +11,17 @@ from PySide6.QtCore import Qt, QThreadPool
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
-from ..core import naming
-from ..core.presets import VIDEO_BY_KEY
-from .player import ClipPlayer, space_plays
-from .tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
-from .widgets import Segmented, combo, hbox, vbox
-from .workers import PreviewSignals, PreviewTask
+from listo.core import naming
+from listo.core.presets import VIDEO_BY_KEY
+from listo.ui.components.player import ClipPlayer, space_plays
+from listo.ui.components.widgets import Segmented, combo, hbox, vbox
+from listo.ui.style.tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
+from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
 
 class PreviewDialog(QDialog):
-    """`clips` = [(label, path, info, settings, captions or None)] — every video in the list."""
+    """`clips` = [(label, path, info, settings, captions or None, clock or None)] — every video in the
+    list (clock: Continuous Timecode, see video.preview_plan)."""
 
     def __init__(self, clips: list[tuple], start: int = 0, parent: QWidget | None = None, play: bool = False):
         super().__init__(parent)
@@ -73,7 +74,8 @@ class PreviewDialog(QDialog):
 
     # ------------------------------------------------------------------ behavior
     def _clip(self) -> tuple:
-        return self.clips[max(0, self.pick.currentIndex())]
+        c = self.clips[max(0, self.pick.currentIndex())]
+        return (*c, None) if len(c) == 5 else c  # (no clock given)
 
     def _original(self) -> bool:
         return self.view.value() == "original"
@@ -89,7 +91,7 @@ class PreviewDialog(QDialog):
         play, self._play_next = play or self._play_next, False
         i = max(0, self.pick.currentIndex())
         self.player.set_steps(i > 0, i < len(self.clips) - 1)
-        _, path, info, s, cues = self._clip()
+        _, path, info, s, cues, _clock = self._clip()
         w, h = naming.output_size(info, s, "video")
         size = f"{w}×{h}" if w and h else ""
         preset = VIDEO_BY_KEY[s.video_preset].title
@@ -115,11 +117,13 @@ class PreviewDialog(QDialog):
         if self._original() and self.player.is_open():
             self.player.set_still(None)  # the paused clip is the original
             return
-        _, path, info, s, cues = self._clip()
+        _, path, info, s, cues, clock = self._clip()
         self.seq += 1
         self._at = at
         self.pool.start(
-            PreviewTask(self.seq, path, info, s, at, self._original(), self.signals, captions=cues)
+            PreviewTask(
+                self.seq, path, info, s, at, self._original(), self.signals, captions=cues, clock=clock
+            )
         )
 
     def _got(self, seq: int, data: bytes, error: str) -> None:

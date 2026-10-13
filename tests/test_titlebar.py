@@ -15,17 +15,13 @@ import pytest
 @pytest.mark.skipif(sys.platform == "darwin", reason="the offscreen display on macOS fakes a safe area")
 def test_title_bar_is_on_top_and_drags_the_window(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QEvent, QPoint, QPointF, QSettings, Qt
+    from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.main_window as mw
-    import listo.ui.sidebar as sb
-    from listo.ui import titlebar
+    import listo.ui.window.main_window as mw
+    from listo.ui.components import titlebar
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(titlebar, "supported", lambda: True)  # as on a Mac
     app = QApplication.instance() or QApplication([])
     w = mw.MainWindow()
