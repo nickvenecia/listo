@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QAbstractAnimation, QEvent
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 from tests.cut_off import cut_off
@@ -52,6 +52,10 @@ def _until(app, cond, timeout: float = 30.0) -> bool:
     return cond()
 
 
+def _moving(win: QWidget) -> bool:
+    return any(a.state() == QAbstractAnimation.State.Running for a in win.findChildren(QAbstractAnimation))
+
+
 class Looker:
     """Looks at windows and keeps what doesn't fit, named by where it was seen."""
 
@@ -64,6 +68,10 @@ class Looker:
 
     def look(self, win: QWidget, where: str) -> None:
         _wait(self.app, self.settle_ms)
+        # a slow machine can still be mid-slide after that: wait for every slide and fade to end, then for
+        # the layout to catch up with what their ending changed (a faded-out button leaving its row)
+        _until(self.app, lambda: not _moving(win), timeout=10.0)
+        _wait(self.app, 50)
         self.found += [f"{where}: {problem}" for problem in cut_off(win)]
 
     def sizes(self, win: QWidget, where: str, normal: tuple[int, int] | None = None) -> None:
@@ -185,7 +193,10 @@ def test_no_words_cut_off_in_the_window(qapp, looker, files, monkeypatch):
         w.export_panel.reload()
         w._settings_changed()
         w._refresh_now()
-        assert _until(qapp, lambda: w.btn_check.isEnabled())  # (captions made by the stand-in)
+        # every clip's captions (made by the stand-in), so "Check Captions · 2 New" can't change mid-look
+        wanted = [it for it in w.items.values() if w._wants_captions(it)]
+        assert wanted
+        assert _until(qapp, lambda: all(it.transcript is not None for it in wanted))
         w._refresh_now()
         w._select(set(w.order[:2]))
         look("everything switched on, two files picked")
