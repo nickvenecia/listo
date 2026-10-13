@@ -150,7 +150,7 @@ def test_window_joins_the_list_into_one_video(tmp_path: Path, monkeypatch):
 
     w.add_paths([str(a), str(b)])
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
-    assert w.export_panel.videos_sec.isVisibleTo(w.export_panel)  # 2 videos: the choice appears
+    assert w.export_panel.videos_sec.isVisibleTo(w.panel)  # 2 videos: the choice appears (video card)
     ep.set_combo(w.export_panel.join_pick, "join")
     w.export_panel._set("join", True)
     assert w.btn_start.text() == "Convert && Join 2 Files"

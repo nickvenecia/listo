@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QComboBox,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLayout,
@@ -189,10 +190,33 @@ class Card(QFrame):
             self.lay.addLayout(item)
 
 
-class Disclosure(QFrame):
-    """A fold-away group (Image, Burn-In, Encoding): a card whose header opens and closes the controls under it.
+class GroupHeading(QWidget):
+    """A heading over a run of cards in the right panel: what they're for, and for how many files
+    ("9 Videos", "Saves To"), with a short muted note after it ("· 1 with its own format")."""
 
-    Folded, the header says what's changed inside ("Burn-In · 2 changed"), so a changed setting is never
+    def __init__(self, title: str = "", parent: QWidget | None = None):
+        super().__init__(parent)
+        lay = hbox(self, (0, tokens.SPACE_2, 0, 0), tokens.SPACE_1)
+        self.title = QLabel(title)
+        self.title.setObjectName("GroupTitle")
+        self.note = QLabel()
+        self.note.setObjectName("GroupNote")
+        self.note.hide()
+        lay.addWidget(self.title)
+        lay.addWidget(self.note, 1)
+
+    def set_text(self, title: str, note: str = "") -> None:
+        if self.title.text() != title:
+            self.title.setText(title)
+        if self.note.text() != note:
+            self.note.setText(note)
+            self.note.setVisible(bool(note))
+
+
+class Disclosure(QFrame):
+    """A fold-away group (Picture, Burn-In, Captions): a card whose header opens and closes the controls under it.
+
+    Folded, the header says what's on inside ("Burn-In · Timecode, File Name"), so a changed setting is never
     hidden silently."""
 
     toggled = Signal(bool)
@@ -237,6 +261,32 @@ class Disclosure(QFrame):
 
     def _show_title(self) -> None:
         self.header.set_full_text(f" {self._title}" + (f"  ·  {self._summary}" if self._summary else ""))
+
+
+def fade(w: QWidget, on: bool) -> None:
+    """Show or hide a small control with a quick fade (FADE_MS), never a pop. Hidden, it takes no room."""
+    if getattr(w, "_fade_on", not w.isHidden()) == on:
+        return
+    w._fade_on = on
+    fx = w.graphicsEffect()
+    if not isinstance(fx, QGraphicsOpacityEffect):
+        fx = QGraphicsOpacityEffect(w)
+        fx.setOpacity(0.0 if on else 1.0)
+        w.setGraphicsEffect(fx)
+    anim = getattr(w, "_fade_anim", None)
+    if anim is None:
+        anim = QVariantAnimation(w)
+        anim.setDuration(tokens.FADE_MS)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.valueChanged.connect(lambda v: w.graphicsEffect().setOpacity(float(v)))
+        anim.finished.connect(lambda: w.setVisible(w._fade_on))
+        w._fade_anim = anim
+    anim.stop()
+    if on:
+        w.show()
+    anim.setStartValue(fx.opacity())
+    anim.setEndValue(1.0 if on else 0.0)
+    anim.start()
 
 
 def repolish(w: QWidget) -> None:

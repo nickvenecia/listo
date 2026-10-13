@@ -84,13 +84,15 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     )
     sb.g_picture.set_open(True)
     assert sb.matte_row.isVisibleTo(sb)
-    from listo.core.presets import Settings
-    from listo.ui.panels.convert import GROUPS
+    from listo.ui.panels.convert import summary
 
-    for group, key in ((sb.g_picture, "picture"), (sb.g_text, "text")):
-        n = sum(1 for k in GROUPS[key] if getattr(s, k) != getattr(Settings(), k))
-        assert n >= 1 and f"{n} changed" in group.header.text()  # changed settings never hide silently
+    sb.g_picture.set_open(False)
+    sb.g_text.set_open(False)
+    assert summary("picture", s) == "2.35:1"  # folded groups say what's on, so nothing hides silently
+    assert summary("text", s) == "Date & Time, VHS Look"
+    assert "VHS Look" in sb.g_text.header._full and "2.35:1" in sb.g_picture.header._full
     sb.g_text.set_open(True)
+    sb.g_captions.set_open(True)  # (captions have a fold of their own)
     sb.cc_on.setChecked(True)
     assert s.captions and sb.cc_box.isVisibleTo(sb)
     assert sb.burn_badge.isVisibleTo(sb)  # VHS style + a burn-in on

@@ -20,12 +20,12 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
 │ Files ⌄    +  │ ⋮⋮ ▢ A001_C001.MOV                         Ready    │ ┌ preview ───────┐ │
 │ ▸ All Files 12│      0:02 · 3840×2160 · 23.976p · HEVC              │ └────────────────┘ │
 │   Videos    9 │      [ProRes 422 ▾]  → A001_C001.mov                │ Recipe             │
-│   Photos    2 │ ⋮⋮ ▢ A001_C002.MOV                         31% ▬▬   │ Video|Photo|Audio  │
+│   Photos    2 │ ⋮⋮ ▢ A001_C002.MOV                         31% ▬▬   │ 9 Videos           │
 │   Audio     1 │ …                                                   │ ╭ Format… ╮        │
-│ Progress ⌄    │                                                     │ ╭ ▸ Image ╮        │
+│ Progress ⌄    │                                                     │ ╭ ▸ Picture ╮      │
 │   To Convert 9│                                                     │ ╭ ▸ Burn-In ╮      │
-│   Done      2 │ ─────────────────────────────────────────────────── │ ╭ ▸ Encoding ╮     │
-│   Need a Look1│ 9 videos · 2 photos · 1 audio file   [Convert 12 Files]│ ╭ Saves To ╮    │
+│   Done      2 │ ─────────────────────────────────────────────────── │ ╭ ▸ Captions ╮     │
+│   Need a Look1│ 9 videos · 2 photos · 1 audio file   [Convert 12 Files]│ Saves To  ╭ … ╮ │
 │ (NV) Your Name│ 0:42 of media                                       │ ╭ ▸ Advanced ╮     │
 └───────────────┴────────────────────────────────────────────────────┴───────────────────┘
   left panel (glass)        the files (on the backdrop)                   right panel (glass)
@@ -44,7 +44,9 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
   Check for Updates and Settings).
 - **The toolbar** (`TOOLBAR_H`): the place's large title and count ("12", or "3 selected") on the left, the
   **search capsule** centred (it shrinks to `SEARCH_MIN` before anything collides), the primary round **+** on
-  the right (Add Files / a Folder / a Link). Nothing else.
+  the right (Add Files / a Folder / a Link). While there are files and the right panel is closed, a round
+  sliders button after the + brings it back (`MainWindow.btn_panel`; it fades in where the panel's ✕ was).
+  Nothing else.
 - **The file list** (`window/tables.FileList`): one painted row per file, `TABLE_ROW_H` tall (never a widget per
   row). Left to right: the grip (drag to reorder), a 16:9 thumbnail on `SCREEN`, the name, what the file is,
   then its format chip, a trim and the new name; on the right its status word (colored by tone) and progress
@@ -59,13 +61,23 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
   **Add a Link…**. Each is an icon in a circle of the accent's tint (`START_BADGE`), a title and a few words; a
   click, Space or Return picks it. No headline, no search (there's nothing to search). Files dragged over the
   window light the Add Files tile.
-- **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**. On top,
-  the live preview (the picked clip, or the first, exactly as it will come out; the sample test pattern when the
-  list is empty). Then Recipe, the Video / Photo / Audio tabs, the format card, the fold-away **Image**,
-  **Burn-In** and **Encoding** cards, **Saves To** (joining, the example name, Where, Name) and **Advanced
-  Options**. Its header: the title, a round eye (the bigger Preview window), the round ✕. It slides in
-  (`DOCK_MS`) when the first file arrives or you click a file, and away with its ✕, Esc or a click on empty space
-  in the list. View › Convert Settings (⌥⌘I) toggles it. On a smaller window it narrows (to `INSPECTOR_MIN`).
+- **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**, one recipe
+  for every file in the list. On top, the live preview (the picked clip, or the first, exactly as it will come
+  out; under it the clip's name and where it is in the list, "1 of 9"; the sample test pattern when the list is
+  empty). Then Recipe, then a **heading for each kind of file in the list** with how many there are ("9 Videos",
+  "2 Photos", "1 Audio File"; `widgets.GroupHeading`), noting the files given their own format on their row
+  ("· 1 with its own format"). A kind that isn't in the list doesn't show (with nothing in the list, all three
+  do). **Never tabs for the kinds**: "Video | Audio" tabs read as an export's picture and sound settings, as in
+  Resolve or Premiere. Videos: the format card (Format, Flavor, Size, Clips: a file per clip or one joined
+  video, Keep Every Audio Track), then the fold-away **Picture**, **Burn-In** and **Captions**. Photos: one card
+  (format, quality, size, camera info). Audio: the format. Then **Saves To** (the example name, Where, Name) and
+  **Advanced** (name taken, dates, double-check, and Speed: these are for every file). Its header: the title,
+  a round eye (the bigger Preview window), the round ✕.
+- **The right panel belongs to the list, not to a picked file.** It slides in (`DOCK_MS`) when the first file
+  arrives and away when the last one leaves: no files, no panel (the start tiles have the window). Picking a
+  file only changes which clip the preview shows; it never opens or closes the panel, and neither do Esc or a
+  click on empty space. Its ✕ closes it; then the toolbar's round sliders button or View › Convert Settings
+  (⌥⌘I) brings it back. On a smaller window it narrows (to `INSPECTOR_MIN`).
 - **Size and place**: the first launch fills the screen (all but the menu bar and Dock); after that Listo opens
   where and how big you left it, if that still fits a screen.
 - **The Mac title bar is Listo's own** (`components/titlebar.py`): the traffic lights, the wordmark centred,
@@ -193,12 +205,13 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 |---|---|
 | `panels.LeftPanel` + `NavRow` | Every list of places on the left (the sidebar, Settings' sections) |
 | `panels.SidePanel` | Every panel on the right; `header_icon()` adds its round buttons, the ✕ is always last |
-| `widgets.Card` · `Disclosure` | Every group inside a panel. A Disclosure folds away and its header says what's changed ("Burn-In · 2 changed"), so nothing that changes the output hides silently. Each remembers whether it's open |
+| `widgets.Card` · `Disclosure` | Every group inside a panel. A Disclosure folds away and its header says what's on inside, in a few words ("Burn-In · Timecode, File Name"; `convert.summary`), so nothing that changes the output hides silently. Each remembers whether it's open |
+| `widgets.GroupHeading` | A heading over a run of cards in the right panel: a kind of file and how many ("9 Videos", with a muted note after it), Saves To |
 | `widgets.Section("Title")` | A labelled group of controls: Title Case label above, `SPACE_1` apart |
 | `widgets.combo(items, current)` / `set_combo` / `disable_item` | **Every** pick-one setting, however few choices; extra detail in the item's tooltip |
 | `widgets.PathCombo` | **Every** setting that points at a file or folder (LUT, Where); see below |
 | `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, the whole row clickable |
-| `widgets.Segmented` | 2–3 views of the same thing (Video / Photo / Audio; Match System / Light / Dark) |
+| `widgets.Segmented` | 2–3 views of the same thing (Match System / Light / Dark) |
 | `widgets.AccentPicker` | The Accent Color circles in Settings › General |
 | `widgets.SearchField` | The toolbar's search capsule |
 | `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip |
@@ -225,7 +238,7 @@ subfolder's name) shows under it only for that choice.
 - **The alert** (`dialogs/common.Alert`): narrow (`ALERT_W`), the app icon, a bold question, one short line, Cancel
   and the action side by side (red when destructive). Return does it, Esc cancels.
 - **Picking**: click picks, ⌘-click adds or removes one, Shift-click a range, ⌘A everything showing, ↑ / ↓ the
-  file above or below. **Esc** (or a click on empty space in the list) picks nothing and closes the right panel.
+  file above or below. **Esc** (or a click on empty space in the list) picks nothing; the right panel stays.
 - **Drag to reorder** by a row's grip: the row lifts onto a card and follows the pointer, the others slide apart
   to show where it will land, the list scrolls near its edges, Esc puts it back. List order is the order a joined
   video plays in and Continuous Timecode runs in. A batch keeps its order while it converts.
@@ -253,7 +266,7 @@ subfolder's name) shows under it only for that choice.
 The right panel slides over `DOCK_MS` (ease-out) and the list beside it slides as a picture, then the real one
 comes back. Dragged rows ease toward their places (`LIFT_EASE` per `LIFT_STEP_MS`). A toast rises `TOAST_RISE` as it
 fades in (`TOAST_IN_MS`, ease-out) and fades away (`TOAST_OUT_MS`). Small controls that come and go
-fade over `FADE_MS`. Nothing bounces. The backdrop, the glass, icons and thumbnails are drawn once and reused.
+fade over `FADE_MS` (`widgets.fade`). Nothing bounces. The backdrop, the glass, icons and thumbnails are drawn once and reused.
 
 ## 9. Words
 

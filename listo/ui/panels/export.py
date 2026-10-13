@@ -1,5 +1,6 @@
-"""Saves To, in the right panel: the live preview (placed at the panel's top), joining, the example name, where
-files go, what they're called, and the advanced options."""
+"""Saves To, in the right panel: the live preview (placed at the panel's top), the Clips choice (one file per
+clip or joined; placed in the video card), the example name, where files go, what they're called, and the
+advanced options (with Speed, placed there by the panel)."""
 
 from __future__ import annotations
 
@@ -27,6 +28,7 @@ from listo.ui.components.widgets import (
     Disclosure,
     ElidedLabel,
     FlowLayout,
+    GroupHeading,
     PathCombo,
     Section,
     ToggleRow,
@@ -35,6 +37,7 @@ from listo.ui.components.widgets import (
     set_combo,
     vbox,
 )
+from listo.ui.panels.convert import summary
 from listo.ui.style.tokens import INSPECTOR_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
 
 log = get_logger(__name__)
@@ -106,12 +109,14 @@ class ExportSettings(QWidget):
         self.picture_note.setObjectName("Hint")
         prev.layout().addWidget(self.picture_note)
 
-        card = Card("Saves To")
+        lay.addWidget(GroupHeading("Saves To"))
+        card = Card()
 
-        # ---- separate files, or every video in one (only when there are 2+ videos to join)
+        # ---- separate files, or every video in one (only when there are 2+ videos to join); it sits in
+        # the video card (ConvertPanel puts it there), but the example name here depends on it
         self._videos = 0
         self._last_video = ""
-        self.videos_sec = Section("Videos")
+        self.videos_sec = Section("Clips")
         self.join_pick = combo(
             [
                 ("separate", "One File per Clip", "Each clip becomes its own file"),
@@ -123,7 +128,6 @@ class ExportSettings(QWidget):
             lambda _i: self._set("join", self.join_pick.currentData() == "join")
         )
         self.videos_sec.add(self.join_pick)
-        card.add(self.videos_sec)
 
         # ---- live example of the file name
         saves = Section()
@@ -244,9 +248,7 @@ class ExportSettings(QWidget):
         self.changed.emit()
 
     def _update_advanced(self) -> None:
-        base = Settings()
-        n = sum(1 for k in ("collision", "keep_dates", "verify") if getattr(self.s, k) != getattr(base, k))
-        self.adv.set_summary(f"{n} changed" if n else "")
+        self.adv.set_summary(summary("advanced", self.s))
 
     def _where_value(self) -> str:
         """The Where dropdown's value: "source", "subfolder" or the chosen folder."""

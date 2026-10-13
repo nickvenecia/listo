@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.0
+- **Convert To is about all your files, and acts like it.** It slides in when you add files and goes away when the list is empty, so the start tiles get the whole window. Clicking a clip only changes which clip the preview shows: the panel stays where it is (Esc and clicking empty space just deselect). Closed it with its ✕? The round sliders button at the top right brings it back, or ⌥⌘I
+- **No more Video / Photo / Audio tabs.** Convert To shows a heading for each kind of file you've added, with how many there are: **9 Videos**, **2 Photos**, **1 Audio File**, each with its own settings under it. Only videos in the list? You only see video settings. Files you gave their own format on their row are counted beside the heading ("· 1 with its own format"), and the row's menu says **Same as the Other Videos** to put one back
+- **Settings where you'd look for them**: a file per clip or **Join Into One Video**, and **Keep Every Audio Track**, are in the video card. **Captions** has its own fold. **Image** is now **Picture** (frame, LUT, interlaced), so it isn't mistaken for photos. **Hardware Encoding** and **Convert Two Files at Once** are under **Advanced**, because they're for every file, photos too
+- **Folded groups say what's on**, like "Burn-In · Timecode, File Name" or "Picture · 2.39:1, LUT", instead of "2 changed"
+- **The preview says where it is in the list**: "A001_C001.MOV · 1 of 9"
+
 ## 3.0.0
 - **A new window.** On the left, your files by kind (All Files, Videos, Photos, Audio) and by how far along they are (To Convert, Done, Need a Look), each with a count. In the middle, the list, with a search at the top and the progress and **Convert** under it. On the right, **Convert To** slides in with everything about how the files come out: the live preview on top, then the recipe, format, Image, Burn-In, Encoding and where they're saved. Close it with its ✕ or Esc; it comes back when you click a file
 - **Light and dark, your way**: Listo follows your computer (and switches with it while it's open), or pick Light or Dark in **Settings › General**. Pictures, previews and thumbnails always sit on black, like a monitor
