@@ -1,20 +1,20 @@
-"""Storage & Cache: what Listo keeps on this computer, how much space it takes, and deleting it."""
+"""Storage & Cache, in Settings › Your Data: what Listo keeps on this computer, how much space it takes, and
+deleting it."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QFrame, QLabel, QMessageBox, QPushButton, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
 from listo.core import storage
-from listo.core.fileutil import reveal
-from listo.core.paths import data_dir
-from listo.ui.components.widgets import hbox, hint, vbox
-from listo.ui.style.tokens import DIALOG_W, SPACE_1, SPACE_2, SPACE_3, SPACE_5
+from listo.ui.components.widgets import Card, hbox, hint, vbox
+from listo.ui.dialogs.common import confirm, notice
+from listo.ui.style.tokens import SPACE_1, SPACE_2, SPACE_3
 
 
-class StorageDialog(QDialog):
+class StorageView(QWidget):
     """busy(key) -> a reason that kind can't be deleted right now ('' if it can).
     cleared(key) is called after a kind was deleted (the window forgets what it held)."""
 
@@ -25,13 +25,8 @@ class StorageDialog(QDialog):
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
-        self.setWindowTitle("Storage & Cache")
-        self.setMinimumWidth(DIALOG_W + 2 * SPACE_5 * 3)
         self.busy, self.cleared = busy, cleared
-        lay = vbox(self, SPACE_5, SPACE_3)
-        title = QLabel("Storage & Cache")
-        title.setObjectName("DialogTitle")
-        lay.addWidget(title)
+        lay = vbox(self, 0, SPACE_3)
         lay.addWidget(
             hint(
                 "Everything here is downloaded or made again when it's needed. Your settings, recipes "
@@ -40,12 +35,10 @@ class StorageDialog(QDialog):
         )
         self.rows: dict[str, tuple[QLabel, QPushButton]] = {}
         for k in storage.kinds():
-            card = QFrame()
-            card.setObjectName("Example")
-            cl = vbox(card, (SPACE_3, SPACE_2, SPACE_3, SPACE_2), SPACE_1)
+            card = Card()
             top = hbox(spacing=SPACE_2)
             name = QLabel(k.title)
-            name.setObjectName("ExTo")
+            name.setObjectName("CardTitle")
             size = QLabel()
             size.setObjectName("Muted")
             delete = QPushButton("Delete")
@@ -55,31 +48,22 @@ class StorageDialog(QDialog):
             top.addStretch(1)
             top.addWidget(size)
             top.addWidget(delete)
-            cl.addLayout(top)
-            cl.addWidget(hint(k.note))
+            card.add(top)
+            card.add(hint(k.note))
+            card.lay.setSpacing(SPACE_1)
             lay.addWidget(card)
             self.rows[k.key] = (size, delete)
 
-        bottom = hbox(margins=(0, SPACE_1, 0, 0), spacing=SPACE_2)
+        bottom = hbox(spacing=SPACE_2)
         self.total = QLabel()
         self.total.setObjectName("Muted")
         bottom.addWidget(self.total)
         bottom.addStretch(1)
-        folder = QPushButton("Show Folder")
-        folder.setCursor(Qt.CursorShape.PointingHandCursor)
-        folder.clicked.connect(self._show_folder)
-        bottom.addWidget(folder)
         self.btn_all = QPushButton("Delete All")
         self.btn_all.setObjectName("Danger")
         self.btn_all.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_all.clicked.connect(lambda: self._delete([k.key for k in storage.kinds()]))
         bottom.addWidget(self.btn_all)
-        done = QPushButton("Done")
-        done.setObjectName("Primary")
-        done.setDefault(True)
-        done.setCursor(Qt.CursorShape.PointingHandCursor)
-        done.clicked.connect(self.accept)
-        bottom.addWidget(done)
         lay.addLayout(bottom)
         self.refresh()
 
@@ -102,24 +86,18 @@ class StorageDialog(QDialog):
         keys = [k for k in keys if k not in blocked]
         if not keys:
             if blocked:
-                QMessageBox.information(self, "Not Right Now", self.busy(blocked[0]))
+                notice(self, "Not Right Now", self.busy(blocked[0]))
             return
         titles = {k.key: k.title for k in storage.kinds()}
         names = ", ".join(titles[k] for k in keys)
         extra = ""
         if "captions" in keys:
-            extra = "\n\nCaptions you checked or fixed will be gone; clips are listened to again if you need captions."
-        ans = QMessageBox.question(self, "Delete?", f"Delete {names}?{extra}")
-        if ans != QMessageBox.StandardButton.Yes:
+            extra = " Captions you checked or fixed will be gone; clips are listened to again if you need captions."
+        if not confirm(self, f"Delete {names}?", f"It's made again when it's needed.{extra}", "Delete"):
             return
         for k in keys:
             storage.clear(k)
             self.cleared(k)
         self.refresh()
         if blocked:
-            QMessageBox.information(self, "Some Kept", self.busy(blocked[0]))
-
-    def _show_folder(self) -> None:
-        d = data_dir()
-        d.mkdir(parents=True, exist_ok=True)
-        reveal(d)
+            notice(self, "Some Kept", self.busy(blocked[0]))

@@ -1,4 +1,5 @@
-"""The settings panel on the right: recipe picker + Video / Photo / Audio settings."""
+"""Convert To, in the right panel: the recipe, then the Video / Photo / Audio settings (format first, then the
+Image, Burn-In and Encoding cards)."""
 
 from __future__ import annotations
 
@@ -10,13 +11,8 @@ from PySide6.QtWidgets import (
     QColorDialog,
     QComboBox,
     QFileDialog,
-    QFrame,
-    QInputDialog,
     QLabel,
-    QMessageBox,
-    QScrollArea,
     QSlider,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -39,12 +35,11 @@ from listo.core.presets import (
 from listo.core.tape import BLUE, NO_EFFECTS
 from listo.core.tools import Capabilities
 from listo.ui.components.widgets import (
+    Card,
     Disclosure,
-    FitScroll,
     PathCombo,
     Section,
     Segmented,
-    StepHeader,
     ToggleRow,
     combo,
     disable_item,
@@ -52,7 +47,8 @@ from listo.ui.components.widgets import (
     set_combo,
     vbox,
 )
-from listo.ui.style.tokens import ICON, SCROLL_GUTTER, SIDEBAR_W, SPACE_1, SPACE_3, SPACE_4
+from listo.ui.dialogs.common import ask_name, confirm
+from listo.ui.style.tokens import ICON, SPACE_1, SPACE_3
 
 ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE = "__save__", "__update__", "__delete__"
 LUT_TIP = "Apply a LUT to every video — handy for review copies"
@@ -74,15 +70,34 @@ AUDIO_TIPS = {
 }
 
 
-def _page() -> tuple[QScrollArea, QVBoxLayout]:
-    """A scrolling settings page. Sections go in it; the layout spaces them SPACE_3 apart."""
-    area = FitScroll()
-    area.setWidgetResizable(True)
-    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    inner = QWidget()
-    lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
-    area.setWidget(inner)
-    return area, lay
+def _page() -> tuple[QWidget, QVBoxLayout]:
+    """A settings page (the right panel scrolls them all). Cards go in it, SPACE_3 apart."""
+    page = QWidget()
+    return page, vbox(page, 0, SPACE_3)
+
+
+class _Pages(QWidget):
+    """Video / Photo / Audio: only the chosen page shows (and takes room), so the panel scrolls just as far
+    as that page needs."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.lay = vbox(self, 0, 0)
+        self.pages: list[QWidget] = []
+        self._i = 0
+
+    def addWidget(self, w: QWidget) -> None:
+        self.pages.append(w)
+        self.lay.addWidget(w)
+        w.setVisible(len(self.pages) - 1 == self._i)
+
+    def setCurrentIndex(self, i: int) -> None:
+        self._i = i
+        for n, w in enumerate(self.pages):
+            w.setVisible(n == i)
+
+    def currentIndex(self) -> int:
+        return self._i
 
 
 def _checks(*rows: ToggleRow, row: bool = False) -> QVBoxLayout:
@@ -120,14 +135,12 @@ GROUPS: dict[str, tuple[str, ...]] = {
 }
 
 
-class Sidebar(QFrame):
+class ConvertSettings(QWidget):
     changed = Signal()
     recipe_applied = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setObjectName("Sidebar")
-        self.setFixedWidth(SIDEBAR_W)
         self.s = settings
         self.qs = QSettings("Listo", "Listo")
         self._loading = False
@@ -140,8 +153,7 @@ class Sidebar(QFrame):
         self._emit_timer.timeout.connect(self._emit_changed)
 
         lay = vbox(self, 0, SPACE_3)
-        lay.addWidget(StepHeader(2, "Convert To"))
-        top = vbox(margins=(SPACE_4, 0, SPACE_4, 0), spacing=SPACE_3)
+        top = vbox(spacing=SPACE_3)
         recipe = Section("Recipe")
         self.recipe = QComboBox()
         self.recipe.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -154,8 +166,8 @@ class Sidebar(QFrame):
         self.tabs = Segmented([("video", "Video"), ("photo", "Photo"), ("audio", "Audio")])
         top.addWidget(self.tabs)
         lay.addLayout(top)
-        self.stack = QStackedWidget()
-        lay.addWidget(self.stack, 1)
+        self.stack = _Pages()
+        lay.addWidget(self.stack)
 
         self._build_video()
         self._build_photo()
@@ -468,8 +480,10 @@ class Sidebar(QFrame):
         )
         self.sec_audio.add(self.v_tracks)
 
+        card = Card()
         for sec in (fmt, self.sec_variant, self.sec_size):
-            lay.addWidget(sec)
+            card.add(sec)
+        lay.addWidget(card)
         self.g_picture = self._group("Image", "picture")
         for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
             self.g_picture.add(sec)
@@ -481,7 +495,6 @@ class Sidebar(QFrame):
             self.g_sound.add(sec)
         for g in (self.g_picture, self.g_text, self.g_sound):
             lay.addWidget(g)
-        lay.addStretch(1)
         self.stack.addWidget(page)
         self._sync_lut()
 
@@ -519,12 +532,13 @@ class Sidebar(QFrame):
             lambda v: self._set("photo_keep_metadata", v),
         )
         meta.add(self.p_meta)
+        card = Card()
         for sec in (fmt, self.sec_quality, size):
-            lay.addWidget(sec)
+            card.add(sec)
+        lay.addWidget(card)
         self.p_adv = self._group("More", "photo")
         self.p_adv.add(meta)
         lay.addWidget(self.p_adv)
-        lay.addStretch(1)
         self.stack.addWidget(page)
 
     def _build_audio(self) -> None:
@@ -536,8 +550,9 @@ class Sidebar(QFrame):
         )
         self.a_fmt.currentIndexChanged.connect(lambda: self._set("audio_format", self.a_fmt.currentData()))
         fmt.add(self.a_fmt)
-        lay.addWidget(fmt)
-        lay.addStretch(1)
+        card = Card()
+        card.add(fmt)
+        lay.addWidget(card)
         self.stack.addWidget(page)
 
     # ------------------------------------------------------------------ behavior
@@ -755,10 +770,7 @@ class Sidebar(QFrame):
         elif data == ACTION_UPDATE and current:
             self._store_recipe(current)
         elif data == ACTION_DELETE and current:
-            if (
-                QMessageBox.question(self, "Delete Recipe", f"Delete the recipe “{current}”?")
-                == QMessageBox.StandardButton.Yes
-            ):
+            if confirm(self, f"Delete the Recipe “{current}”?", "Your files aren't touched.", "Delete"):
                 self._delete_recipe(current)
         elif data:
             vals = next((v for n, v, _ in self._all_recipes() if n == data), None)
@@ -774,9 +786,8 @@ class Sidebar(QFrame):
         self._match_recipe()  # put the picker back on the right entry
 
     def _save_recipe(self) -> None:
-        name, ok = QInputDialog.getText(self, "Save Recipe", "Name this recipe:")
-        name = name.strip()
-        if not ok or not name:
+        name = ask_name(self, "Save as a Recipe", "Save", placeholder="Client Review, Proxies…")
+        if not name:
             return
         if name in (ACTION_SAVE, ACTION_UPDATE, ACTION_DELETE):
             return

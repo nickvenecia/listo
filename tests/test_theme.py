@@ -82,7 +82,7 @@ def test_window_follows_the_computer(qapp, tmp_path, monkeypatch, back_to_dark):
     monkeypatch.setenv("LISTO_LOOK", "light")  # the computer switched to light mode
     appmod._system_changed(qapp)
     assert tokens.SCHEME == "light" and tokens.LIGHT["PANEL"] in qapp.styleSheet()
-    w.sidebar.g_text.set_open(True)
+    w.convert.g_text.set_open(True)
     w.grab()  # everything repaints in the new look without errors
     monkeypatch.setenv("LISTO_LOOK", "dark")
     appmod._system_changed(qapp)

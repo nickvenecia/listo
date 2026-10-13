@@ -368,7 +368,7 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide6.QtCore import QSettings
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QApplication
 
     import listo.ui.panels.convert as sb
     import listo.ui.window.jobs as wk
@@ -381,7 +381,7 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
     answers = []
-    monkeypatch.setattr(mw.QMessageBox, "question", lambda *a, **k: answers.pop(0))
+    monkeypatch.setattr(mw, "confirm", lambda *a, **k: answers.pop(0))
     app = QApplication.instance() or QApplication([])
     a, b = tmp_path / "a.mov", tmp_path / "b.mov"
     for c in (a, b):
@@ -403,12 +403,12 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
     assert {it.transcript.model for it in w.items.values()} == {"small"}  # Balanced
     first, second = its()
     first.transcript.edited = True  # you fixed this one by hand
-    answers.append(QMessageBox.StandardButton.No)
+    answers.append(False)
     w.settings.caption_model = "fast"
     w._settings_changed()
     assert wait(lambda: second.transcript.model == "base")  # redone with Fast
     assert first.transcript.model == "small" and not answers  # asked, kept your fixes
-    answers.append(QMessageBox.StandardButton.Yes)
+    answers.append(True)
     w.settings.caption_model = "best"
     w._settings_changed()
     assert wait(

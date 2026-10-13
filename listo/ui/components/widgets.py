@@ -92,24 +92,34 @@ class Section(QWidget):
 
 
 class ElidedLabel(QLabel):
-    """A one-line label that cuts long text short with "…" instead of widening its panel."""
+    """A one-line label that cuts long text short with "…" instead of widening its panel (at the end, or
+    `mode` ElideMiddle / ElideLeft for file names and paths)."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None):
+    def __init__(
+        self,
+        text: str = "",
+        mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight,
+        parent: QWidget | None = None,
+    ):
         super().__init__(parent)
         self._full = ""
+        self._mode = mode
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.set_full_text(text)
 
     def set_full_text(self, text: str) -> None:
+        if text == self._full and self.text():
+            return
         self._full = text
         self.setToolTip("")
         self._elide()
+        self.updateGeometry()  # its room in the layout follows the new text
 
     def full_text(self) -> str:
         return self._full
 
     def _elide(self) -> None:
-        shown = self.fontMetrics().elidedText(self._full, Qt.TextElideMode.ElideRight, max(1, self.width()))
+        shown = self.fontMetrics().elidedText(self._full, self._mode, max(1, self.width()))
         self.setText(shown)
         self.setToolTip(theme.plain_tip(self._full) if shown != self._full else "")
 

@@ -1,4 +1,5 @@
-"""The export panel (right side): live preview, where files go, what they're called, and Convert."""
+"""Saves To, in the right panel: the live preview (placed at the panel's top), joining, the example name, where
+files go, what they're called, and the advanced options."""
 
 from __future__ import annotations
 
@@ -21,12 +22,12 @@ from listo.core.presets import Settings
 from listo.core.probe import MediaInfo
 from listo.ui.components.player import ClipPlayer
 from listo.ui.components.widgets import (
+    Card,
     Disclosure,
-    FitScroll,
+    ElidedLabel,
     FlowLayout,
     PathCombo,
     Section,
-    StepHeader,
     ToggleRow,
     combo,
     hbox,
@@ -35,7 +36,6 @@ from listo.ui.components.widgets import (
     vbox,
 )
 from listo.ui.style.tokens import INSPECTOR_W, SCROLL_GUTTER, SPACE_1, SPACE_2, SPACE_3, SPACE_4
-from listo.ui.window.job_card import ElidedLabel
 
 log = get_logger(__name__)
 
@@ -84,42 +84,42 @@ def summary(s: Settings) -> tuple[str, str]:
     return where, name
 
 
-class ExportPanel(QFrame):
+def picture_width(panel_w: int) -> int:
+    """The preview's width in a right panel this wide (its padding and scroll bar room taken off)."""
+    return panel_w - 2 * SPACE_4 - SCROLL_GUTTER
+
+
+class ExportSettings(QWidget):
     changed = Signal()
     preview_clicked = Signal()
 
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
-        self.setObjectName("ExportPanel")
-        self.setFixedWidth(INSPECTOR_W)
         self.s = settings
+        self._panel_w = INSPECTOR_W
         self._sample: tuple[str, MediaInfo | None, str] | None = None
         self._custom_text = (
             settings.naming if style_for(settings.naming) == "custom" else "{name}_{preset}_{date}"
         )
 
-        outer = vbox(self, 0, 0)
-        outer.addWidget(StepHeader(3, "Export"))
-        scroll = FitScroll()
-        outer.addWidget(scroll, 1)
-        inner = QWidget()
-        scroll.setWidget(inner)
-        lay = vbox(inner, (SPACE_4, SPACE_3, SPACE_4 - SCROLL_GUTTER, SPACE_4), SPACE_3)
+        lay = vbox(self, 0, SPACE_3)
 
-        # ---- live preview: the selected (or first) clip with every setting applied
-        prev = Section("Preview")
-        pic_w = INSPECTOR_W - 2 * SPACE_4 - 1  # (the panel's 1 px edge)
+        # ---- live preview: the picked (or first) clip with every setting applied (the panel puts it on top)
+        self.preview_box = prev = QWidget()
+        vbox(prev, 0, SPACE_1)
+        pic_w = picture_width(INSPECTOR_W)
         # Paused: the exact result (MainWindow renders it). Playing: the clip with its captions, with sound.
         self.player = ClipPlayer(pic_w, round(pic_w * 9 / 16))
         self.player.stage.setCursor(Qt.CursorShape.PointingHandCursor)
         self.player.stage.setToolTip("Click for a bigger preview")
         self.player.clicked.connect(self.preview_clicked)
         self.player.set_message("Making a preview…")
-        prev.add(self.player)
-        self.picture_note = ElidedLabel("", Qt.TextElideMode.ElideMiddle)
+        prev.layout().addWidget(self.player)
+        self.picture_note = ElidedLabel("")
         self.picture_note.setObjectName("Hint")
-        prev.add(self.picture_note)
-        lay.addWidget(prev)
+        prev.layout().addWidget(self.picture_note)
+
+        card = Card("Saves To")
 
         # ---- separate files, or every video in one (only when there are 2+ videos to join)
         self._videos = 0
@@ -136,10 +136,10 @@ class ExportPanel(QFrame):
             lambda _i: self._set("join", self.join_pick.currentData() == "join")
         )
         self.videos_sec.add(self.join_pick)
-        lay.addWidget(self.videos_sec)
+        card.add(self.videos_sec)
 
         # ---- live example of the file name
-        saves = Section("Saves As")
+        saves = Section()
         ex = QFrame()
         ex.setObjectName("Example")
         el = vbox(ex, (SPACE_4, SPACE_3, SPACE_4, SPACE_3), SPACE_1)
@@ -154,7 +154,7 @@ class ExportPanel(QFrame):
         el.addWidget(self.ex_to)
         el.addWidget(self.ex_note)
         saves.add(ex)
-        lay.addWidget(saves)
+        card.add(saves)
 
         # ---- where
         where = Section("Where")
@@ -177,7 +177,7 @@ class ExportPanel(QFrame):
         where.add(self.d_sub_row)
         self.d_proxy_hint = hint("Edit proxies go into a Proxy folder next to the original.")
         where.add(self.d_proxy_hint)
-        lay.addWidget(where)
+        card.add(where)
 
         # ---- name
         name = Section("Name")
@@ -201,7 +201,8 @@ class ExportPanel(QFrame):
             flow.addWidget(b)
         cb.addWidget(tok_wrap)
         name.add(self.custom_box)
-        lay.addWidget(name)
+        card.add(name)
+        lay.addWidget(card)
 
         # ---- collisions + dates
         taken = Section("Name Taken")
@@ -239,13 +240,15 @@ class ExportPanel(QFrame):
         after.add(self.k_verify)
         self.adv.add(after)
         lay.addWidget(self.adv)
-        lay.addStretch(1)
+        self._sync()
 
-        # ---- the action, always visible at the bottom
-        bottom = QFrame()
-        bottom.setObjectName("PanelBottom")
-        self.bottom = vbox(bottom, SPACE_4, SPACE_2)
-        outer.addWidget(bottom)
+    def set_panel_width(self, panel_w: int) -> None:
+        """The right panel's width changed (a smaller window): the preview and the name tokens follow."""
+        if panel_w == self._panel_w:
+            return
+        self._panel_w = panel_w
+        w = picture_width(panel_w)
+        self.player.set_size(w, round(w * 9 / 16))
         self._sync()
 
     # ------------------------------------------------------------------ behavior
@@ -305,7 +308,8 @@ class ExportPanel(QFrame):
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):
             self.tok_flow.itemAt(i).widget().ensurePolished()
-        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(INSPECTOR_W - 2 * SPACE_4 - SPACE_2))
+        room = picture_width(self._panel_w) - 2 * SPACE_3  # inside the Saves To card
+        self.tok_wrap.setMinimumHeight(self.tok_flow.heightForWidth(room))
         self._update_example()
 
     def reload(self) -> None:
@@ -388,7 +392,7 @@ class ExportPanel(QFrame):
                 name = naming.planned_name(path, info, self.s, kind, 1)
         except Exception:
             out_dir, name = p.parent, "?"
-        self.ex_from.setText(
+        self.ex_from.set_full_text(
             f"{p.name} … {Path(self._last_video).name} ({self._videos} clips)"
             if joined
             else f"{p.parent.name}/{p.name}"
@@ -408,7 +412,7 @@ class ExportPanel(QFrame):
                 name = target.name
         except Exception:
             log.debug("example name failed", exc_info=True)
-        self.ex_to.setText(f"→  {out_dir.name}/{name}")
+        self.ex_to.set_full_text(f"→  {out_dir.name}/{name}")
         self.ex_note.setText(note)
         self.ex_note.setVisible(bool(note))
         for i, (_key, _, tpl) in enumerate(NAME_STYLES):  # hover an item to see its result
@@ -424,4 +428,4 @@ class ExportPanel(QFrame):
         else:
             self.player.set_still(None)
             self.player.set_message(note or "No preview")
-        self.picture_note.setText(note if png else "")
+        self.picture_note.set_full_text(note if png else "")

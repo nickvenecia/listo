@@ -129,6 +129,7 @@ class ClipPlayer(QWidget):
         self._autoplay = False
         self._shown: tuple | None = None
         self._still_at: float | None = None  # where the still frame was taken (None = any time)
+        self._still_pm: QPixmap | None = None  # that frame as it came (to fit it again at a new size)
         self.video_rect = QRectF(0, 0, width, height)
         self.out_size = (width, height)
         self.out_rect = QRectF(self.video_rect)
@@ -303,10 +304,25 @@ class ClipPlayer(QWidget):
         self._shown = None
         self._draw_caption()
 
+    def set_size(self, width: int, height: int) -> None:
+        """A new picture size (the right panel is narrower on a smaller window)."""
+        if (width, height) == (self.W, self.H) or width < 2 or height < 2:
+            return
+        self.W, self.H = width, height
+        self.stage.setFixedSize(width, height)
+        self.scene.setSceneRect(0, 0, width, height)
+        self._layout()
+        self._shown = None
+        self._draw_caption()
+        self.set_message(self.message.text())
+        if self._still_pm is not None:
+            self.set_still(self._still_pm, self._still_at)
+
     def set_still(self, pm: QPixmap | None, at: float | None = None) -> None:
         """The exact result frame at `at` seconds (shown while paused there, hidden while playing)."""
         self.message.setText("")
         self._still_at = at
+        self._still_pm = pm if pm is not None and not pm.isNull() else None
         if pm is None or pm.isNull():
             self.still.setPixmap(QPixmap())
             return

@@ -83,7 +83,7 @@ def test_lut_and_where_follow_the_rule(tmp_path: Path, monkeypatch, app):
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(lut), ""))
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *a, **k: str(dest))
     w = mw.MainWindow()
-    sb, panel, s = w.sidebar, w.export_panel, w.settings
+    sb, panel, s = w.convert, w.export_panel, w.settings
 
     assert _labels(sb.lut) == ["No LUT", "—", "Choose a LUT File…"]  # no LUT folder any more
     sb.lut.activated.emit(sb.lut.findData(CHOOSE))
@@ -117,7 +117,7 @@ def test_timecode_choice_is_in_clip_info(tmp_path: Path, monkeypatch, app):
     for mod in (mw, sb_mod, ep):
         monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     w = mw.MainWindow()
-    sb = w.sidebar
+    sb = w.convert
     sb.g_text.set_open(True)
     assert sb.tc_mode.isVisibleTo(sb)  # also the file's own timecode, so shown even without the burn-in
     assert _labels(sb.tc_mode) == ["Continuous Timecode", "Restart Timecode Each Clip", "Match Record Time"]

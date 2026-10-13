@@ -293,6 +293,10 @@ QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {tokens.ACCENT
 #Toast {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; padding: {SPACE_2}px {SPACE_4}px; }}
 QTextBrowser#Notes {{ background: {tokens.WELL}; color: {tokens.TEXT}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS}px;
     padding: {SPACE_2}px; }}
+QPlainTextEdit#Field {{ background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
+    padding: {SPACE_1}px {SPACE_2}px; color: {tokens.TEXT}; font-size: {TEXT_MD}px; font-family: "{FONT_FAMILY}"; }}
+QPlainTextEdit#Field:hover {{ border-color: {tokens.BORDER_HOVER}; }}
+QPlainTextEdit#Field:focus {{ border-color: {tokens.ACCENT}; }}
 QPlainTextEdit {{ background: {tokens.WELL}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS}px;
     font-family: "{MONO_FAMILY}"; font-size: {TEXT_XS}px; color: {tokens.MUTED}; }}
 QMenu {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {tokens.LIST_R}px;

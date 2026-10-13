@@ -31,10 +31,15 @@ def pytest_unconfigure(config):
 
 @pytest.fixture(autouse=True)
 def data_folder(tmp_path):
-    """Never touch the real settings, captions or tools: every test gets its own empty data folder."""
+    """Never touch the real settings, recipes, captions or tools: every test gets its own empty data
+    folder, and its own settings file for QSettings("Listo", "Listo")."""
+    from PySide6.QtCore import QSettings
+
     from listo.core.paths import use_data_dir
 
     use_data_dir(tmp_path / "data")
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "qsettings"))
     yield tmp_path / "data"
     use_data_dir(None)
 

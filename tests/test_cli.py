@@ -79,7 +79,7 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
 
     app = QApplication.instance() or QApplication([])
     w = MainWindow()
-    sb = w.sidebar
+    sb = w.convert
     sb.v_aspect.setCurrentIndex(sb.v_aspect.findData("2.35:1"))
     sb.v_fit.setCurrentIndex(sb.v_fit.findData("matte"))
     sb.matte_q.setValue(60)
@@ -121,12 +121,13 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.burn_style.setCurrentIndex(sb.burn_style.findData("clean"))
     assert not sb.sec_tape.isVisibleTo(sb)  # VHS only
     sb.burn_style.setCurrentIndex(sb.burn_style.findData("vhs"))
-    w._fill_trash_menu()
-    assert [a.text() for a in w.trash_menu.actions() if a.text()] == [
-        "Remove Selected",
+    m = w._list_menu(0)  # right-click on empty space: only clearing the list (never the files)
+    assert [a.text() for a in m.actions() if a.text()] == [
+        "Remove from the List",
         "Clear Finished",
         "Clear All",
     ]
+    assert not any(a.isEnabled() for a in m.actions() if a.text())  # nothing in the list yet
     w.close()
     app.processEvents()
 
@@ -195,7 +196,7 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     second.mkdir()
     (second / "MOV01A.MOD").write_bytes(b"x")
     w.add_paths([str(second / "MOV01A.MOD")])
-    assert sorted(it.card.name.text() for it in w.items.values()) == [
+    assert sorted(it.card.name for it in w.items.values()) == [
         "PRG002 / MOV01A.MOD",
         "SD_VIDEO / MOV01A.MOD",
     ]
