@@ -1,4 +1,4 @@
-# Listo: notes for Claude Code
+# Listo: notes for working on the code
 
 Cross-platform (macOS / Windows / Linux) batch converter for video, photos and audio.
 Python 3.12 + PySide6 (Qt Widgets) UI, ffmpeg/ffprobe for video and audio, Pillow + pillow-heif + rawpy for photos.
@@ -10,6 +10,8 @@ The owner is a filmmaker (director/DP/editor/colorist), not a full-time develope
   All values live in `listo/ui/tokens.py`; never type a size or color anywhere else.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)**: code rules. Layout, style (ruff), safety rules, threads, tests, commits.
 - Before finishing any change: `ruff format . && ruff check . && python -m pytest -q`.
+- Commit messages: a short plain summary, nothing added after it (no sign-off, co-author or tool lines).
+  Commits are authored as Nick Venecia <nicholasvenecia@gmail.com> (this repo's git config).
 
 ## Layout
 ```

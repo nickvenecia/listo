@@ -119,8 +119,9 @@ packaging/     Installer files per OS
 
 ## 7. Commits and releases
 
-- One topic per commit. Message: short summary line in the present tense ("Add WebP output"),
-  then a blank line and the why, if it isn't obvious.
+- One topic per commit. Message: a short plain summary in the present tense ("Add WebP output"), nothing
+  added after it: no sign-off, co-author or tool lines. Commits are authored as the developer
+  (Nick Venecia <nicholasvenecia@gmail.com>, set in this repo's git config).
 - Update `CHANGELOG.md` under "Unreleased" for anything a user would notice.
 - Release: bump `__version__` in `listo/__init__.py`, move the changelog entries under the new version,
   commit, then `git tag vX.Y.Z && git push --tags`. CI builds and publishes the downloads.
