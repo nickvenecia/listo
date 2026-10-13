@@ -132,6 +132,8 @@ packaging/     Installer files per OS
 - Tests never touch real data: `conftest.py` gives each its own data folder and an empty stand-in for the
   settings store older versions used.
 - Integration tests that need ffmpeg skip themselves when it isn't installed (`tests/helpers.py`).
+- UI changes: `tests/test_cut_off.py` opens every screen and dialog (the window at its usual and smallest size)
+  and fails on any words cut off (`tests/cut_off.py` finds them); a new screen or dialog gets a line there.
 - UI changes: check screenshots in both looks and a light accent
   (`QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES`, then `dark`, then
   `LISTO_ACCENT=yellow`).

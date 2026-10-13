@@ -210,11 +210,11 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 | `widgets.Section("Title")` | A labelled group of controls: Title Case label above, `SPACE_1` apart |
 | `widgets.combo(items, current)` / `set_combo` / `disable_item` | **Every** pick-one setting, however few choices; extra detail in the item's tooltip |
 | `widgets.PathCombo` | **Every** setting that points at a file or folder (LUT, Where); see below |
-| `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, the whole row clickable |
+| `widgets.ToggleRow` | Every on/off setting: one full-width row, label left, switch right, the whole row clickable. A label too long for the row ends in "…" and its tooltip starts with the whole label |
 | `widgets.Segmented` | 2–3 views of the same thing (Match System / Light / Dark) |
 | `widgets.AccentPicker` | The Accent Color circles in Settings › General |
 | `widgets.SearchField` | The toolbar's search capsule |
-| `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip |
+| `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip (`full_text()` reads it). The sidebar's rows, the bar under the list, names, paths |
 | `widgets.Toast`, through `MainWindow.toast(text, tone)` | A short message, centred over the list just above the bar under it (`TOAST_LIFT`): it rises and fades in (`TOAST_IN_MS`, `TOAST_RISE`), stays `TOAST_MS` (longer for long ones, `TOAST_MS_PER_CHAR`), fades away (`TOAST_OUT_MS`). Resting the pointer on it keeps it; it never takes a click (what's under it still works). `tone`: "done" (a green check: Backed up, Undid), "problem" (a yellow alert on a yellow-tinted card: it didn't work, and the words say what to do), or "" for news (an info sign: Still making captions…). Never a question |
 | `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
 | `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
@@ -276,6 +276,13 @@ Listo talks like a helpful person, not like software.
   it still does, a short tooltip. Promises that matter stay ("Your files themselves stay where they are").
 - **Few words.** Labels and headings 1–4 words, in plain language: "Double-Check Each File", not "Verify output
   integrity".
+- **Words are never cut off.** Text that might not fit wraps onto another line or ends in "…" with the whole text
+  in its tooltip; fonts are wider on a Mac. Inside anything with a fixed width (start tiles, cards, sidebars, the
+  right panel) words wrap. A place that must stay one line (a sidebar row, the bar under the list, a switch's
+  label, a file's name) ends in "…" (`widgets.ElidedLabel`, or `ToggleRow`'s own). Never a smaller font to make
+  it fit; if neither suits, give it more room or fewer words. A dialog can't be made shorter than its words
+  (`widgets.keep_words_whole`, done for every dialog as it opens). `tests/cut_off.py` checks every screen; a new
+  screen gets a line in that test (`tests/test_cut_off.py`).
 - **Title Case for labels**: buttons, menu items, section and card titles, dropdown choices, tabs, dialog titles.
   Small words stay lowercase inside (a, an, the, and, or, of, to, in, on, at, for, by, with, as, per); LUT, VHS,
   H.264 and .srt stay as they are. No ALL CAPS (the VHS caption look and STOP ■ are what's burned in, not labels).
@@ -290,7 +297,8 @@ Listo talks like a helpful person, not like software.
 1. No raw sizes or colors outside `tokens.py`; this prints only `theme.qcolor`'s color reader (1 px hairlines are
    the one allowed literal): `grep -rnE '[^{_A-Z0-9][0-9]{2,}px|#[0-9A-Fa-f]{6}|rgba' listo/ui --include=*.py | grep -v tokens.py`
 2. New controls are `CONTROL_H` tall (or `SMALL_H`) and line up with their neighbours; icon buttons have tooltips.
-3. Labels are short and in Title Case; sentences are plain sentences.
-4. Screenshots look right in both looks and in a light accent:
+3. No words cut off: `python -m pytest tests/test_cut_off.py` (a new screen or dialog gets a line there first).
+4. Labels are short and in Title Case; sentences are plain sentences.
+5. Screenshots look right in both looks and in a light accent:
    `QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES` (then `LISTO_LOOK=dark`,
    then `LISTO_ACCENT=yellow`).

@@ -41,7 +41,9 @@ class StartTile(QFrame):
         sub.setObjectName("StartDetail")
         for w in (name, sub):
             w.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            w.setWordWrap(True)  # the tile is a fixed width: longer words take another line
             lay.addWidget(w)
+        lay.addStretch(1)  # a tile made taller by its neighbour keeps its words on top, level with theirs
 
     def set_hot(self, on: bool) -> None:
         """Lit while files are dragged over the window."""

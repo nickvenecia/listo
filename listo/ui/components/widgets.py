@@ -8,6 +8,7 @@ from typing import ClassVar
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QEvent,
     QPoint,
     QPointF,
     QRect,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStyledItemDelegate,
     QToolButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -128,6 +130,10 @@ class ElidedLabel(QLabel):
         self.setToolTip("")
         self._elide()
         self.updateGeometry()  # its room in the layout follows the new text
+
+    def full_text(self) -> str:
+        """The whole text (what shows may end in "…"; tests/cut_off.py leaves labels with this alone)."""
+        return self._full
 
     def _elide(self) -> None:
         shown = self.fontMetrics().elidedText(self._full, self._mode, max(1, self.width()))
@@ -287,6 +293,17 @@ def fade(w: QWidget, on: bool) -> None:
     anim.setStartValue(fx.opacity())
     anim.setEndValue(1.0 if on else 0.0)
     anim.start()
+
+
+def keep_words_whole(win: QWidget) -> None:
+    """A window (a dialog) can't be made shorter than its wrapped lines need at its narrowest; it can still
+    grow. Qt would let it shrink further and cut them off at the bottom. app._RoundPopups does this for every
+    dialog as it opens."""
+    win.ensurePolished()  # (the stylesheet's type sizes)
+    narrowest = max(win.minimumWidth(), win.minimumSizeHint().width())
+    need = win.heightForWidth(narrowest)  # -1 when nothing in it wraps
+    if need > win.minimumHeight():
+        win.setMinimumHeight(need)
 
 
 def repolish(w: QWidget) -> None:
@@ -772,7 +789,8 @@ class PanelHeader(QFrame):
 
 class ToggleRow(QAbstractButton):
     """An on/off setting: the label on the left, a switch on the right, the whole row clickable.
-    Works like a QCheckBox (setChecked, isChecked, toggled, text)."""
+    Works like a QCheckBox (setChecked, isChecked, toggled, text). As wide as its row: a label too long for
+    it ends in "…", and its tooltip starts with the whole label."""
 
     def __init__(self, text: str, checked: bool = False, parent: QWidget | None = None):
         super().__init__(parent)
@@ -780,13 +798,28 @@ class ToggleRow(QAbstractButton):
         self.setCheckable(True)
         self.setChecked(checked)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.setFixedHeight(tokens.TOGGLE_ROW_H)
         self._hover = False
 
     def sizeHint(self) -> QSize:
         w = self.fontMetrics().horizontalAdvance(self.text()) + tokens.SPACE_3 + tokens.TOGGLE_W
         return QSize(w, tokens.TOGGLE_ROW_H)
+
+    def _label_room(self) -> int:
+        return self.width() - tokens.TOGGLE_W - tokens.SPACE_3
+
+    def event(self, e):
+        if (
+            e.type() == QEvent.Type.ToolTip
+            and self.fontMetrics().horizontalAdvance(self.text()) > self._label_room()
+        ):
+            tip = "\n".join(
+                t for t in (self.text(), self.toolTip()) if t
+            )  # the whole label, then what it's for
+            QToolTip.showText(e.globalPos(), theme.plain_tip(tip), self)
+            return True
+        return super().event(e)
 
     def enterEvent(self, e):
         self._hover = True
@@ -806,7 +839,7 @@ class ToggleRow(QAbstractButton):
         # label
         p.setPen(QColor(tokens.TEXT if enabled else tokens.FAINT))
         text_rect = r.adjusted(0, 0, -(tokens.TOGGLE_W + tokens.SPACE_3), 0)
-        label = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, text_rect.width())
+        label = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self._label_room())
         p.drawText(text_rect, int(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft), label)
         # switch
         tw, th = tokens.TOGGLE_W, tokens.TOGGLE_H

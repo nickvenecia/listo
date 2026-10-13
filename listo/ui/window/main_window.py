@@ -414,16 +414,20 @@ class MainWindow(QMainWindow):
         texts = QVBoxLayout()
         texts.setSpacing(tokens.SPACE_1)
         top = hbox(spacing=tokens.SPACE_3)
-        self.f_title = QLabel()
+        # one line each, beside the buttons: on a narrow window they end in "…" (the whole text in the tooltip)
+        self.f_title = ElidedLabel()
         self.f_title.setObjectName("TotalValue")
-        self.f_time = QLabel()  # while converting: "3 of 9 done · About 2 min left", at the bar's right end
+        # while converting: "3 of 9 done · About 2 min left", at the bar's right end
+        self.f_time = ElidedLabel()
         self.f_time.setObjectName("TotalLabel")
         self.f_time.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         top.addWidget(self.f_title)
         top.addStretch(1)
         top.addWidget(self.f_time)
-        self.f_sub = QLabel()
+        self.f_sub = ElidedLabel()
         self.f_sub.setObjectName("TotalLabel")
+        for lab in (self.f_title, self.f_time, self.f_sub):  # whole whenever there's room
+            lab.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
         self.f_bar = QProgressBar()
         self.f_bar.setRange(0, 1000)
         self.f_bar.setTextVisible(False)
@@ -2461,8 +2465,8 @@ class MainWindow(QMainWindow):
         self.f_time.setVisible(self.running)
         self.f_sub.setVisible(not self.running)
         if self._convert_after_captions and not self.running:  # Convert was pressed; Stop calls it off
-            self.f_title.setText("Waiting for Captions")
-            self.f_sub.setText("Converts as soon as they're ready.")
+            self.f_title.set_full_text("Waiting for Captions")
+            self.f_sub.set_full_text("Converts as soon as they're ready.")
             self.f_bar.hide()
             self.btn_start.setEnabled(False)
             self.btn_start.setText("Waiting…")
@@ -2473,8 +2477,8 @@ class MainWindow(QMainWindow):
         if self.running and job is not None and job.thread is not None:
             self.f_bar.show()
             self.f_bar.setValue(int(min(1.0, job.done_s / job.total_s) * 1000) if job.total_s else 0)
-            self.f_title.setText(f"Joining {len(job.parts)} Clips into One Video")
-            self.f_time.setText("")
+            self.f_title.set_full_text(f"Joining {len(job.parts)} Clips into One Video")
+            self.f_time.set_full_text("")
             self.btn_start.setEnabled(False)
             self.btn_pause.hide()
             self.btn_cancel.show()
@@ -2487,12 +2491,14 @@ class MainWindow(QMainWindow):
             self.f_bar.show()
             self.f_bar.setValue(int(done_w / total_w * 1000))
             n = len(batch)
-            self.f_title.setText("Paused" if self.paused else f"Converting {n} File{'s' if n != 1 else ''}")
+            self.f_title.set_full_text(
+                "Paused" if self.paused else f"Converting {n} File{'s' if n != 1 else ''}"
+            )
             left = self._clock.left(done_w, total_w, time.monotonic())
             bits = [f"{finished_n} of {n} done"]
             if left is not None and not self.paused:
                 bits.append(time_left(left))
-            self.f_time.setText(" · ".join(bits))
+            self.f_time.set_full_text(" · ".join(bits))
             self.btn_start.setEnabled(False)
             self.btn_start.setText("Converting…")
 
@@ -2520,13 +2526,13 @@ class MainWindow(QMainWindow):
             if sk:
                 parts.append(f"{sk} skipped")
             ok = not f and not w
-            self.f_title.setText(("Listo · " if ok else "Finished · ") + " · ".join(parts))
+            self.f_title.set_full_text(("Listo · " if ok else "Finished · ") + " · ".join(parts))
             ready = "Your video is ready." if joined else "Your files are ready."
-            self.f_sub.setText(ready if ok else "Click ⓘ on a file for details.")
+            self.f_sub.set_full_text(ready if ok else "Click ⓘ on a file for details.")
             return
         if n == 0:
-            self.f_title.setText("Nothing here yet")
-            self.f_sub.setText("")
+            self.f_title.set_full_text("Nothing here yet")
+            self.f_sub.set_full_text("")
             self.btn_show.hide()
             return
         kinds = {"video": 0, "photo": 0, "audio": 0, "link": 0}
@@ -2546,14 +2552,14 @@ class MainWindow(QMainWindow):
             )
             if c
         ]
-        self.f_title.setText(" · ".join(bits) or "Nothing Listo can convert yet")
+        self.f_title.set_full_text(" · ".join(bits) or "Nothing Listo can convert yet")
         sub = []
         if dur:
             sub.append(f"{fmt_duration(dur)} of media")
         bad = sum(1 for it in items if it.state == "unsupported")
         if bad:
             sub.append(f"{bad} file{'s' if bad != 1 else ''} can't be converted")
-        self.f_sub.setText(" · ".join(sub))
+        self.f_sub.set_full_text(" · ".join(sub))
 
     def _scroll_to(self, iid: int) -> None:
         QTimer.singleShot(50, lambda: self.table.scroll_to(iid))

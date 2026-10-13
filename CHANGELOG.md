@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+- **Words are never cut off.** The bar under the list ends a long summary in "…" instead of chopping it mid-word (point at it to read it all), and its buttons always show their whole names, even on the smallest window
+- **Windows can't be shrunk past their words.** Dragging a window like a file's details or About Listo smaller stops before any line gets cut off at the bottom
+- **Ready for wider fonts**: the start tiles' words move onto a second line rather than run past the tile's edges; a name too long for a sidebar row or a switch ends in "…" with the whole name in its tooltip
+
 ## 3.1.0
 - **Convert To is about all your files, and acts like it.** It slides in when you add files and goes away when the list is empty, so the start tiles get the whole window. Clicking a clip only changes which clip the preview shows: the panel stays where it is (Esc and clicking empty space just deselect). Closed it with its ✕? The round sliders button at the top right brings it back, or ⌥⌘I
 - **No more Video / Photo / Audio tabs.** Convert To shows a heading for each kind of file you've added, with how many there are: **9 Videos**, **2 Photos**, **1 Audio File**, each with its own settings under it. Only videos in the list? You only see video settings. Files you gave their own format on their row are counted beside the heading ("· 1 with its own format"), and the row's menu says **Same as the Other Videos** to put one back

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QComboBox,
+    QDialog,
     QLabel,
     QMenu,
     QScrollBar,
@@ -25,7 +26,7 @@ from listo import APP_NAME, __version__
 from listo.core import store
 from listo.core.log import get_logger, setup_logging
 from listo.core.paths import ASSETS, data_dir, log_dir
-from listo.ui.components.widgets import ComboItemDelegate
+from listo.ui.components.widgets import ComboItemDelegate, keep_words_whole
 from listo.ui.style import theme, tokens
 
 log = get_logger(__name__)
@@ -122,8 +123,9 @@ class _RoundPopups(QObject):
     """Qt gives menus and dropdown lists square windows; make them see-through so the
     stylesheet's rounded corners are what you actually see. A button's menu opens just below it, with a
     little air (place_menu); so does a dropdown's list. Also: scrolling never changes a value
-    (dropdowns and sliders pass the wheel on to the panel, which scrolls instead), and text in a
-    label is shown as typed (a file called "<b>clip.mov" keeps that name)."""
+    (dropdowns and sliders pass the wheel on to the panel, which scrolls instead), text in a
+    label is shown as typed (a file called "<b>clip.mov" keeps that name), and a dialog can't be made
+    shorter than its words need (widgets.keep_words_whole)."""
 
     @staticmethod
     def _see_through(win: QWidget) -> None:
@@ -145,7 +147,9 @@ class _RoundPopups(QObject):
             return True
         if ev.type() == QEvent.Type.Show and isinstance(obj, QWidget) and obj.isWindow():
             owner = obj.parentWidget()
-            if (
+            if isinstance(obj, QDialog):
+                keep_words_whole(obj)
+            elif (
                 isinstance(obj, QMenu)
                 and isinstance(owner, QAbstractButton)
                 and getattr(owner, "menu", lambda: None)() is obj

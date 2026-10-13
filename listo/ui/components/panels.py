@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QFrame, QLabel, QToolButton, QWidget
 
 from listo.ui.components.glass import glass
 from listo.ui.components.widgets import (
+    ElidedLabel,
     FitScroll,
     IconLabel,
     PanelHeader,
@@ -42,7 +43,7 @@ class NavRow(QFrame):
         lay = hbox(self, (tokens.SPACE_2, 0, tokens.SPACE_2, 0), tokens.SPACE_2)
         self.icon = IconLabel(icon, "MUTED", tokens.ICON)
         self.icon.setFixedWidth(tokens.ICON)
-        self.label = QLabel(label)
+        self.label = ElidedLabel(label)  # one line: a name too long for the sidebar ends in "…"
         self.label.setObjectName("NavLabel")
         self.count = QLabel()
         self.count.setObjectName("NavCount")
