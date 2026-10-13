@@ -151,7 +151,7 @@ the computer, also while it's open, unless Settings › General › Appearance p
 | `ACCENT` (+ `_HOVER`, `_PRESS`) | The accent: the primary button, selection, progress, focus, the wordmark's dot |
 | `ON_ACCENT` | Words and icons on the accent (dark on a light accent: never assume white) |
 | `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A disabled primary button |
-| `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the drop target) |
+| `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the files tile lit while files are dragged in) |
 | `CHIP` | Key caps in Keyboard Shortcuts, the gap where a dragged row will land |
 | `GOOD` / `WARN` / `BAD` (+ `BAD_TINT`, `BAD_EDGE`, `ON_BAD`) | Done / needs a look / failed (a danger button's hover, words on the alert's red button) |
 
@@ -179,10 +179,10 @@ Use these; never build a control's look by hand.
 | Primary | `setObjectName("Primary")` | The one main action in a view (Convert 12 Files, Send, Delete in an alert) |
 | Normal | *(none)* | Everything else (Cancel, Show Files, Back Up…) |
 | Quiet | `Ghost` | Small helpers inside a card, "Update to …" |
-| Danger | `Danger` | Destructive actions in a form (Stop, Delete All): red words |
+| Danger | `Danger` | Destructive actions in a form (Delete All in Storage & Cache): red words. Stop is a round icon in red |
 | Alert's yes | `DangerFill` | Only the destructive button inside an alert |
 | Round icon button | `widgets.circle_button(icon, tip)` (`CirclePrimary` for the +) | Every icon button in the toolbar or a panel header |
-| Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | Icon buttons inside a row, a card or a player (play, ‹ ›) |
+| Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | The player's play and ‹ › (the list's row buttons are painted with the row) |
 | Section + | `SectionAdd` | The plain gray + beside a sidebar heading |
 
 Every icon-only button has a tooltip. "…" when a button opens a window or a picker.

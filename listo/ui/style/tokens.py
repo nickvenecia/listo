@@ -75,11 +75,10 @@ GLASS_SHADOW_SPREAD = 24  # how far it reaches: wide and faint, never a dark smu
 GLASS_SHADOW_DROP = 3  # how far below the panel it sits: barely
 GLASS_EDGE_FADE = 60  # the hairline is brightest along the top, settling over this many px
 SIDEBAR_W = 232  # the left panel: your files by kind
-INSPECTOR_W = 420  # the right panel: Convert To, or the clip you picked
+INSPECTOR_W = 420  # the right panel: Convert To
 INSPECTOR_MIN = 360  # …on a smaller window
 INSPECTOR_SHARE = 0.27  # of the window's width, between those two
 TOOLBAR_H = 64  # the bar above the list: title, search, +
-HEADER_H = 52  # a panel header that isn't level with a toolbar
 TITLEBAR_H = 32  # Listo's own Mac title bar (fitted to the real one once the window shows)
 SEARCH_W = 440  # the search capsule asks for this much room…
 SEARCH_MIN = 160  # …and gives way down to this
@@ -144,7 +143,7 @@ UPDATE_WAIT_MS = 1500  # a found update waits this long between looks while anot
 # never copy them into a constant at import: use() swaps them.
 DARK = {
     "BG": "#1E1E1E",  # window background: the Mac's dark charcoal, not black
-    "PANEL": "#1E1E1E",  # dialogs, footers
+    "PANEL": "#1E1E1E",  # dialogs
     "CARD": "#1F1E20",  # cards, fields
     "CARD_HOVER": "#262527",
     "CARD_SELECTED": "#392E20",  # a selected row (a hint of the accent)

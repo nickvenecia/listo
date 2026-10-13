@@ -167,7 +167,7 @@ class Sidebar(LeftPanel):
         files = self._section("files", "Files", self.btn_add)
         progress = self._section("progress", "Progress")
         for key, (label, icon, section) in PLACES.items():
-            r = self.add_row(key, label, icon, files if section == "files" else progress, foldable=False)
+            r = self.add_row(key, label, icon, files if section == "files" else progress)
             r.clicked.connect(self.pick)
         self.lay.addStretch(1)
         folded = self.qs.value("sidebar_folded", "", type=str) or ""
@@ -291,6 +291,4 @@ class Sidebar(LeftPanel):
         self.word.setText(theme.wordmark())
         for h in self.heads.values():
             h._draw()
-        for r in self.rows.values():
-            r.recolor()
         self.btn_add.setIcon(theme.icon("plus", theme.MUTED, tokens.ICON_SM))

@@ -147,7 +147,6 @@ class Item:
     result: Result | None = None
     card: Row | None = None  # its row in the list (tables.Row)
     message: str = ""
-    notes: list[str] = field(default_factory=list)
     override: dict = field(default_factory=dict)  # per-file format choice
     base: Settings | None = None  # settings captured when this file joined a batch
     started: float = 0.0
@@ -304,9 +303,7 @@ class MainWindow(QMainWindow):
         self.convert.recipe_applied.connect(self.export_panel.reload)
         self.panel.btn_preview.clicked.connect(self.open_preview)
         self.panel.close_wanted.connect(lambda: self.show_panel(False))
-        self.inspector = glass(QStackedWidget())  # the glass panel on the right…
-        self.inspector.addWidget(self.panel)
-        self.dock = Dock(self.inspector, root, self.sidebar, body)  # …which slides in and out
+        self.dock = Dock(glass(self.panel), root, self.sidebar, body)  # the glass panel on the right, sliding
         self.dock.follower = lambda: self.pages.currentWidget()
         outer.addLayout(body, 1)
         self.setCentralWidget(root)
@@ -387,7 +384,6 @@ class MainWindow(QMainWindow):
         self.table = FileList()
         self.table.pressed.connect(self._card_pressed)
         self.table.opened.connect(self.play_item)
-        self.table.remove.connect(self.remove_item)
         self.table.retry.connect(self.retry_item)
         self.table.reveal.connect(self.reveal_item)
         self.table.details.connect(self.show_details)
@@ -609,8 +605,7 @@ class MainWindow(QMainWindow):
         super().resizeEvent(e)
         w = max(tokens.INSPECTOR_MIN, min(tokens.INSPECTOR_W, int(self.width() * tokens.INSPECTOR_SHARE)))
         self.dock.set_target(w)
-        for i in range(self.inspector.count()):  # every right-hand panel, whatever it is
-            self.inspector.widget(i).set_width(w)
+        self.panel.set_width(w)
 
     # ------------------------------------------------------------------ settings, look, feedback
     def open_settings(self, pane: str = "general") -> None:
@@ -787,7 +782,9 @@ class MainWindow(QMainWindow):
             return
         known = str(self.qs.value("updates/latest", "") or "")
         if known and update.is_newer(known, __version__):
-            self._show_update_button(known)  # found earlier; the window knows without asking again
+            self._show_update_button(
+                known
+            )  # found at an earlier launch: the button shows now; the check confirms it
         self.check_updates(quiet=True)
 
     def check_updates(self, quiet: bool = False) -> None:
@@ -833,7 +830,7 @@ class MainWindow(QMainWindow):
         self.open_update()
 
     def open_update(self) -> None:
-        if self.latest is None:  # known from an earlier day: fetch the details first
+        if self.latest is None:  # known from an earlier launch (updates/latest): fetch the details first
             self.check_updates()
             return
         dlg = UpdateDialog(self.latest, self._update_busy, self)
@@ -1099,7 +1096,7 @@ class MainWindow(QMainWindow):
     def add_paths(self, paths: list[str]) -> None:
         existing = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         added = dupes = skipped = 0
-        to_add: list[tuple[str, bool]] = []
+        to_add: list[str] = []
         for p in paths:
             pp = Path(p)
             if pp.is_dir():
@@ -1109,13 +1106,13 @@ class MainWindow(QMainWindow):
                         if fn.startswith("."):
                             continue
                         if ext_of(fn) in KNOWN_EXTS:
-                            to_add.append((os.path.join(root, fn), False))
+                            to_add.append(os.path.join(root, fn))
                         elif ext_of(fn) not in SIDECAR_EXTS:  # camera sidecars are read, not listed
                             skipped += 1
             elif pp.is_file() and ext_of(pp) not in SIDECAR_EXTS:
-                to_add.append((str(pp), True))
+                to_add.append(str(pp))
         fresh = []
-        for path, _explicit in to_add:
+        for path in to_add:
             key = naming.reserve_key(Path(path))
             if key in existing:
                 dupes += 1
@@ -1413,7 +1410,7 @@ class MainWindow(QMainWindow):
         return sample_cues(s.caption_words, s.caption_lines)  # shows the look before the words exist
 
     def _render_live(self) -> None:
-        """Settings or the list changed: (re)load the Export preview's clip, then show the exact
+        """Settings or the list changed: (re)load the live preview's clip, then show the exact
         result where it's paused. While it plays, the new look shows when it pauses."""
         it = self._live_clip()
         player = self.export_panel.player
@@ -1476,7 +1473,7 @@ class MainWindow(QMainWindow):
         )
 
     def _live_step(self, direction: int) -> None:
-        """The Export preview's arrows: select the previous / next clip in the list and show it."""
+        """The live preview's arrows: select the previous / next clip in the list and show it."""
         clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
         cur = self._live_clip()
         if cur not in clips:
@@ -1492,7 +1489,7 @@ class MainWindow(QMainWindow):
             self._render_live()  # at once: an arrow press shouldn't wait
 
     def _live_settled(self, at: float) -> None:
-        """The Export preview was paused or moved: show the exact result there."""
+        """The live preview was paused or moved: show the exact result there."""
         if self._live_loaded is not None:
             self._live_render_at(at)
 
@@ -1686,10 +1683,6 @@ class MainWindow(QMainWindow):
             self._schedule_live()
 
     # ------------------------------------------------------------------ list actions
-    def remove_item(self, iid: int) -> None:
-        """Take one file off the list (never off the disk). ⌘Z puts it back."""
-        self._take_off([iid])
-
     def _take_off(self, ids: list[int], record: bool = True) -> None:
         """Take files off the list in one go (files converting right now stay). One undo step."""
         gone: list[tuple[int, Item]] = []
@@ -2289,7 +2282,7 @@ class MainWindow(QMainWindow):
         if not self.paused:
             paused_any = False
             for it, c in convs:
-                if c.pause():  # photos and finishing steps can't pause; leave those cards as they are
+                if c.pause():  # photos and finishing steps can't pause; leave those rows as they are
                     paused_any = True
                     if it:
                         it.state = "paused"
@@ -2316,9 +2309,12 @@ class MainWindow(QMainWindow):
         self.btn_pause.setToolTip("Resume" if paused else "Pause")
 
     def stop(self) -> None:
-        self._convert_after_captions = False
         if not self.running:
+            if self._convert_after_captions:  # not converting yet: just don't start when captions are done
+                self._convert_after_captions = False
+                self._refresh_footer()
             return
+        self._convert_after_captions = False
         log.info("stop pressed")
         self.running = False
         self.paused = False
@@ -2442,9 +2438,15 @@ class MainWindow(QMainWindow):
         convertible = [it for it in items if it.state not in ("unsupported",)]
         self.f_time.setVisible(self.running)
         self.f_sub.setVisible(not self.running)
-        if self._convert_after_captions and not self.running:
+        if self._convert_after_captions and not self.running:  # Convert was pressed; Stop calls it off
             self.f_title.setText("Waiting for Captions")
             self.f_sub.setText("Converts as soon as they're ready.")
+            self.f_bar.hide()
+            self.btn_start.setEnabled(False)
+            self.btn_start.setText("Waiting…")
+            self.btn_pause.hide()
+            self.btn_cancel.show()
+            return
         job = self.join_job
         if self.running and job is not None and job.thread is not None:
             self.f_bar.show()
@@ -2474,7 +2476,6 @@ class MainWindow(QMainWindow):
 
             self.btn_pause.show()
             self.btn_cancel.show()
-            self.btn_add.setEnabled(True)
             return
 
         self.btn_pause.hide()

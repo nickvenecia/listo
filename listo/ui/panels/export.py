@@ -288,7 +288,7 @@ class ExportSettings(QWidget):
         self.custom_box.setVisible(self.styles.currentData() == "custom")
         self.videos_sec.setVisible(self._videos >= 2 and join.can_join(self.s))
         self._update_advanced()
-        # The dialog sizes itself before it knows its width; reserve room for every wrapped row.
+        # The panel lays out before the naming chips wrap; reserve room for every wrapped row.
         self.tok_wrap.ensurePolished()
         for i in range(self.tok_flow.count()):
             self.tok_flow.itemAt(i).widget().ensurePolished()
@@ -297,7 +297,7 @@ class ExportSettings(QWidget):
         self._update_example()
 
     def reload(self) -> None:
-        """Refresh controls from the settings (after a recipe is applied)."""
+        """Refresh controls from the settings (after a recipe is applied, or undo / redo)."""
         widgets = (
             self.join_pick,
             self.where,

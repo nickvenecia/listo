@@ -582,26 +582,19 @@ class ClickLabel(QLabel):
 class PanelHeader(QFrame):
     """The top of each panel, the same height everywhere so the panels line up.
 
-    It says what the panel holds ("Convert To", a clip's name). `.lead` takes widgets on the left,
-    `.actions` on the right."""
+    It says what the panel holds ("Convert To"); `.actions` takes round buttons before the ✕."""
 
     def __init__(self, title: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self.setObjectName("PanelHeader")
-        self.setFixedHeight(tokens.HEADER_H)
+        self.setFixedHeight(tokens.TOOLBAR_H)  # level with the list's toolbar
         lay = hbox(self, (tokens.SPACE_4, 0, tokens.SPACE_4, 0), tokens.SPACE_2)
         self.title = ElidedLabel(title)
         self.title.setObjectName("PanelTitle")
         self.title.setVisible(bool(title))
         lay.addWidget(self.title, 1)
-        self.lead = hbox(spacing=tokens.SPACE_2)
-        lay.addLayout(self.lead)
         self.actions = hbox(spacing=tokens.SPACE_2)
         lay.addLayout(self.actions)
-
-    def set_title(self, title: str) -> None:
-        self.title.set_full_text(title)
-        self.title.setVisible(bool(title))
 
     def add_close(self, tip: str = "Close") -> QToolButton:
         """The round ✕, at the far right (after any other buttons)."""
@@ -746,7 +739,7 @@ def circle_button(name: str, tip: str, color: str = "") -> QToolButton:
 
 
 def icon_button(name: str, tip: str, color: str = "", size: int = tokens.ICON_SM) -> QToolButton:
-    """A small icon button inside a row, a card or a player: round, no frame until you point at it.
+    """A small icon button (the player's play and ‹ ›): round, no frame until you point at it.
     Always has a tooltip. Without a `color` it's the muted grey of the look in use; "" = set the icon later."""
     b = QToolButton()
     b.setObjectName("IconBtn")
@@ -756,13 +749,6 @@ def icon_button(name: str, tip: str, color: str = "", size: int = tokens.ICON_SM
     b.setToolTip(tip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     return b
-
-
-def chip(text: str = "", tone: str = "") -> QLabel:
-    lbl = QLabel(text)
-    lbl.setObjectName("Chip")
-    lbl.setProperty("tone", tone)
-    return lbl
 
 
 class FlowLayout(QLayout):

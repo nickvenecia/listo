@@ -11,7 +11,7 @@ Subclass them; change what's inside, never the frame.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QLabel, QToolButton, QWidget
 
 from listo.ui.components.glass import glass
@@ -24,45 +24,23 @@ from listo.ui.components.widgets import (
     repolish,
     vbox,
 )
-from listo.ui.style import theme, tokens
+from listo.ui.style import tokens
 
 
 class NavRow(QFrame):
-    """One place in a LeftPanel: an icon, a name, a count; an arrow when rows fold under it."""
+    """One place in a LeftPanel: an icon, a name, a count."""
 
     clicked = Signal(str)
-    fold_wanted = Signal(str)  # its arrow (rows with rows under them)
-    menu_wanted = Signal(str, QPoint)
 
-    def __init__(
-        self, key: str, label: str, icon: str = "", parent: QWidget | None = None, foldable: bool = True
-    ):
-        """`foldable=False`: a plain list row (Settings) with no room kept for a fold arrow."""
+    def __init__(self, key: str, label: str, icon: str = "", parent: QWidget | None = None):
         super().__init__(parent)
         self.key = key
         self.setObjectName("Nav")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFixedHeight(tokens.NAV_H)
-        lay = hbox(
-            self, (tokens.SPACE_1 if foldable else tokens.SPACE_2, 0, tokens.SPACE_2, 0), tokens.SPACE_1
-        )
-        self.arrow = QToolButton()  # shown on rows with rows under them; keeps its room on the others
-        self.arrow.setObjectName("NavArrow")
-        self.arrow.setFixedSize(tokens.ICON_SM + tokens.SPACE_1, tokens.ICON_SM + tokens.SPACE_1)
-        self.arrow.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.arrow.clicked.connect(lambda: self.fold_wanted.emit(self.key))
-        keep = self.arrow.sizePolicy()
-        keep.setRetainSizeWhenHidden(True)
-        self.arrow.setSizePolicy(keep)
-        self.arrow.hide()
-        self.folded = False
-        if foldable:
-            lay.addWidget(self.arrow)
-        else:
-            lay.setSpacing(tokens.SPACE_2)
+        lay = hbox(self, (tokens.SPACE_2, 0, tokens.SPACE_2, 0), tokens.SPACE_2)
         self.icon = IconLabel(icon, "MUTED", tokens.ICON)
-        self.recolor()
         self.icon.setFixedWidth(tokens.ICON)
         self.label = QLabel(label)
         self.label.setObjectName("NavLabel")
@@ -72,15 +50,6 @@ class NavRow(QFrame):
         lay.addWidget(self.label, 1)
         lay.addWidget(self.count)
 
-    def recolor(self) -> None:
-        self.arrow.setIcon(
-            theme.icon("chevron-right" if self.folded else "chevron", theme.FAINT, tokens.ICON_SM)
-        )
-
-    def set_folded(self, on: bool) -> None:
-        self.folded = on
-        self.recolor()
-
     def set_count(self, n: int | str, tone: str = "") -> None:
         text = str(n) if n not in (0, "") else ""
         if self.count.text() != text:
@@ -88,10 +57,6 @@ class NavRow(QFrame):
         if self.count.property("tone") != tone:
             self.count.setProperty("tone", tone)
             repolish(self.count)
-
-    def set_current(self, on: bool) -> None:
-        self.setProperty("current", on)
-        self.set_selected(on)
 
     def set_selected(self, on: bool) -> None:
         if bool(self.property("selected")) != on:
@@ -103,9 +68,6 @@ class NavRow(QFrame):
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self.key)
         super().mousePressEvent(e)
-
-    def contextMenuEvent(self, e):
-        self.menu_wanted.emit(self.key, e.globalPos())
 
 
 class LeftPanel(QFrame):
@@ -137,8 +99,8 @@ class LeftPanel(QFrame):
         self.foot.hide()
         outer.addWidget(self.foot)
 
-    def add_row(self, key: str, label: str, icon: str = "", into=None, foldable: bool = True) -> NavRow:
-        r = NavRow(key, label, icon, foldable=foldable)
+    def add_row(self, key: str, label: str, icon: str = "", into=None) -> NavRow:
+        r = NavRow(key, label, icon)
         (into if into is not None else self.lay).addWidget(r)
         self.rows[key] = r
         return r
@@ -149,11 +111,7 @@ class LeftPanel(QFrame):
 
     def select(self, key: str) -> None:
         for k, r in self.rows.items():
-            r.set_current(k == key)
-
-    def recolor(self) -> None:
-        for r in self.rows.values():
-            r.recolor()
+            r.set_selected(k == key)
 
 
 class SidePanel(QFrame):
@@ -167,7 +125,6 @@ class SidePanel(QFrame):
         self.setFixedWidth(tokens.INSPECTOR_W)
         outer = vbox(self, 0, 0)
         self.header = PanelHeader(title)
-        self.header.setFixedHeight(tokens.TOOLBAR_H)  # lines up with the list's toolbar
         self.close_btn = self.header.add_close()
         self.close_btn.clicked.connect(self.close_wanted.emit)
         outer.addWidget(self.header)

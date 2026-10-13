@@ -55,9 +55,8 @@ class SettingsDialog(QDialog):
         self.side = side = LeftPanel(tokens.SETTINGS_SIDE_W)
         root.float(side)
         for key, label, icon in PANES:
-            side.add_row(key, label, icon, foldable=False).clicked.connect(self.show_pane)
+            side.add_row(key, label, icon).clicked.connect(self.show_pane)
         side.lay.addStretch(1)
-        self.rows = side.rows
         body.addWidget(side)
 
         self.stack = QStackedWidget()
@@ -85,21 +84,12 @@ class SettingsDialog(QDialog):
         self.stack.setCurrentIndex([k for k, _l, _i in PANES].index(key))
         self.setWindowTitle(dict((k, label) for k, label, _i in PANES)[key])
 
-    def _fill(self, key: str, w: QWidget, scroll: bool = True) -> None:
-        """Put `w` in a section (replacing what was there)."""
-        holder = self.panes[key]
-        lay = holder.layout()
-        while lay.count():
-            old = lay.takeAt(0).widget()
-            if old is not None:
-                old.deleteLater()
-        inner = w
-        if scroll:
-            area = FitScroll()
-            area.setWidget(w)
-            w = area
-        lay.addWidget(w)
-        inner.show()
+    def _fill(self, key: str, w: QWidget) -> None:
+        """Put `w` in its section, scrolling if it's taller than the window."""
+        area = FitScroll()
+        area.setWidget(w)
+        self.panes[key].layout().addWidget(area)
+        w.show()
 
     @staticmethod
     def _column() -> tuple[QWidget, object]:

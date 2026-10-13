@@ -5,7 +5,7 @@ A row shows a grip (drag it to change the order), the thumbnail, the name, what 
 (captions, trim, details, try again, show the new file) show while the pointer is over it or it's picked.
 Right-click for the same commands and for taking files off the list.
 
-The window talks to each row through a `Row` (it.card): the same setters the old per-file cards had, so the
+The window talks to each row through a `Row` (it.card): set_state, set_progress and the rest, so the
 converting code never deals with painting.
 """
 
@@ -188,7 +188,7 @@ class Row:
             self.selected = on
             self._changed()
 
-    # what shows, by state (the same rules the per-file cards had)
+    # what shows, by state
     def buttons(self) -> list[str]:
         s, k = self.state, self.kind
         shown = {
@@ -452,7 +452,6 @@ class FileList(QListView):
 
     pressed = Signal(int, object)  # item id, keyboard modifiers (for picking)
     opened = Signal(int)  # double-click: play it
-    remove = Signal(int)
     retry = Signal(int)
     reveal = Signal(int)
     details = Signal(int)
@@ -488,10 +487,6 @@ class FileList(QListView):
         self._show_later: list[int] | None = None  # rows asked for while one was lifted
 
     # ------------------------------------------------------------------ rows
-    @property
-    def rows(self) -> dict[int, Row]:
-        return self.model_.rows
-
     def add_row(self, row: Row, shown: bool = True) -> None:
         row.owner = self
         self.model_.rows[row.item_id] = row
@@ -602,7 +597,6 @@ class FileList(QListView):
             "details": self.details,
             "retry": self.retry,
             "reveal": self.reveal,
-            "remove": self.remove,
         }.get(part)
         if signal is not None:
             signal.emit(iid)

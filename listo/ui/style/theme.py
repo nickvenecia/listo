@@ -14,7 +14,6 @@ from listo.ui.style import tokens
 from listo.ui.style.tokens import (
     AVATAR,
     BAR_H,
-    CHIP_SM_H,
     CONTROL_H,
     HANDLE,
     ICON,
@@ -208,9 +207,6 @@ QScrollBar:vertical:disabled, QScrollBar::handle:vertical:disabled {{ background
 QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::sub-page {{ height: 0; background: none; }}
 
 /* ---------- status words and chips: the color comes from the tone */
-#Chip {{ border-radius: {RADIUS_SM}px; padding: 0 {SPACE_2}px; font-size: {TEXT_XS}px; font-weight: {WEIGHT_SEMIBOLD};
-    min-height: {CHIP_SM_H}px; max-height: {CHIP_SM_H}px; border: 1px solid {tokens.BORDER_STRONG}; color: {tokens.MUTED}; }}
-#Chip[tone="custom"] {{ color: {tokens.ACCENT}; border-color: {tokens.ACCENT_EDGE}; background: {tokens.ACCENT_TINT}; }}
 
 /* ---------- cards in a panel */
 #CardTitle {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
@@ -231,8 +227,6 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #Nav:hover {{ background: {tokens.CARD_HOVER}; }}
 #Nav[selected="true"] {{ background: {tokens.ACCENT_TINT}; }}
 #NavLabel {{ color: {tokens.TEXT}; font-weight: {WEIGHT_MEDIUM}; }}
-QToolButton#NavArrow {{ background: transparent; border: none; padding: 0; }}
-QToolButton#NavArrow:hover {{ background: {tokens.CARD_HOVER}; border-radius: {RADIUS_XS}px; }}
 #NavHead {{ background: transparent; }}
 #NavHead:hover #SectionLabel {{ color: {tokens.TEXT}; }}
 #Nav[selected="true"] #NavLabel {{ color: {tokens.ACCENT_HOVER}; }}

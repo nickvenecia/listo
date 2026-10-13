@@ -96,7 +96,7 @@ listo/
     panels/convert_to.py   ConvertPanel (the right panel, a SidePanel): preview on top, then ConvertSettings, then
                    ExportSettings; set_width() on a smaller window
     panels/convert.py      ConvertSettings: recipe, Video / Photo / Audio pages, the Image / Burn-In / Encoding cards
-    panels/export.py       ExportSettings: the live preview (preview_box), joining, Saves As example, Where, Name, Advanced
+    panels/export.py       ExportSettings: the live preview (preview_box), joining, Saves To (the example name, Where, Name), Advanced
     dialogs/common.py      Alert, confirm(), notice(), ask_name(), about()
     dialogs/settings.py    Settings (⌘,): General (Appearance, Accent Color, Updates), Keyboard Shortcuts, Your Data
                    (folder, Back Up…, Storage & Cache = dialogs/storage.StorageView, debug console, log)
@@ -153,7 +153,7 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
 - `frame.frame_plan` also returns the picture area (fractions, without bars); burnin.plan keeps everything inside it.
 - Captions flow: as soon as captions are on and a clip with sound is read, MainWindow._sync_captions() queues it on the
   background TranscribeThread, which hands clips to a separate process (core/captions_worker.py: nice'd, half the cores;
-  progress only on the card's CC icon). Never run speech-to-text on a thread in the app process: it holds Python's
+  progress only on the row's CC icon). Never run speech-to-text on a thread in the app process: it holds Python's
   lock and froze the window for 10-15 s. Entry points (listo/__main__.py, launcher.py) call
   multiprocessing.freeze_support() and keep their code under `if __name__ == "__main__"` (spawn re-imports them).
   Tests swap the process's target (TranscribeThread.target -> tests/speech_standin.py). Checking is separate:

@@ -1,4 +1,4 @@
-"""ClipPlayer: plays a clip with sound inside Listo (Export preview, Preview window, caption check).
+"""ClipPlayer: plays a clip with sound inside Listo (the live preview in Convert To, the Preview window, the caption check).
 
 Layers, bottom to top:
   video     the clip as shot (Qt's player; pixel shape from MediaInfo, so DV / MOD look right)
@@ -88,15 +88,11 @@ def fit(w: float, h: float, box: QRectF) -> QRectF:
 
 class _Stage(QGraphicsView):
     clicked = Signal()
-    double_clicked = Signal()
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit()
         super().mouseReleaseEvent(e)
-
-    def mouseDoubleClickEvent(self, e):
-        self.double_clicked.emit()
 
     def wheelEvent(self, e):
         e.ignore()  # let the panel scroll
@@ -104,7 +100,6 @@ class _Stage(QGraphicsView):
 
 class ClipPlayer(QWidget):
     position_changed = Signal(float)  # seconds, while playing and after every move
-    playing_changed = Signal(bool)
     step = Signal(int)  # -1 previous clip, +1 next clip (owners decide what that means)
     settled = Signal(float)  # paused somewhere new: owners can show the exact result frame there
     clicked = Signal()
@@ -427,7 +422,6 @@ class ClipPlayer(QWidget):
             self._ticker.stop()
             self._tick()
             self._settle.start()
-        self.playing_changed.emit(playing)
 
     def _duration(self, ms: int) -> None:
         self.slider.blockSignals(True)

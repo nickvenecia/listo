@@ -97,13 +97,9 @@ class _Pages(QWidget):
         for n, w in enumerate(self.pages):
             w.setVisible(n == i)
 
-    def currentIndex(self) -> int:
-        return self._i
 
-
-def _checks(*rows: ToggleRow, row: bool = False) -> QVBoxLayout:
-    """On/off settings stacked as full-width rows (label left, switch right). `row` is ignored:
-    side-by-side boxes made the panel look cluttered and left-leaning."""
+def _checks(*rows: ToggleRow) -> QVBoxLayout:
+    """On/off settings stacked as full-width rows (label left, switch right)."""
     lay = vbox(spacing=0)
     for r in rows:
         lay.addWidget(r)
@@ -587,8 +583,8 @@ class ConvertSettings(QWidget):
         self.changed.emit()
 
     def notify_external_change(self) -> None:
-        """Settings changed elsewhere (e.g. Export options) — keep the recipe picker honest."""
-        self._sync_text()  # (joining shows "Glitch Between Joined Clips")
+        """Settings changed (here, in Saves To, or by undo): keep the recipe picker honest."""
+        self._sync_text()
         self._match_recipe()
 
     def _video_preset(self, key: str) -> None:
@@ -818,7 +814,7 @@ class ConvertSettings(QWidget):
         self._match_recipe()
 
     def reload(self) -> None:
-        """Refresh every control from the settings (after a recipe is applied)."""
+        """Refresh every control from the settings (after a recipe is applied, or undo / redo)."""
         self._loading = True
         try:
             for box, key in (

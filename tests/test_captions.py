@@ -167,6 +167,8 @@ def test_convert_waits_for_captions_then_converts(tmp_path: Path, monkeypatch):
 
     assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
     w.start()
+    if w._convert_after_captions:  # still making them: the bar says so until they're done
+        assert w.f_title.text() == "Waiting for Captions" and not w.btn_start.isEnabled()
     assert wait(lambda: any(it.state == "done" for it in w.items.values()))
     assert opened == []  # checking is its own button now
     srt = (tmp_path / "talk_cc.srt").read_text()
