@@ -62,18 +62,7 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
-
-    import listo.ui.panels.convert
-    import listo.ui.panels.export
-    import listo.ui.window.main_window
-
-    # Never touch the real Listo preferences on this computer.
-    ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.window.main_window, listo.ui.panels.convert, listo.ui.panels.export):
-        if hasattr(mod, "QSettings"):
-            monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
 
     from listo.ui.window.main_window import MainWindow
 
@@ -123,9 +112,9 @@ def test_main_window_builds_and_settings_round_trip(tmp_path: Path, monkeypatch)
     sb.burn_style.setCurrentIndex(sb.burn_style.findData("vhs"))
     m = w._list_menu(0)  # right-click on empty space: only clearing the list (never the files)
     assert [a.text() for a in m.actions() if a.text()] == [
-        "Remove from the List",
+        "Remove from the List…",
         "Clear Finished",
-        "Clear All",
+        "Clear All…",
     ]
     assert not any(a.isEnabled() for a in m.actions() if a.text())  # nothing in the list yet
     w.close()
@@ -169,15 +158,8 @@ def test_camera_sidecar_files_are_not_listed(tmp_path: Path, monkeypatch):
     import os
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert
-    import listo.ui.window.main_window
-
-    ini = str(tmp_path / "listo-test.ini")
-    for mod in (listo.ui.window.main_window, listo.ui.panels.convert):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     from listo.ui.window.main_window import MainWindow
 
     app = QApplication.instance() or QApplication([])
@@ -210,17 +192,12 @@ def test_preview_window_opens_for_clips_and_for_an_empty_list(tmp_path: Path, mo
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
     import listo.ui.dialogs.preview as pd
-    import listo.ui.panels.convert as sb
     import listo.ui.window.main_window as mw
     from listo.core import sample
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(sample, "data_dir", lambda: tmp_path / "data")
     shown = []
     monkeypatch.setattr(pd.PreviewDialog, "exec", lambda self: shown.append([c[0] for c in self.clips]) or 0)

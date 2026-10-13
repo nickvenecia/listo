@@ -27,6 +27,7 @@ from pathlib import Path
 from listo.core.log import get_logger
 from listo.core.paths import downloads_dir, tools_dir
 from listo.core.tools import EXE, IS_WIN, capabilities, popen_kwargs
+from listo.core.web import is_web_link, web_link
 
 log = get_logger(__name__)
 
@@ -50,8 +51,8 @@ class Canceled(Exception):
 
 
 def is_link(text: str) -> bool:
-    t = text.strip().lower()
-    return (t.startswith("http://") or t.startswith("https://")) and " " not in t and len(t) > 10
+    """A web link the downloader can be given (core/web.py decides)."""
+    return is_web_link(text)
 
 
 def _arch() -> str:
@@ -295,7 +296,9 @@ class LinkDownload:
     """Download one link. run() blocks; cancel() from any thread."""
 
     def __init__(self, url: str, dest: Path | None = None):
-        self.url = url.strip()
+        self.url = web_link(url)
+        if not self.url:
+            raise ValueError("That doesn't look like a web link.")
         self.dest = dest or downloads_dir()
         self.proc: subprocess.Popen | None = None
         self._canceled = False
@@ -351,7 +354,7 @@ class LinkDownload:
             args += ["--ffmpeg-location", str(Path(caps.ffmpeg).parent)]
         if deno:
             args += ["--js-runtimes", f"deno:{deno}"]
-        args.append(self.url)
+        args += ["--", self.url]  # the link is never read as one of yt-dlp's options
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         self.proc = subprocess.Popen(
             args,

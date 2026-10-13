@@ -79,7 +79,7 @@ def test_the_right_panel_and_esc(qapp, clips):
         w._card_pressed(first, Qt.KeyboardModifier.NoModifier)
         assert w.dock.opened  # picking a file brings it back
         menu = [a.text() for a in w._list_menu(first).actions() if a.text()]
-        assert "Remove from the List" in menu and "Clear All" in menu
+        assert "Remove from the List…" in menu and "Clear All…" in menu
     finally:
         w.close()
 
@@ -124,3 +124,45 @@ def test_feedback_waits_in_the_outbox(data_folder):
     assert len(kept) == 1 and json.loads(kept[0].read_text())["message"] == fb.message
     with pytest.raises(feedback.FeedbackError):
         feedback.make("idea", "   ")
+
+
+def test_undo_redo_and_reorder(qapp, clips, monkeypatch):
+    import listo.ui.window.main_window as mw
+
+    w = mw.MainWindow()
+    w._restored = True
+    w.show()
+    asked = []
+    monkeypatch.setattr(mw, "confirm", lambda *a, **k: asked.append(a[1]) or True)
+    try:
+        w.add_paths([str(p) for p in clips[:3]])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        a, b, c = w.order
+
+        # a settings change is one step; ⌘Z takes it back, ⇧⌘Z does it again
+        was = w.settings.video_preset
+        w.settings.video_preset = "h264"
+        w._settings_changed()
+        w._settings_timer.stop()
+        w._record_settings()
+        w.undo()
+        assert w.settings.video_preset == was and w.convert.v_fmt.currentData() == was
+        w.redo()
+        assert w.settings.video_preset == "h264"
+
+        # dragging a row: list order is join and timecode order
+        w._reordered([c, a, b])
+        assert w.order == [c, a, b] and w.table.shown_ids() == [c, a, b]
+        w.undo()
+        assert w.order == [a, b, c]
+
+        # Delete asks first (naming the file), and ⌘Z puts it back where it was
+        w._select({b})
+        w.remove_selected()
+        assert asked and asked[-1].startswith("Remove A001_C002.mov") and b not in w.items
+        w.undo()
+        assert w.order == [a, b, c] and w.items[b].card.owner is w.table
+        w.redo()
+        assert w.order == [a, c]
+    finally:
+        w.close()

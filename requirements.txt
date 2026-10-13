@@ -1,8 +1,9 @@
-PySide6-Essentials>=6.7
-PySide6-Addons>=6.7  # Qt's media player: playback in Check the Captions
-psutil>=5.9
-Pillow>=10.3
-pillow-heif>=0.18
-rawpy>=0.21
-certifi>=2024.2
-faster-whisper>=1.1
+# Exact versions, so every build is the same (Dependabot proposes updates: .github/dependabot.yml)
+PySide6-Essentials==6.12.0
+PySide6-Addons==6.12.0  # Qt's media player: playback in the preview and Check the Captions
+psutil==7.2.2  # pausing and stopping ffmpeg and its children
+Pillow==12.3.0  # photos
+pillow-heif==1.8.0  # iPhone photos (.HEIC)
+rawpy==0.27.1  # camera RAW photos
+certifi==2026.7.22  # the list of trusted certificates for HTTPS (updates, the link downloader)
+faster-whisper==1.2.1  # captions: speech to text, on this computer

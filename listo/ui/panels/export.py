@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -20,6 +20,7 @@ from listo.core import join, naming
 from listo.core.log import get_logger
 from listo.core.presets import Settings
 from listo.core.probe import MediaInfo
+from listo.core.store import Prefs
 from listo.ui.components.player import ClipPlayer
 from listo.ui.components.widgets import (
     Card,
@@ -31,7 +32,6 @@ from listo.ui.components.widgets import (
     ToggleRow,
     combo,
     hbox,
-    hint,
     set_combo,
     vbox,
 )
@@ -159,7 +159,7 @@ class ExportSettings(QWidget):
         # ---- where
         where = Section("Where")
         self.where = PathCombo(
-            QSettings("Listo", "Listo"), "recent_folders", WHERE, "Choose a Destination…", self._ask_folder,
+            Prefs(), "recent_folders", WHERE, "Choose a Destination…", self._ask_folder,
             folders=True,
         )  # fmt: skip
         self.where.set_value(self._where_value())
@@ -175,8 +175,6 @@ class ExportSettings(QWidget):
         sr.addWidget(lbl)
         sr.addWidget(self.d_sub, 1)
         where.add(self.d_sub_row)
-        self.d_proxy_hint = hint("Edit proxies go into a Proxy folder next to the original.")
-        where.add(self.d_proxy_hint)
         card.add(where)
 
         # ---- name
@@ -221,9 +219,9 @@ class ExportSettings(QWidget):
         taken.add(self.collision)
         self.adv = Disclosure(
             "Advanced Options",
-            is_open=QSettings("Listo", "Listo").value("export_advanced_open", False, type=bool),
+            is_open=Prefs().value("export_advanced_open", False, type=bool),
         )
-        self.adv.toggled.connect(lambda on: QSettings("Listo", "Listo").setValue("export_advanced_open", on))
+        self.adv.toggled.connect(lambda on: Prefs().setValue("export_advanced_open", on))
         self.adv.add(taken)
 
         after = Section("After Converting")
@@ -300,7 +298,6 @@ class ExportSettings(QWidget):
     def _sync(self) -> None:
         dest = self.s.destination
         self.d_sub_row.setVisible(dest == "subfolder")
-        self.d_proxy_hint.setVisible(self.s.video_preset == "proxy" and dest == "source")
         self.custom_box.setVisible(self.styles.currentData() == "custom")
         self.videos_sec.setVisible(self._videos >= 2 and join.can_join(self.s))
         self._update_advanced()

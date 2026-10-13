@@ -129,16 +129,11 @@ def test_window_joins_the_list_into_one_video(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert as sb
     import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     src = tmp_path / "src"
     src.mkdir()
@@ -223,16 +218,10 @@ def test_play_badge_only_starts_the_joined_video(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert as sb
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     badges, tcs = [], []
     real = mw.Conversion
 

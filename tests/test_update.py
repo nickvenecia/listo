@@ -188,16 +188,10 @@ def test_update_window(monkeypatch):
 
 def test_window_offers_the_update(tmp_path: Path, monkeypatch):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert as sb
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     app = QApplication.instance() or QApplication([])
     w = mw.MainWindow()
     assert w.btn_update.isHidden()

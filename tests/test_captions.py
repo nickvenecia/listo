@@ -128,16 +128,11 @@ def test_convert_waits_for_captions_then_converts(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QDialog
 
     import listo.ui.dialogs.captions as ed
-    import listo.ui.panels.convert as sb
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
     import listo.ui.window.jobs as wk
@@ -187,16 +182,11 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication, QDialog
 
     import listo.ui.dialogs.captions as ed
-    import listo.ui.panels.convert as sb
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
 
     import listo.ui.window.jobs as wk
@@ -367,17 +357,12 @@ def test_changing_accuracy_redoes_the_captions(tmp_path: Path, monkeypatch):
     import time
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert as sb
     import listo.ui.window.jobs as wk
     import listo.ui.window.main_window as mw
     from tests import speech_standin
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
     monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
     answers = []

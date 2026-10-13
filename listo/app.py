@@ -189,6 +189,12 @@ def setup_app(app: QApplication) -> None:
     f.setPixelSize(tokens.TEXT_MD)  # every size is in pixels (the stylesheet's too), so they match
     f.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(f)
+    from listo.ui.old_settings import bring_over
+
+    try:
+        bring_over()  # settings kept by older versions, copied into settings.json once
+    except OSError:
+        log.warning("couldn't copy the old settings into settings.json", exc_info=True)
     saved = store.prefs()
     appearance, accent = saved.get("appearance", "system"), saved.get("accent", "")
     set_appearance(
@@ -305,6 +311,12 @@ def main() -> int:
     ]
     if not smoke and _hand_off(launch_files):
         return 0  # an open Listo window took the files
+    if smoke:  # a throwaway data folder: the check never touches real settings
+        import tempfile
+
+        from listo.core.paths import use_data_dir
+
+        use_data_dir(Path(tempfile.mkdtemp(prefix="listo-smoke-")))
     setup_app(app)  # light or dark like the computer (or as Settings says), in the saved accent
 
     from listo.ui.window.main_window import MainWindow

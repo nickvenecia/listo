@@ -1,9 +1,9 @@
 """The file list in the middle: one row per file, painted (no widgets per row, so hundreds of clips stay quick).
 
-A row shows the thumbnail, the name, what the file is, what it becomes (its format chip, a trim, the new
-name), and on the right its status and progress. The row's buttons (captions, trim, details, try again,
-show the new file, remove) show while the pointer is over it or it's picked. Right-click for the same
-commands and more.
+A row shows a grip (drag it to change the order), the thumbnail, the name, what the file is, what it becomes
+(its format chip, a trim, the new name), and on the right its status and progress. The row's buttons
+(captions, trim, details, try again, show the new file) show while the pointer is over it or it's picked.
+Right-click for the same commands and for taking files off the list.
 
 The window talks to each row through a `Row` (it.card): the same setters the old per-file cards had, so the
 converting code never deals with painting.
@@ -13,11 +13,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from PySide6.QtCore import QAbstractListModel, QEvent, QModelIndex, QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import (
+    QAbstractListModel,
+    QEvent,
+    QModelIndex,
+    QPoint,
+    QPointF,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QFont, QImage, QPainter, QPainterPath, QPixmap, QRegion
-from PySide6.QtWidgets import QAbstractItemView, QListView, QStyledItemDelegate, QToolTip, QWidget
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QListView,
+    QStyledItemDelegate,
+    QToolTip,
+    QWidget,
+)
 
 from listo.ui.style import theme, tokens
+from listo.ui.window.lift import Lift
 
 STATES = {
     "probing": "Reading…",
@@ -53,7 +73,6 @@ BUTTONS = (  # (key, icon, tip): left to right
     ("details", "info", "Details"),
     ("retry", "retry", "Try Again"),
     ("reveal", "reveal", "Show the New File"),
-    ("remove", "x", "Remove from the List"),
 )
 CC_TIPS = {
     "working": "Making captions in the background…",
@@ -178,7 +197,6 @@ class Row:
             "details": s in ("failed", "done", "skipped", "unsupported", "warning"),
             "retry": s in ("failed", "canceled", "skipped", "warning"),
             "reveal": s in FINISHED_OK,
-            "remove": s not in BUSY or s == "downloading",
         }
         return [key for key, _i, _t in BUTTONS if shown[key]]
 
@@ -241,9 +259,10 @@ class _Parts:
     def __init__(self, rect: QRect, row: Row, show_buttons: bool):
         i = tokens.ROW_INSET
         self.shape = QRectF(rect.adjusted(1, i, -1, -i))
-        inner = rect.adjusted(tokens.SPACE_2, i, -tokens.SPACE_2, -i)
+        inner = rect.adjusted(tokens.SPACE_1, i, -tokens.SPACE_2, -i)
+        self.grip = QRect(inner.left(), inner.top(), tokens.GRIP_W, inner.height())
         th_y = inner.top() + (inner.height() - tokens.THUMB_H) // 2
-        self.thumb = QRect(inner.left(), th_y, tokens.THUMB_W, tokens.THUMB_H)
+        self.thumb = QRect(self.grip.right() + 1, th_y, tokens.THUMB_W, tokens.THUMB_H)
         right = inner.right() - tokens.STATUS_W
         self.status_area = QRect(right + 1, inner.top(), tokens.STATUS_W, inner.height())
         x0 = self.thumb.right() + 1 + tokens.SPACE_3
@@ -329,6 +348,15 @@ class RowPainter(QStyledItemDelegate):
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(theme.qcolor(fill))
             p.drawRoundedRect(pt.shape, tokens.ROW_R, tokens.ROW_R)
+
+        # the grip you drag it by
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(theme.qcolor(tokens.FAINT))
+        c = QPointF(pt.grip.center())
+        gap = tokens.GRIP_GAP
+        for dx in (-gap / 2, gap / 2):
+            for dy in (-gap, 0, gap):
+                p.drawEllipse(QPointF(c.x() + dx, c.y() + dy), tokens.GRIP_DOT, tokens.GRIP_DOT)
 
         # the picture: always on black (a monitor), the kind's icon until a thumbnail arrives
         path = QPainterPath()
@@ -431,6 +459,7 @@ class FileList(QListView):
     trim_clicked = Signal(int)
     captions_clicked = Signal(int)
     format_clicked = Signal(int, QPoint)  # item id, where its menu opens (screen)
+    reordered = Signal(list)  # the rows shown, in their new order (dragged by a grip)
     menu_wanted = Signal(int, QPoint)  # right-click on a row (0: on empty space)
     blank_clicked = Signal()  # a click on empty space: nothing picked
     step = Signal(int, object)  # ↑ / ↓: pick the row above / below (direction, modifiers)
@@ -453,6 +482,10 @@ class FileList(QListView):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.hover_id = 0
         self.hover_part = ""
+        self.can_reorder = True  # the window turns it off while converting
+        self._press: tuple[QPoint, int] | None = None  # a grip was pressed, until it moves far enough to lift
+        self._lift: Lift | None = None
+        self._show_later: list[int] | None = None  # rows asked for while one was lifted
 
     # ------------------------------------------------------------------ rows
     @property
@@ -475,6 +508,9 @@ class FileList(QListView):
 
     def show_ids(self, ids: list[int]) -> None:
         """Show these rows, in this order (the place and search filters decide which)."""
+        if self._lift is not None:  # never refill under a row being dragged: after it lands
+            self._show_later = list(ids)
+            return
         self.model_.set_ids([i for i in ids if i in self.model_.rows])
 
     def shown_ids(self) -> list[int]:
@@ -499,6 +535,8 @@ class FileList(QListView):
             return 0, "", QRect()
         rect = self.visualRect(index)
         pt = self.painter_.parts(rect, row)
+        if pt.grip.contains(pos):
+            return row.item_id, "grip", pt.grip
         for key, r in pt.buttons.items():
             if r.contains(pos):
                 return row.item_id, key, r
@@ -508,16 +546,28 @@ class FileList(QListView):
         return row.item_id, "row", rect
 
     def mouseMoveEvent(self, e):
+        pos = e.position().toPoint()
+        if self._lift is not None:
+            self._lift.move_to(pos.y())
+            return
+        if self._press is not None and e.buttons() & Qt.MouseButton.LeftButton:
+            if (pos - self._press[0]).manhattanLength() >= QApplication.startDragDistance():
+                self.start_lift(self._press[1], self._press[0].y())
+                if self._lift is not None:
+                    self._lift.move_to(pos.y())
+            return
         iid, part, _r = self._hit(e.position().toPoint())
         if (iid, part) != (self.hover_id, self.hover_part):
             old = self.hover_id
             self.hover_id, self.hover_part = iid, part
             for i in {old, iid} - {0}:
                 self.row_changed(i)
-            clickable = part not in ("", "row")
-            self.viewport().setCursor(
-                Qt.CursorShape.PointingHandCursor if clickable else Qt.CursorShape.ArrowCursor
-            )
+            shape = Qt.CursorShape.ArrowCursor
+            if part == "grip" and self.can_reorder:
+                shape = Qt.CursorShape.OpenHandCursor
+            elif part not in ("", "row", "grip"):
+                shape = Qt.CursorShape.PointingHandCursor
+            self.viewport().setCursor(shape)
         super().mouseMoveEvent(e)
 
     def leaveEvent(self, e):
@@ -540,6 +590,12 @@ class FileList(QListView):
         if part == "chip":
             self.format_clicked.emit(iid, self.viewport().mapToGlobal(rect.bottomLeft()))
             return
+        if part == "grip" and not e.modifiers():
+            row = self.model_.rows.get(iid)
+            if row is not None and not row.selected:
+                self.pressed.emit(iid, e.modifiers())
+            self._press = (e.position().toPoint(), iid)
+            return
         signal = {
             "cc": self.captions_clicked,
             "trim": self.trim_clicked,
@@ -559,13 +615,48 @@ class FileList(QListView):
             self.opened.emit(iid)
 
     def mouseReleaseEvent(self, e):
+        if self._lift is not None:
+            self.end_lift(drop=True)
+        self._press = None
         e.accept()
+
+    # ------------------------------------------------------------------ dragging to reorder
+    def start_lift(self, iid: int, y: float) -> None:
+        """Lift the pressed row (and the others picked with it) to drag it into place."""
+        self._press = None
+        if not self.can_reorder:
+            return
+        shown = self.shown_ids()
+        picked = [i for i in shown if self.model_.rows[i].selected]
+        moving = picked if iid in picked else [iid]
+        self._lift = Lift(self, shown, moving, iid, y)
+        self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+
+    def lifting(self) -> bool:
+        return self._lift is not None
+
+    def end_lift(self, drop: bool = True) -> None:
+        lift, self._lift = self._lift, None
+        if lift is None:
+            return
+        lift.stop()
+        self.viewport().setCursor(Qt.CursorShape.ArrowCursor)
+        got = lift.result() if drop else None
+        later, self._show_later = self._show_later, None
+        if later is not None:
+            self.show_ids(later)
+        self.viewport().update()
+        if got is not None:
+            QTimer.singleShot(0, lambda: self.reordered.emit(got))
 
     def contextMenuEvent(self, e):
         iid, _part, _r = self._hit(e.pos())
         self.menu_wanted.emit(iid, e.globalPos())
 
     def keyPressEvent(self, e):
+        if e.key() == Qt.Key.Key_Escape and self._lift is not None:
+            self.end_lift(drop=False)  # put it back
+            return
         step = {Qt.Key.Key_Up: -1, Qt.Key.Key_Down: 1}.get(e.key())
         if step is not None:
             self.step.emit(step, e.modifiers())
@@ -582,6 +673,8 @@ class FileList(QListView):
                     tip = (f"{row.cc[1]}. " if row.cc[1] else "") + CC_TIPS.get(row.cc[0], "")
                 elif part == "chip":
                     tip = "Change the format for just this file"
+                elif part == "grip":
+                    tip = "Drag to change the order (joined videos and timecode follow it)"
                 elif part in dict((k, t) for k, _i, t in BUTTONS):
                     tip = dict((k, t) for k, _i, t in BUTTONS)[part]
                 elif part == "row":
@@ -626,6 +719,9 @@ class FileList(QListView):
         self.viewport().update()
 
     def paintEvent(self, e):
+        if self._lift is not None:
+            self._lift.paint()
+            return None
         if self._slide is None:
             return super().paintEvent(e)
         left, left_seam, right, right_seam, right_w = self._slide

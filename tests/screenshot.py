@@ -36,8 +36,9 @@ def main() -> None:
 
     scratch = Path(tempfile.mkdtemp(prefix="listo-shots-"))  # never the real settings or recipes
     use_data_dir(scratch)
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(scratch))
+    from listo.ui import old_settings
+
+    old_settings.old_store = lambda: QSettings(str(scratch / "old.ini"), QSettings.Format.IniFormat)
     if os.environ.get("LISTO_ACCENT"):
         store.save_pref("accent", os.environ["LISTO_ACCENT"])
     app = QApplication(sys.argv[:1])

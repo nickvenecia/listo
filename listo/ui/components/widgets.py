@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSettings, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
@@ -27,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from listo.core.store import Prefs, loads
 from listo.ui.style import theme, tokens
 
 
@@ -417,14 +417,14 @@ class PathCombo(QComboBox):
 
     def __init__(
         self,
-        qs: QSettings,
+        qs: Prefs,
         store: str,
         fixed: list[tuple[str, str, str]],
         choose: str,
         ask: Callable[[str], str],
         folders: bool = False,
     ):
-        """store: the QSettings key of the remembered paths. ask(start) shows the system picker
+        """store: the settings.json key of the remembered paths. ask(start) shows the system picker
         and returns the path (or "" when cancelled)."""
         super().__init__()
         self.qs, self.store, self.fixed, self.choose, self.ask, self.folders = (
@@ -441,16 +441,13 @@ class PathCombo(QComboBox):
         self.set_value(self.value)
 
     def recent(self) -> list[str]:
-        try:
-            data = json.loads(self.qs.value(self.store, "[]") or "[]")
-        except (ValueError, TypeError):
-            data = []
+        data = loads(self.qs.value(self.store, []), [])
         there = Path.is_dir if self.folders else Path.is_file
         return [p for p in data if isinstance(p, str) and p and there(Path(p))]
 
     def remember(self, path: str) -> None:
         paths = [path] + [p for p in self.recent() if p != path]
-        self.qs.setValue(self.store, json.dumps(paths[:RECENT_PATHS]))
+        self.qs.setValue(self.store, paths[:RECENT_PATHS])
 
     def _name(self, path: str) -> str:
         p = Path(path)

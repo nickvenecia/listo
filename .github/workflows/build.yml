@@ -2,6 +2,7 @@ name: Build Listo
 
 # Every push builds and tests on all platforms.
 # Pushing a tag like v2.0.0 also publishes a GitHub Release with the downloads.
+# Actions are pinned to exact commits (a tag can be moved; a commit can't). Dependabot proposes updates.
 on:
   push:
     branches: [main]
@@ -16,8 +17,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false  # the build never needs to push
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - run: pip install "ruff==0.16.8"
@@ -25,6 +28,17 @@ jobs:
         run: ruff format --check .
       - name: Lint (style, bugs, security)
         run: ruff check .
+      - name: The tag matches the app's version
+        # a release whose app reports an older number keeps offering itself as an update
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          v=$(python -c "import ast, pathlib; t = ast.parse(pathlib.Path('listo/__init__.py').read_text()); print(next(n.value.value for n in t.body if isinstance(n, ast.Assign) and n.targets[0].id == '__version__'))")
+          if [ "$TAG" != "v$v" ]; then
+            echo "::error::Tag $TAG doesn't match __version__ $v in listo/__init__.py. Bump the version, commit, then tag."
+            exit 1
+          fi
 
   build:
     needs: lint
@@ -42,13 +56,13 @@ jobs:
             name: linux
     runs-on: ${{ matrix.os }}
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PYTHONUTF8: "1"
-      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false  # the build never needs to push
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
 
@@ -65,6 +79,8 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Download ffmpeg to bundle
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # (only to avoid GitHub's rate limit when reading its releases)
         run: python scripts/fetch_ffmpeg.py
 
       - name: Run tests (with the bundled ffmpeg)
@@ -90,6 +106,14 @@ jobs:
 
       - name: Build app
         run: pyinstaller listo.spec --noconfirm
+
+      # the signing certificate is only handed to the signing step (never to installs, tests or the build)
+      - name: Is signing set up?
+        id: signing
+        if: runner.os == 'macOS'
+        env:
+          HAS_CERT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+        run: echo "ready=$HAS_CERT" >> "$GITHUB_OUTPUT"
 
       # ---------- smoke tests: launch the packaged app and convert a file
       - name: Smoke test (macOS)
@@ -127,19 +151,23 @@ jobs:
 
       # ---------- optional: sign + notarize on macOS (only if you add the secrets — see README)
       - name: Sign and notarize (macOS)
-        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
+        if: runner.os == 'macOS' && steps.signing.outputs.ready == 'true'
         env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          echo "$MACOS_CERTIFICATE" | base64 --decode > cert.p12
+          CERT="$RUNNER_TEMP/cert.p12"
+          trap 'rm -f "$CERT"' EXIT  # gone even if a step below fails
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$CERT"
           security create-keychain -p ci build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p ci build.keychain
-          security import cert.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          security import "$CERT" -k build.keychain -P "$MACOS_CERTIFICATE_PWD" -T /usr/bin/codesign
+          rm -f "$CERT"
           security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
           find dist/Listo.app -type f \( -perm -u+x -o -name "*.dylib" -o -name "*.so" \) -print0 | \
             xargs -0 codesign --force --timestamp --options runtime --entitlements packaging/macos/entitlements.plist --sign "$MACOS_SIGN_IDENTITY" || true
@@ -191,7 +219,7 @@ jobs:
           bash packaging/linux/build_appimage.sh dist/Listo out/Listo-linux-x64.AppImage
           out/Listo-linux-x64.AppImage --smoke-test
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: Listo-${{ matrix.name }}
           path: out/*
@@ -204,11 +232,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: artifacts/*
           generate_release_notes: true

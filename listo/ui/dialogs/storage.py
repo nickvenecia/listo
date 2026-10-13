@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 from listo.core import storage
 from listo.ui.components.widgets import Card, hbox, hint, vbox
 from listo.ui.dialogs.common import confirm, notice
-from listo.ui.style.tokens import SPACE_1, SPACE_2, SPACE_3
+from listo.ui.style.tokens import SPACE_2, SPACE_3
 
 
 class StorageView(QWidget):
@@ -39,6 +39,7 @@ class StorageView(QWidget):
             top = hbox(spacing=SPACE_2)
             name = QLabel(k.title)
             name.setObjectName("CardTitle")
+            name.setToolTip(k.note)
             size = QLabel()
             size.setObjectName("Muted")
             delete = QPushButton("Delete")
@@ -49,8 +50,6 @@ class StorageView(QWidget):
             top.addWidget(size)
             top.addWidget(delete)
             card.add(top)
-            card.add(hint(k.note))
-            card.lay.setSpacing(SPACE_1)
             lay.addWidget(card)
             self.rows[k.key] = (size, delete)
 

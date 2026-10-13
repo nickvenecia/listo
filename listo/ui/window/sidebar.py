@@ -12,7 +12,6 @@ from PySide6.QtCore import (
     QPoint,
     QPropertyAnimation,
     QRect,
-    QSettings,
     Qt,
     QTimer,
     Signal,
@@ -20,6 +19,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QFrame, QGraphicsOpacityEffect, QLabel, QPushButton, QToolButton, QWidget
 
+from listo.core.store import Prefs
 from listo.ui.components.panels import LeftPanel
 from listo.ui.components.widgets import ElidedLabel, IconLabel, hbox, section_label, vbox
 from listo.ui.style import theme, tokens
@@ -153,7 +153,7 @@ class Sidebar(LeftPanel):
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(tokens.SIDEBAR_W, tokens.TOOLBAR_H, parent)
-        self.qs = QSettings("Listo", "Listo")
+        self.qs = Prefs()
         self.current = "all"
         self.word = word = QLabel(theme.wordmark())
         word.setObjectName("Wordmark")

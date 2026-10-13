@@ -109,16 +109,10 @@ def test_command_line_runs_the_timecode_on(tmp_path: Path):
 def test_window_gives_separate_files_their_timecode(tmp_path: Path, monkeypatch, mode: str):
     """Separate files follow the same choice as a joined video, and the previews show what Convert gives."""
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
 
-    import listo.ui.panels.convert as sb
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     given = []
     real = mw.Conversion
 

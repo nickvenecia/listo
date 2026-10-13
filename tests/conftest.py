@@ -30,16 +30,17 @@ def pytest_unconfigure(config):
 
 
 @pytest.fixture(autouse=True)
-def data_folder(tmp_path):
-    """Never touch the real settings, recipes, captions or tools: every test gets its own empty data
-    folder, and its own settings file for QSettings("Listo", "Listo")."""
+def data_folder(tmp_path, monkeypatch):
+    """Never touch the real settings, recipes, captions or tools: every test gets its own empty data folder,
+    and its own (empty) stand-in for the settings store older versions used."""
     from PySide6.QtCore import QSettings
 
     from listo.core.paths import use_data_dir
+    from listo.ui import old_settings
 
     use_data_dir(tmp_path / "data")
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "qsettings"))
+    old = str(tmp_path / "old-settings.ini")
+    monkeypatch.setattr(old_settings, "old_store", lambda: QSettings(old, QSettings.Format.IniFormat))
     yield tmp_path / "data"
     use_data_dir(None)
 

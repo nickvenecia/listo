@@ -100,10 +100,9 @@ class CaptionEditor(QDialog):
         self.player.settled.connect(self._settled)
         self.player.clicked.connect(self.player.toggle)
         left.addWidget(self.player)
-        self.help = hint(
-            "Press Play (or Space) to watch with the captions; the one on screen lights up. "
-            "Click a line to jump there and fix it. Clear a line to remove that caption."
-        )
+        self.player.setToolTip("Space plays and pauses; the caption on screen lights up on the right")
+        self.help = hint("")  # only when something needs saying (no room for a caption here)
+        self.help.hide()
         left.addWidget(self.help)
         left.addStretch(1)
         body.addLayout(left)
@@ -115,7 +114,7 @@ class CaptionEditor(QDialog):
         self.scroll.setFixedHeight(EDITOR_PIC_H + 24)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         right.addWidget(self.scroll)
-        self.btn_add = QPushButton(" Add Caption")
+        self.btn_add = QPushButton("Add Caption")
         self.btn_add.setIcon(theme.icon("plus", theme.TEXT))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add a caption where the clip is now (pause where the words start)")
@@ -259,7 +258,9 @@ class CaptionEditor(QDialog):
         end = min(t + NEW_CAPTION_S, nxt)
         if end - t < MIN_CAPTION_S:
             self.help.setText("No room for a caption here. Move to a gap between captions, then Add Caption.")
+            self.help.show()
             return
+        self.help.hide()
         self.player.pause()
         cue = Cue(round(t, 3), round(end, 3), "")
         cues.append(cue)

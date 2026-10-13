@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QPoint, QSettings, QSize, Qt, QThread, QThreadPool, QTimer
+from PySide6.QtCore import QByteArray, QPoint, QSize, Qt, QThread, QThreadPool, QTimer
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
@@ -87,6 +87,7 @@ from listo.ui.dialogs.trim import TrimDialog, fmt_time
 from listo.ui.dialogs.update import CheckThread, UpdateDialog, restart_into
 from listo.ui.panels.convert_to import ConvertPanel
 from listo.ui.style import theme, tokens
+from listo.ui.window.history import History, Step
 from listo.ui.window.jobs import (
     ConvertThread,
     DownloadThread,
@@ -243,11 +244,9 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.resize(*tokens.WINDOW_SIZE)
         self.setMinimumSize(QSize(*tokens.WINDOW_MIN))
-        self.qs = QSettings("Listo", "Listo")
+        self.qs = store.Prefs()  # settings.json in Listo's data folder
         try:
-            import json
-
-            self.settings = Settings.from_dict(json.loads(self.qs.value("settings", "{}") or "{}"))
+            self.settings = Settings.from_dict(store.loads(self.qs.value("settings", {}), {}))
         except Exception:
             log.warning("couldn't read the saved settings; starting fresh", exc_info=True)
             self.settings = Settings()
@@ -293,6 +292,9 @@ class MainWindow(QMainWindow):
         self._sample_probe: tuple[str, MediaInfo] | None = None
         self._anchor: int | None = None  # where a Shift-click range starts
         self._restored = False  # True: open at the size already set (screenshots), not the saved one
+        self.history = History()  # undo / redo
+        self._settings_before = self.settings.to_dict()  # the settings as the last undo step left them
+        self._history_busy = False  # undoing or redoing: that's not a new step
 
         self._build()
         self._menus()
@@ -313,6 +315,10 @@ class MainWindow(QMainWindow):
         self._live_timer.setSingleShot(True)
         self._live_timer.setInterval(350)  # wait until a slider or a few clicks settle
         self._live_timer.timeout.connect(self._render_live)
+        self._settings_timer = QTimer(self)  # a settings change becomes an undo step once it settles
+        self._settings_timer.setSingleShot(True)
+        self._settings_timer.setInterval(tokens.SAVE_DELAY_MS)
+        self._settings_timer.timeout.connect(self._record_settings)
         self._schedule_live()
         self.convert.apply_capabilities(self.caps)
         self.pool.start(HardwareTask(self.hw_signals))
@@ -430,8 +436,9 @@ class MainWindow(QMainWindow):
         self.table.trim_clicked.connect(self.trim_item)
         self.table.captions_clicked.connect(self.open_captions)
         self.table.menu_wanted.connect(self._row_menu)
-        self.table.blank_clicked.connect(lambda: self._select(set()))
+        self.table.blank_clicked.connect(self._escape)
         self.table.step.connect(self._step_pick)
+        self.table.reordered.connect(self._reordered)
         self.nothing = QLabel("Nothing here.")  # a place or a search with no files in it
         self.nothing.setObjectName("EmptyText")
         self.nothing.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -522,13 +529,19 @@ class MainWindow(QMainWindow):
         act(f, f"Quit {APP_NAME}", self.close, QKeySequence.StandardKey.Quit, QAction.MenuRole.QuitRole)
 
         e = bar.addMenu("Edit")
+        self.act_undo = act(e, "Undo", self.undo, QKeySequence.StandardKey.Undo)
+        self.act_redo = act(e, "Redo", self.redo, "Ctrl+Shift+Z")
+        if sys.platform != "darwin":  # Ctrl+Y too, as Windows apps do
+            self.act_redo.setShortcuts([QKeySequence("Ctrl+Shift+Z"), QKeySequence("Ctrl+Y")])
+        e.aboutToShow.connect(self._edit_menu_state)
+        e.addSeparator()
         # Text fields keep these keys for themselves while you type in them.
         act(e, "Paste", self._paste, QKeySequence.StandardKey.Paste)
         act(e, "Select All", self.select_all, QKeySequence.StandardKey.SelectAll)
         e.addSeparator()
-        act(e, "Remove from the List", self.remove_selected, [Qt.Key.Key_Backspace, Qt.Key.Key_Delete])
+        act(e, "Remove from the List…", self.remove_selected, [Qt.Key.Key_Backspace, Qt.Key.Key_Delete])
         act(e, "Clear Finished", self.clear_finished)
-        act(e, "Clear All", self.clear_all)
+        act(e, "Clear All…", self.clear_all)
         e.addSeparator()
         act(e, "Find", self.search.setFocus, QKeySequence.StandardKey.Find)
 
@@ -617,7 +630,11 @@ class MainWindow(QMainWindow):
         self.qs.setValue("panel_open", on)
 
     def _escape(self) -> None:
-        """Esc: nothing picked, and the panel slides away."""
+        """Esc (or a click on empty space in the list): nothing picked, and the panel slides away.
+        While a row is being dragged, Esc puts it back instead."""
+        if self.table.lifting():
+            self.table.end_lift(drop=False)
+            return
         self._select(set())
         self.show_panel(False)
 
@@ -685,6 +702,116 @@ class MainWindow(QMainWindow):
         d = data_dir()
         d.mkdir(parents=True, exist_ok=True)
         reveal(d)
+
+    def back_up(self) -> None:
+        """Your settings, recipes and checked captions, zipped where you pick."""
+        start = store.documents_dir() / f"Listo Backup {time.strftime('%Y-%m-%d')}.zip"
+        path, _ = QFileDialog.getSaveFileName(self, "Back Up", str(start), "Zip Files (*.zip)")
+        if not path:
+            return
+        try:
+            store.back_up(Path(path))
+        except OSError:
+            log.warning("back up failed", exc_info=True)
+            notice(self, "Couldn't Back Up", "Listo couldn't write the backup there. Pick another folder.")
+            return
+        self.toast.show_message(f"Backed up to {Path(path).name}.")
+
+    # ------------------------------------------------------------------ undo / redo
+    def _step(self, what: str, undo, redo) -> None:
+        if not self._history_busy:
+            self.history.push(Step(what, undo, redo))
+
+    def _record_settings(self) -> None:
+        """A settings change has settled: one undo step for it (a change taken straight back leaves none)."""
+        now, before = self.settings.to_dict(), self._settings_before
+        if now == before:
+            return
+        last = self.history.last()
+        if last is not None and last.kind == "settings" and last.data[0] == now:
+            self.history.drop_last()  # changed straight back
+        else:
+            self.history.push(
+                Step(
+                    "the settings",
+                    lambda: self._put_settings(before),
+                    lambda: self._put_settings(now),
+                    "settings",
+                    (before, now),
+                )
+            )
+        self._settings_before = now
+
+    def _put_settings(self, values: dict) -> None:
+        self._history_busy = True
+        try:
+            self.settings.apply(values)
+            self.convert.reload()
+            self.export_panel.reload()
+            self._settings_changed()
+            self._settings_before = self.settings.to_dict()
+        finally:
+            self._history_busy = False
+
+    def _reordered(self, shown: list[int]) -> None:
+        """A dragged row landed: the files showing are in this order now (the others keep their places)."""
+        before = list(self.order)
+        spots = [n for n, i in enumerate(before) if i in set(shown)]
+        after = list(before)
+        for n, iid in zip(spots, shown, strict=False):
+            after[n] = iid
+        if after == before:
+            return
+        self._put_order(after)
+        self._step("the order", lambda: self._put_order(before), lambda: self._put_order(after))
+
+    def _put_order(self, order: list[int]) -> None:
+        self.order = [i for i in order if i in self.items] + [i for i in self.order if i not in set(order)]
+        if self.running:
+            self.batch.sort(key=lambda i: self.order.index(i) if i in self.items else len(self.order))
+        log.info("list order changed")
+        self._apply_filter()
+        for it in self.items.values():
+            if it.state in ("ready", "waiting"):
+                self._update_output_name(it)  # a joined video is named after its first and last clip
+        self._refresh_footer()
+        self._schedule_live()
+
+    def _text_widget(self):
+        """The text box you're typing in, if any (it keeps its own undo, cut, copy and paste)."""
+        w = QApplication.focusWidget()
+        return w if isinstance(w, (QLineEdit, QPlainTextEdit)) else None
+
+    def _text_can_undo(self, redo: bool = False) -> bool:
+        w = self._text_widget()
+        if isinstance(w, QLineEdit):
+            return w.isRedoAvailable() if redo else w.isUndoAvailable()
+        if w is not None:
+            doc = w.document()
+            return doc.isRedoAvailable() if redo else doc.isUndoAvailable()
+        return False
+
+    def undo(self) -> None:
+        """⌘Z: in a text box, its typing; otherwise the last change to the settings or the list."""
+        if self._text_can_undo():
+            self._text_widget().undo()
+            return
+        self._settings_timer.stop()
+        self._record_settings()  # a change still settling is the step to undo
+        what = self.history.undo()
+        self.toast.show_message(f"Undid the change to {what}." if what else "Nothing to undo.")
+
+    def redo(self) -> None:
+        if self._text_can_undo(redo=True):
+            self._text_widget().redo()
+            return
+        what = self.history.redo()
+        self.toast.show_message(f"Redid the change to {what}." if what else "Nothing to redo.")
+
+    def _edit_menu_state(self) -> None:
+        h = self.history
+        self.act_undo.setEnabled(self._text_can_undo() or h.can_undo() or self._settings_timer.isActive())
+        self.act_redo.setEnabled(self._text_can_undo(redo=True) or h.can_redo())
 
     # ------------------------------------------------------------------ updates (core/update.py)
     def _auto_check_updates(self) -> None:
@@ -818,11 +945,11 @@ class MainWindow(QMainWindow):
         making = len(wanted) - len(ready) - sum(1 for it in wanted if it.id in self._tx_failed)
         self.btn_check.setEnabled(bool(ready))
         if not ready and making:
-            self.btn_check.setText(" Making Captions…")
+            self.btn_check.setText("Making Captions…")
         elif new:
-            self.btn_check.setText(f" Check Captions · {new} New")
+            self.btn_check.setText(f"Check Captions · {new} New")
         else:
-            self.btn_check.setText(" Check Captions")
+            self.btn_check.setText("Check Captions")
 
     def _show_log(self) -> None:
         from listo.core.fileutil import reveal
@@ -972,9 +1099,24 @@ class MainWindow(QMainWindow):
             return
         dlg = TrimDialog(it.path, it.info, it.trim, self)
         if dlg.exec() == QDialog.DialogCode.Accepted and it.state in ("ready", "waiting"):
-            it.trim = dlg.result_trim
-            it.card.set_trim(f"✂ {fmt_time(it.trim[0])}–{fmt_time(it.trim[1])}" if it.trim else "")
-            self._refresh_footer()
+            before, after = it.trim, dlg.result_trim
+            if after == before:
+                return
+            self._put_trim(iid, after)
+            self._step(
+                f"{Path(it.path).name}'s trim",
+                lambda: self._put_trim(iid, before),
+                lambda: self._put_trim(iid, after),
+            )
+
+    def _put_trim(self, iid: int, trim: tuple[float, float] | None) -> None:
+        it = self.items.get(iid)
+        if it is None or it.state not in ("ready", "waiting"):
+            return
+        it.trim = trim
+        it.card.set_trim(f"✂ {fmt_time(trim[0])}–{fmt_time(trim[1])}" if trim else "")
+        self._refresh_footer()
+        self._schedule_live()
 
     # ------------------------------------------------------------------ adding files
     def pick_files(self) -> None:
@@ -1001,9 +1143,7 @@ class MainWindow(QMainWindow):
         self.btn_show.hide()
         if self.running:
             return
-        for iid in list(self.order):
-            if self.items[iid].state in ("done", "skipped"):
-                self.remove_item(iid)
+        self._take_off([i for i in self.order if self.items[i].state in ("done", "skipped")], record=False)
 
     def add_paths(self, paths: list[str]) -> None:
         existing = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
@@ -1516,11 +1656,10 @@ class MainWindow(QMainWindow):
         self.export_panel.set_sample(None, None, "video")
 
     def _settings_changed(self) -> None:
-        import json
 
         self.convert.notify_external_change()
         self.export_panel.refresh()
-        self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
+        self.qs.setValue("settings", self.settings.to_dict())
         self._schedule_live()
         for it in self.items.values():
             if it.state in ("ready", "waiting"):
@@ -1528,6 +1667,8 @@ class MainWindow(QMainWindow):
         self._caption_choice_changed()
         self._sync_captions()
         self._refresh_footer()  # "Convert & Join" on the button
+        if not self._history_busy:
+            self._settings_timer.start()
 
     def _format_menu(self, iid: int, at: QPoint) -> None:
         it = self.items.get(iid)
@@ -1575,26 +1716,81 @@ class MainWindow(QMainWindow):
         it = self.items.get(iid)
         if not it or it.state not in ("ready", "waiting"):
             return
-        it.override = {k: v for k, v in override.items() if k in OVERRIDE_KEYS}
-        self._update_output_name(it)
+        before = dict(it.override)
+        after = {k: v for k, v in override.items() if k in OVERRIDE_KEYS}
+        if after == before:
+            return
+        self._put_override(iid, after)
+        self._step(
+            f"{Path(it.path).name}'s format",
+            lambda: self._put_override(iid, before),
+            lambda: self._put_override(iid, after),
+        )
+
+    def _put_override(self, iid: int, override: dict) -> None:
+        it = self.items.get(iid)
+        if it is not None and it.state in ("ready", "waiting"):
+            it.override = dict(override)
+            self._update_output_name(it)
+            self._schedule_live()
 
     # ------------------------------------------------------------------ list actions
     def remove_item(self, iid: int) -> None:
-        it = self.items.get(iid)
-        if not it or iid in self.active:
+        """Take one file off the list (never off the disk). ⌘Z puts it back."""
+        self._take_off([iid])
+
+    def _take_off(self, ids: list[int], record: bool = True) -> None:
+        """Take files off the list in one go (files converting right now stay). One undo step."""
+        gone: list[tuple[int, Item]] = []
+        for iid in ids:
+            it = self.items.get(iid)
+            if not it or iid in self.active:
+                continue
+            gone.append((self.order.index(iid), it))
+            if iid in self.downloads:
+                self.downloads[iid].job.cancel()  # its thread finishes on its own
+            self.table.drop_row(iid)
+            del self.items[iid]
+            self.order.remove(iid)
+            if iid in self.batch:
+                self.batch.remove(iid)
+        if not gone:
             return
-        if iid in self.downloads:
-            self.downloads[iid].job.cancel()  # its thread finishes on its own
-        self.table.drop_row(iid)
-        del self.items[iid]
-        self.order.remove(iid)
-        if iid in self.selected:
-            self._select(self.selected - {iid})
-        if iid in self.batch:
-            self.batch.remove(iid)
-        if not self.items or not self.table.shown_ids():
-            self._show_page()
+        self.selected -= {it.id for _n, it in gone}
+        self._show_page()
         self._update_sample()
+        self._refresh_footer()
+        if self.running:
+            self._kick()
+        if record:
+            n = len(gone)
+            names = Path(gone[0][1].path).name if n == 1 else f"{n} files"
+            again = [it.id for _n, it in gone]
+            self._step(
+                f"taking {names} off the list",
+                lambda: self._put_back(gone),
+                lambda: self._take_off(again, False),
+            )
+
+    def _put_back(self, gone: list[tuple[int, Item]]) -> None:
+        """Undo taking files off the list: each goes back where it was."""
+        for index, it in sorted(gone, key=lambda g: g[0]):
+            if it.id in self.items:
+                continue
+            if it.state == "downloading":  # its download stopped when it went: try again from its row
+                it.state, it.message = "failed", "Canceled"
+                it.card.set_state("failed", "Canceled")
+            elif it.state == "waiting" and not self.running:
+                it.state, it.base = "ready", None
+                it.card.set_state("ready")
+            self.items[it.id] = it
+            self.order.insert(min(index, len(self.order)), it.id)
+            self.table.add_row(it.card, shown=False)
+            if self.running and it.state == "waiting" and it.id not in self.batch:
+                self.batch.append(it.id)
+        self._apply_filter()
+        self._update_sample()
+        self._refresh_soon(captions=True)
         self._refresh_footer()
         if self.running:
             self._kick()
@@ -1686,14 +1882,15 @@ class MainWindow(QMainWindow):
         dlg.exec()
 
     def clear_finished(self) -> None:
-        for iid in list(self.order):
-            if self.items[iid].state in FINAL:
-                self.remove_item(iid)
+        self._take_off([i for i in self.order if self.items[i].state in FINAL])
 
     def clear_all(self) -> None:
-        for iid in list(self.order):
-            if iid not in self.active:
-                self.remove_item(iid)
+        ids = [i for i in self.order if i not in self.active]
+        if len(ids) > 1 and not confirm(
+            self, "Clear the List?", f"{len(ids)} files. The files themselves stay where they are.", "Clear"
+        ):
+            return
+        self._take_off(ids)
 
     # ------------------------------------------------------------------ selection
     def _select(self, ids: set[int]) -> None:
@@ -1735,11 +1932,21 @@ class MainWindow(QMainWindow):
         self.table.scroll_to(iid)
 
     def select_all(self) -> None:
-        self._select(set(self.order))
+        """⌘A: every file showing."""
+        self._select(set(self.table.shown_ids()))
 
     def remove_selected(self) -> None:
-        for iid in [i for i in self.order if i in self.selected]:
-            self.remove_item(iid)  # files that are converting right now are skipped
+        """Delete / Backspace: take what's picked off the list, after an alert that names it (files converting
+        right now stay)."""
+        ids = [i for i in self.order if i in self.selected and i not in self.active]
+        if not ids:
+            return
+        name = Path(self.items[ids[0]].path).name
+        what = name if len(ids) == 1 else f"{len(ids)} Files"
+        if confirm(
+            self, f"Remove {what} from the List?", "The files themselves stay where they are.", "Remove"
+        ):
+            self._take_off(ids)
 
     def _list_menu(self, iid: int) -> QMenu:
         """Right-click: what can be done with this file (or what's picked), then clearing the list.
@@ -1774,14 +1981,14 @@ class MainWindow(QMainWindow):
         n = sum(1 for i in self.selected if i not in self.active)
         a = m.addAction(
             theme.menu_icon("x"),
-            f"Remove {n} from the List" if n > 1 else "Remove from the List",
+            f"Remove {n} from the List…" if n > 1 else "Remove from the List…",
             self.remove_selected,
         )
         a.setEnabled(n > 0)
         finished = sum(1 for it in self.items.values() if it.state in FINAL)
         a = m.addAction(theme.menu_icon("check"), "Clear Finished", self.clear_finished)
         a.setEnabled(finished > 0)
-        a = m.addAction(theme.menu_icon("list-x"), "Clear All", self.clear_all)
+        a = m.addAction(theme.menu_icon("list-x"), "Clear All…", self.clear_all)
         a.setEnabled(bool(self.items))
         return m
 
@@ -2272,6 +2479,7 @@ class MainWindow(QMainWindow):
             any(it.info is not None and it.info.interlaced for it in self.items.values())
         )
         self._refresh_places()
+        self.table.can_reorder = not self.running  # (a batch keeps its order while it converts)
         if finished:
             self._show_summary = True
         elif self.running:
@@ -2346,7 +2554,7 @@ class MainWindow(QMainWindow):
             if sk:
                 parts.append(f"{sk} skipped")
             ok = not f and not w
-            self.f_title.setText(("Listo! " if ok else "Finished — ") + " · ".join(parts))
+            self.f_title.setText(("Listo · " if ok else "Finished · ") + " · ".join(parts))
             ready = "Your video is ready." if joined else "Your files are ready."
             self.f_sub.setText(ready if ok else "Click ⓘ on a file for details.")
             return
@@ -2429,7 +2637,7 @@ class MainWindow(QMainWindow):
             super().show()
             return
         geo = self.qs.value("geometry")
-        if isinstance(geo, QByteArray) and not geo.isEmpty() and self._fits_after(geo):
+        if isinstance(geo, str) and geo and self._fits_after(QByteArray.fromHex(geo.encode())):
             super().show()
         elif self.titlebar is not None:  # the Mac: fill the free area ourselves (zooming is unreliable here)
             titlebar.fill_screen(self)
@@ -2495,10 +2703,9 @@ class MainWindow(QMainWindow):
         self.pool.clear()
         self.pool.waitForDone(3000)
         if not self._restored:
-            self.qs.setValue("geometry", self.saveGeometry())
-        import json
+            self.qs.setValue("geometry", bytes(self.saveGeometry().toHex()).decode())
 
-        self.qs.setValue("settings", json.dumps(self.settings.to_dict()))
+        self.qs.setValue("settings", self.settings.to_dict())
 
 
 def _eta(sec: float) -> str:

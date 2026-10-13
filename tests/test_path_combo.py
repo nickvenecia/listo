@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from listo.core.store import Prefs
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 
@@ -23,11 +25,10 @@ def _labels(c) -> list[str]:
 
 
 def test_choose_remembers_and_cancel_goes_back(tmp_path: Path, app):
-    from PySide6.QtCore import QSettings
 
     from listo.ui.components.widgets import CHOOSE, PathCombo
 
-    qs = QSettings(str(tmp_path / "t.ini"), QSettings.Format.IniFormat)
+    qs = Prefs()
     shoot, other = tmp_path / "Shoot" / "Exports", tmp_path / "Other" / "Exports"
     shoot.mkdir(parents=True)
     other.mkdir(parents=True)
@@ -65,17 +66,11 @@ def test_choose_remembers_and_cancel_goes_back(tmp_path: Path, app):
 
 
 def test_lut_and_where_follow_the_rule(tmp_path: Path, monkeypatch, app):
-    from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QFileDialog
 
-    import listo.ui.panels.convert as sb_mod
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
     from listo.ui.components.widgets import CHOOSE
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb_mod, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     lut = tmp_path / "CINECOLOR_APPLE_LOG2_A.cube"
     lut.write_text("LUT_3D_SIZE 2\n" + "0 0 0\n" * 8)
     dest = tmp_path / "Deliveries"
@@ -107,15 +102,9 @@ def test_lut_and_where_follow_the_rule(tmp_path: Path, monkeypatch, app):
 
 
 def test_timecode_choice_is_in_clip_info(tmp_path: Path, monkeypatch, app):
-    from PySide6.QtCore import QSettings
 
-    import listo.ui.panels.convert as sb_mod
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb_mod, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     w = mw.MainWindow()
     sb = w.convert
     sb.g_text.set_open(True)

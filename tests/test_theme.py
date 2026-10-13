@@ -67,16 +67,10 @@ def test_icons_follow_the_look(qapp, back_to_dark):
 
 
 def test_window_follows_the_computer(qapp, tmp_path, monkeypatch, back_to_dark):
-    from PySide6.QtCore import QSettings
 
-    import listo.ui.panels.convert as sb
-    import listo.ui.panels.export as ep
     import listo.ui.window.main_window as mw
     from listo import app as appmod
 
-    ini = str(tmp_path / "t.ini")
-    for mod in (mw, sb, ep):
-        monkeypatch.setattr(mod, "QSettings", lambda *a, **k: QSettings(ini, QSettings.Format.IniFormat))
     appmod.set_appearance(qapp, "system")
     w = mw.MainWindow()
     monkeypatch.setenv("LISTO_LOOK", "light")  # the computer switched to light mode

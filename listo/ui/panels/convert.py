@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QColorDialog,
@@ -32,6 +32,7 @@ from listo.core.presets import (
     VIDEO_PRESETS,
     Settings,
 )
+from listo.core.store import Prefs, loads
 from listo.core.tape import BLUE, NO_EFFECTS
 from listo.core.tools import Capabilities
 from listo.ui.components.widgets import (
@@ -142,7 +143,7 @@ class ConvertSettings(QWidget):
     def __init__(self, settings: Settings, parent: QWidget | None = None):
         super().__init__(parent)
         self.s = settings
-        self.qs = QSettings("Listo", "Listo")
+        self.qs = Prefs()
         self._loading = False
         self._hw_ok: bool | None = None  # None until the hardware check finishes
         self._has_interlaced = False  # any interlaced file in the list
@@ -527,7 +528,7 @@ class ConvertSettings(QWidget):
 
         meta = Section("Metadata")
         self.p_meta = _checkbox(
-            "Keep camera info and color profile",
+            "Keep Camera Info and Color Profile",
             self.s.photo_keep_metadata,
             lambda v: self._set("photo_keep_metadata", v),
         )
@@ -720,13 +721,25 @@ class ConvertSettings(QWidget):
 
     # ------------------------------------------------------------------ recipes
     def _user_recipes(self) -> list[dict]:
-        try:
-            data = json.loads(self.qs.value("recipes", "[]") or "[]")
-            return [
-                r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)
-            ]
-        except (ValueError, TypeError):
-            return []
+        data = loads(self.qs.value("recipes", []), [])
+        return [
+            r for r in data if isinstance(r, dict) and r.get("name") and isinstance(r.get("values"), dict)
+        ]
+
+    def _save_recipes(self, recipes: list[dict]) -> None:
+        """Save the recipe list. If what's saved couldn't be read, it's kept beside it first (never lost)."""
+        raw = self.qs.value("recipes")
+        readable = raw is None or isinstance(raw, list)
+        if isinstance(raw, str):
+            try:
+                readable = isinstance(json.loads(raw or "[]"), list)
+            except ValueError:
+                readable = False
+        if not readable:
+            import time
+
+            self.qs.setValue(f"recipes.unreadable-{int(time.time())}", raw)
+        self.qs.setValue("recipes", recipes)
 
     def _all_recipes(self) -> list[tuple[str, dict, bool]]:
         out = [(n, v, False) for n, v in BUILTIN_RECIPES]
@@ -798,13 +811,13 @@ class ConvertSettings(QWidget):
         values = self.s.to_dict()
         values["video_variant"] = {p.key: self.s.variant_for(p.key) for p in VIDEO_PRESETS if p.variants}
         recipes.append({"name": name, "values": values})
-        self.qs.setValue("recipes", json.dumps(recipes))
+        self._save_recipes(recipes)
         self._current_recipe = name
         self._match_recipe()
 
     def _delete_recipe(self, name: str) -> None:
         recipes = [r for r in self._user_recipes() if r["name"] != name]
-        self.qs.setValue("recipes", json.dumps(recipes))
+        self._save_recipes(recipes)
         self._current_recipe = None
         self._match_recipe()
 
