@@ -52,10 +52,12 @@ class ShortcutsList(QWidget):
             sec = Section(title)
             for text, key in rows:
                 row = hbox(spacing=tokens.SPACE_2)
-                row.addWidget(QLabel(text), 1)
+                what = QLabel(text)
+                what.setWordWrap(True)  # a narrow window: onto another line, never cut off
+                row.addWidget(what, 1)
                 cap = QLabel(key)
                 cap.setObjectName("KeyCap")
-                row.addWidget(cap)
+                row.addWidget(cap, 0, Qt.AlignmentFlag.AlignTop)  # level with the first line
                 sec.add(row)
             bl.addWidget(sec)
         bl.addStretch(1)

@@ -149,6 +149,14 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   fixed choices, the ones picked before (a settings.json list, newest first, gone ones dropped), "Choose …".
   LUT: "recent_luts". Where: "recent_folders"; its value is "source" / "subfolder" / a folder (-> destination +
   dest_folder, ExportSettings._where_value). Never a Change… button, a path label or a folder-of-files mode.
+- **Words are never cut off.** Text that might not fit wraps onto another line or ends in "…" with the
+  whole text in its tooltip; fonts are wider on a Mac. `tests/cut_off.py` checks every screen; a new
+  screen gets a line in that test (tests/test_cut_off.py: the window in each state at its usual and smallest
+  size, every dialog and Settings pane as it opens and at its smallest).
+  Inside anything a fixed width (tiles, cards, sidebars, the right panel) words wrap (`setWordWrap(True)`); a
+  place that must stay one line uses `widgets.ElidedLabel` (`full_text()` is the whole text; the checker skips
+  it) or paints its own "…" with an Ignored width policy (ToggleRow, the folds' headers); never a smaller font.
+  Every dialog stays at least as tall as its wrapped lines need (app._RoundPopups -> widgets.keep_words_whole).
 - Recipes are user-made only (full Settings dicts in settings.json "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
