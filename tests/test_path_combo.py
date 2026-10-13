@@ -112,5 +112,5 @@ def test_timecode_choice_is_in_clip_info(tmp_path: Path, monkeypatch, app):
     assert _labels(sb.tc_mode) == ["Continuous Timecode", "Restart Timecode Each Clip", "Match Record Time"]
     sb.tc_mode.setCurrentIndex(sb.tc_mode.findData("record"))
     assert w.settings.timecode_mode == "record"
-    assert "1 changed" in sb.g_text.header.text()
+    assert "Match Record Time" in sb.g_text.header._full
     w.close()

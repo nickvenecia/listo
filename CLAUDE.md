@@ -95,9 +95,11 @@ listo/
     window/history.py      undo / redo steps (settings, files taken off the list, order, a file's format and trim)
     window/jobs.py         threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads, captions process)
     panels/convert_to.py   ConvertPanel (the right panel, a SidePanel): preview on top, then ConvertSettings, then
-                   ExportSettings; set_width() on a smaller window
-    panels/convert.py      ConvertSettings: recipe, Video / Photo / Audio pages, the Image / Burn-In / Encoding cards
-    panels/export.py       ExportSettings: the live preview (preview_box), joining, Saves To (the example name, Where, Name), Advanced
+                   ExportSettings (it puts Clips in the video card and Speed in Advanced); set_width() on a smaller window
+    panels/convert.py      ConvertSettings: recipe, then a GroupHeading + cards per kind in the list (set_kinds: "9 Videos";
+                   videos: format card, Picture / Burn-In / Captions folds), summary(): what's on, shown folded
+    panels/export.py       ExportSettings: the live preview (preview_box), Clips (videos_sec: joining), Saves To (the
+                   example name, Where, Name), Advanced
     dialogs/common.py      Alert, confirm(), notice(), ask_name(), about()
     dialogs/settings.py    Settings (⌘,): General (Appearance, Accent Color, Updates), Keyboard Shortcuts, Your Data
                    (folder, Back Up…, Storage & Cache = dialogs/storage.StorageView, debug console, log)
@@ -138,7 +140,7 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   icons take a color value (theme.icon("plus", theme.MUTED)) and redraw themselves; pictures sit on SCREEN (black in
   both); words on the accent use ON_ACCENT (dark on light accents). tests/test_theme.py and test_accent.py check it.
 - Everything Listo saves lives in settings.json in data_dir() (core/store.Prefs, written atomically on every change):
-  "settings", "recipes", "recent_luts", "recent_folders", "group_open/*", "sidebar_folded", "panel_open",
+  "settings", "recipes", "recent_luts", "recent_folders", "group_open/*", "sidebar_folded",
   "geometry" (hex), "last_dir", "updates/*", "appearance", "accent", "auto_update". Older versions kept these in
   QSettings: ui/old_settings.bring_over() copies them once (DONE key "copied_old_settings") and never touches the
   old store. Lists and dicts are saved as themselves; store.loads() also reads the JSON text older versions wrote.
@@ -188,9 +190,13 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   -c copy). Stop before gluing -> parts deleted and those clips back to ready.
 - Window (DESIGN.md §1): the sidebar (places filter the list: MainWindow.go(place) / _apply_filter with the search)
   | the file list with the bar under it (Convert N Files lives there, so closing the panel never hides it)
-  | Convert To in the Dock. The Dock opens when the first file arrives or a file is clicked, closes on its ✕, Esc
-  or a click on empty space (MainWindow._escape), remembers "panel_open". Convert To's cards: Image / Burn-In /
-  Encoding (convert.GROUPS lists what each "N changed" counts). Labels are Title Case (DESIGN.md §9).
+  | Convert To in the Dock. Convert To is about every file in the list, never the picked one: the Dock opens when
+  the first file arrives and closes when the last one leaves (MainWindow._show_page); picking a file, Esc or a
+  click on empty space never open or close it. Its ✕ closes it; MainWindow.btn_panel (the toolbar's round
+  sliders button, faded in while closed with files) or ⌥⌘I bring it back. Inside: a heading per kind in the list
+  with its count (ConvertSettings.set_kinds, fed by _refresh_places), never Video / Photo / Audio tabs (they read
+  as an export's picture / sound tabs). Folds (Picture / Burn-In / Captions, Saves To's Advanced) say what's on
+  (convert.summary). Labels are Title Case (DESIGN.md §9).
 - Undo / redo (window/history.py): MainWindow._record_settings (SAVE_DELAY_MS after a settings change settles;
   a change taken straight back drops the step), _take_off / _put_back (files off the list, one step), _reordered /
   _put_order, _set_override / _put_override, trim_item / _put_trim. ⌘Z in a text box undoes the typing instead.

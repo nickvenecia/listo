@@ -86,6 +86,7 @@ from listo.ui.components.widgets import (
     SearchField,
     Toast,
     circle_button,
+    fade,
     hbox,
     hint,
     vbox,
@@ -237,6 +238,7 @@ class MainWindow(QMainWindow):
         self.history = History()  # undo / redo
         self._settings_before = self.settings.to_dict()  # the settings as the last undo step left them
         self._history_busy = False  # undoing or redoing: that's not a new step
+        self._had_files = False  # Convert To comes with the first files and goes with the last one
 
         self._build()
         self._menus()
@@ -310,7 +312,6 @@ class MainWindow(QMainWindow):
         self.toaster = Toast(self, self._toast_area)
         esc = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         esc.activated.connect(self._escape)
-        self.dock.set_open(self.qs.value("panel_open", True, type=bool), animate=False)
 
     def _build_center(self) -> QWidget:
         center = QFrame()
@@ -358,6 +359,11 @@ class MainWindow(QMainWindow):
         self.btn_add.setMenu(self._add_menu(self.btn_add))
         self.sidebar.btn_add.setMenu(self._add_menu(self.sidebar.btn_add))
         right.addWidget(self.btn_add)
+        keys = QKeySequence("Ctrl+Alt+I").toString(QKeySequence.SequenceFormat.NativeText)
+        self.btn_panel = circle_button("sliders", f"Show Convert To ({keys})")  # where the panel's ✕ was
+        self.btn_panel.clicked.connect(lambda: self.show_panel(True))
+        self.btn_panel.hide()  # only while there are files and the panel is closed
+        right.addWidget(self.btn_panel)
         grid.addLayout(right, 0, 2)
         lay.addWidget(bar)
 
@@ -573,7 +579,11 @@ class MainWindow(QMainWindow):
         self._show_count()
 
     def _show_page(self) -> None:
-        self.search.setVisible(bool(self.items))  # nothing to search yet
+        has = bool(self.items)
+        if has != self._had_files:
+            self._had_files = has
+            self.show_panel(has)  # the first files bring Convert To in; the last one going takes it away
+        self.search.setVisible(has)  # nothing to search yet
         if not self.items:
             self.pages.setCurrentWidget(self.empty)
         elif not self.table.shown_ids():
@@ -587,18 +597,19 @@ class MainWindow(QMainWindow):
         self.count.set_full_text(f"{n} selected" if n > 1 else (str(shown) if shown else ""))
 
     def show_panel(self, on: bool) -> None:
-        """Open or close the Convert To panel on the right (it remembers for next time)."""
+        """Open or close Convert To on the right. It's about every file in the list, so picking a file never
+        opens or closes it; closed while there are files, the round button at the toolbar's right brings it
+        back."""
         self.dock.set_open(on)
-        self.qs.setValue("panel_open", on)
+        fade(self.btn_panel, not on and bool(self.items))
 
     def _escape(self) -> None:
-        """Esc (or a click on empty space in the list): nothing picked, and the panel slides away.
-        While a row is being dragged, Esc puts it back instead."""
+        """Esc (or a click on empty space in the list): nothing picked. While a row is being dragged, Esc
+        puts it back instead."""
         if self.table.lifting():
             self.table.end_lift(drop=False)
             return
         self._select(set())
-        self.show_panel(False)
 
     def resizeEvent(self, e) -> None:
         """The right panel gives up some width on a smaller window, so the toolbar never crowds."""
@@ -1165,9 +1176,7 @@ class MainWindow(QMainWindow):
         self.order.append(iid)
         self.table.add_row(it.card, shown=self._shown(it))
         if len(self.items) == 1:
-            self._show_page()
-            if not self.dock.opened:
-                self.show_panel(True)  # the first file in: Convert To slides in beside it
+            self._show_page()  # the first file in: Convert To slides in beside it
         return iid
 
     def _add_item(self, path: str) -> None:
@@ -1468,7 +1477,9 @@ class MainWindow(QMainWindow):
                 and not any(c.text.strip() for c in it.transcript.cues)
             ):
                 heard = " · No speech heard in this clip"
-            self._live_note = f"{Path(it.path).name} · {fmt_duration(at)}{heard}"
+            clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+            of = f" · {clips.index(it) + 1} of {len(clips)}" if len(clips) > 1 and it in clips else ""
+            self._live_note = f"{Path(it.path).name}{of} · {fmt_duration(at)}{heard}"
         self.pool.start(
             PreviewTask(
                 self._live_seq,
@@ -1644,7 +1655,8 @@ class MainWindow(QMainWindow):
             group.addAction(a)
             a.triggered.connect(lambda _=False, o=override: self._set_override(iid, o))
 
-        add(m, "Same as the Panel", {}, not it.override)
+        others = {"video": "Videos", "photo": "Photos", "audio": "Audio Files"}.get(it.kind, "Files")
+        add(m, f"Same as the Other {others}", {}, not it.override)
         if it.kind == "video":
             m.addSeparator()
             for p in VIDEO_PRESETS:
@@ -1692,6 +1704,7 @@ class MainWindow(QMainWindow):
             it.override = dict(override)
             self._update_output_name(it)
             self._schedule_live()
+            self._refresh_places()  # "9 Videos · 1 with its own format"
 
     # ------------------------------------------------------------------ list actions
     def _take_off(self, ids: list[int], record: bool = True) -> None:
@@ -1867,8 +1880,6 @@ class MainWindow(QMainWindow):
             self._select(self.selected ^ {iid})
         else:
             self._select({iid})
-            if not self.dock.opened:
-                self.show_panel(True)  # picking a file brings Convert To back
         self._anchor = iid
 
     def _step_pick(self, direction: int, mods) -> None:
@@ -2365,12 +2376,16 @@ class MainWindow(QMainWindow):
     def _refresh_places(self) -> None:
         """The sidebar's counts, and the list again if a file moved in or out of the place shown."""
         counts = dict.fromkeys(PLACES, 0)
+        own = dict.fromkeys(("video", "photo", "audio"), 0)  # files with their own format (from their row)
         for it in self.items.values():
             for key in PLACES:
                 if in_place(key, it.kind, it.state):
                     counts[key] += 1
+            if it.override and it.kind in own:
+                own[it.kind] += 1
         problems = counts["attention"] > 0
         self.sidebar.set_counts(counts, self.running, problems)
+        self.convert.set_kinds({k: counts[k] for k in own}, own)  # "9 Videos", "2 Photos" in Convert To
         self.footer.setVisible(bool(self.items))
         if self.place != "all" or self.search.text().strip():
             want = [i for i in self.order if self._shown(self.items[i])]

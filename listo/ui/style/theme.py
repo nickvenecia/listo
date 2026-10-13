@@ -210,6 +210,8 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 /* ---------- cards in a panel */
 #CardTitle {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#GroupTitle {{ font-size: {TEXT_MD}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#GroupNote {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #Card {{ background: {tokens.BLOCK}; border: none; border-radius: {RADIUS_LG}px; }}
 #Totals {{ background: transparent; border-top: 1px solid {tokens.BORDER}; }}
 #TotalLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
@@ -322,6 +324,7 @@ _SVG = {
     "scissors": '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
     "search": '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     "share": '<path d="M12 3.5v10"/><path d="m8 7.5 4-4 4 4"/><path d="M6 11.5H5.5A1.5 1.5 0 0 0 4 13v5.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V13a1.5 1.5 0 0 0-1.5-1.5H18"/>',
+    "sliders": '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
     "stop": '<rect x="6" y="6" width="12" height="12" rx="2"/>',
     "updown": '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/>',

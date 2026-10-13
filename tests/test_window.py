@@ -135,25 +135,66 @@ def test_a_start_tile_is_picked_by_click_space_or_return(qapp):
     page.close()
 
 
-def test_the_right_panel_and_esc(qapp, clips):
+def test_the_right_panel_comes_and_goes_with_the_files(qapp, clips):
+    from listo.ui.style import tokens
     from listo.ui.window.main_window import MainWindow
 
     w = MainWindow()
     w._restored = True
     w.show()
     try:
-        w.show_panel(False)
+        assert not w.dock.opened and w.btn_panel.isHidden()  # no files: no panel, no button for it
         w.add_paths([str(clips[0])])
         assert w.dock.opened  # the first file in brings Convert To in
         first = w.order[0]
         w._card_pressed(first, Qt.KeyboardModifier.NoModifier)
-        assert w.selected == {first}
         w._escape()
-        assert not w.selected and not w.dock.opened  # Esc: nothing picked, the panel slides away
+        assert (
+            not w.selected and w.dock.opened
+        )  # Esc: nothing picked; the panel is for every file, so it stays
+        w.show_panel(False)  # its ✕
+        assert not w.btn_panel.isHidden()  # the toolbar's round button brings it back
         w._card_pressed(first, Qt.KeyboardModifier.NoModifier)
-        assert w.dock.opened  # picking a file brings it back
+        assert not w.dock.opened  # picking a file doesn't open it (it isn't about that one file)
+        w.btn_panel.click()
+        assert w.dock.opened
+        assert _wait(qapp, lambda: w.btn_panel.isHidden(), tokens.FADE_MS / 1000 + 2)  # it fades away
+        w._take_off(list(w.order))
+        assert not w.dock.opened and w.btn_panel.isHidden()  # the last file gone: the panel goes too
+        w.history.undo()
+        assert w.items and w.dock.opened  # undo puts the file back, and the panel with it
         menu = [a.text() for a in w._list_menu(first).actions() if a.text()]
         assert "Remove from the List…" in menu and "Clear All…" in menu
+    finally:
+        w.close()
+
+
+def test_convert_to_shows_a_heading_for_each_kind_in_the_list(qapp, clips):
+    from listo.ui.window.main_window import MainWindow
+
+    w = MainWindow()
+    w._restored = True
+    w.show()
+    try:
+        sb = w.convert
+
+        def shown():
+            return [head.title.text() for box, head in sb.kinds.values() if box.isVisibleTo(sb)]
+
+        assert shown() == ["Videos", "Photos", "Audio"]  # nothing in the list: all three can be set up
+        w.add_paths([str(clips[0])])
+        w._refresh_now()
+        assert shown() == ["1 Video"]  # only the kinds in the list, counted
+        w.add_paths([str(clips[1]), str(clips[2])])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        w._refresh_now()
+        assert shown() == ["2 Videos", "1 Photo"]
+        w._set_override(w.order[1], {"video_preset": "h264"})
+        assert sb.kinds["video"][1].note.text() == "· 1 with its own format"
+        assert not sb.kinds["video"][1].note.isHidden()
+        assert w.export_panel.videos_sec.isVisibleTo(w.panel)  # 2 videos: Clips, in the video card
+        assert sb.v_card.isAncestorOf(w.export_panel.videos_sec)
+        assert w.export_panel.adv.isAncestorOf(sb.v_par)  # speed is for every file: under Advanced
     finally:
         w.close()
 

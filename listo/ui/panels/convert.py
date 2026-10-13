@@ -1,5 +1,6 @@
-"""Convert To, in the right panel: the recipe, then the Video / Photo / Audio settings (format first, then the
-Image, Burn-In and Encoding cards)."""
+"""Convert To, in the right panel: the recipe, then a heading and settings for each kind of file in the list
+("9 Videos": the format card, then the Picture, Burn-In and Captions folds; "2 Photos"; "1 Audio File").
+A kind that isn't in the list doesn't show; with nothing in the list, all three do."""
 
 from __future__ import annotations
 
@@ -38,9 +39,9 @@ from listo.core.tools import Capabilities
 from listo.ui.components.widgets import (
     Card,
     Disclosure,
+    GroupHeading,
     PathCombo,
     Section,
-    Segmented,
     ToggleRow,
     combo,
     disable_item,
@@ -71,33 +72,6 @@ AUDIO_TIPS = {
 }
 
 
-def _page() -> tuple[QWidget, QVBoxLayout]:
-    """A settings page (the right panel scrolls them all). Cards go in it, SPACE_3 apart."""
-    page = QWidget()
-    return page, vbox(page, 0, SPACE_3)
-
-
-class _Pages(QWidget):
-    """Video / Photo / Audio: only the chosen page shows (and takes room), so the panel scrolls just as far
-    as that page needs."""
-
-    def __init__(self, parent: QWidget | None = None):
-        super().__init__(parent)
-        self.lay = vbox(self, 0, 0)
-        self.pages: list[QWidget] = []
-        self._i = 0
-
-    def addWidget(self, w: QWidget) -> None:
-        self.pages.append(w)
-        self.lay.addWidget(w)
-        w.setVisible(len(self.pages) - 1 == self._i)
-
-    def setCurrentIndex(self, i: int) -> None:
-        self._i = i
-        for n, w in enumerate(self.pages):
-            w.setVisible(n == i)
-
-
 def _checks(*rows: ToggleRow) -> QVBoxLayout:
     """On/off settings stacked as full-width rows (label left, switch right)."""
     lay = vbox(spacing=0)
@@ -114,22 +88,65 @@ def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> ToggleRow:
     return box
 
 
-# Settings counted in each folded group's "· N changed" (so nothing changed hides when folded).
-GROUPS: dict[str, tuple[str, ...]] = {
-    "picture": ("desqueeze", "aspect", "deinterlace", "lut_path"),
-    "text": (
-        "burn_timecode",
-        "timecode_mode",
-        "burn_filename",
-        "burn_datetime",
-        "burn_stop",
-        "captions",
-        "tape_blue",
-        "tape_glitches",
-    ),
-    "sound": ("hardware", "parallel", "keep_all_audio"),
-    "photo": ("photo_keep_metadata",),
+# The kinds of file, in the panel's order: (one, many, the heading while the list is empty)
+KINDS: dict[str, tuple[str, str, str]] = {
+    "video": ("Video", "Videos", "Videos"),
+    "photo": ("Photo", "Photos", "Photos"),
+    "audio": ("Audio File", "Audio Files", "Audio"),
 }
+DEINTERLACE_WORDS = {"film": "Film-Look Deinterlace", "off": "Leave Interlaced"}
+TIMECODE_WORDS = {"restart": "Restart Timecode", "record": "Match Record Time"}
+COLLISION_WORDS = {"skip": "Skip Taken Names", "replace": "Replace Old Copies"}
+
+
+def _label(choices, key: str) -> str:
+    return next((c.label for c in choices if c.key == key), key)
+
+
+def summary(group: str, s: Settings, interlaced: bool = True) -> str:
+    """What's on inside a folded group, in a few words ("Timecode, File Name"); "" when it's all as it
+    starts. A folded group shows it in its header, so nothing that changes the output hides silently.
+    `interlaced`: there's interlaced footage in the list (deinterlacing does nothing otherwise)."""
+    base = Settings()
+    on: list[str] = []
+    if group == "picture":
+        if s.desqueeze != base.desqueeze:
+            on.append(_label(DESQUEEZE, s.desqueeze))
+        if s.aspect != base.aspect:
+            on.append(_label(ASPECT_CHOICES, s.aspect).split(" · ")[0])
+        if interlaced and s.deinterlace in DEINTERLACE_WORDS:
+            on.append(DEINTERLACE_WORDS[s.deinterlace])
+        if s.lut_path:
+            on.append("LUT")
+    elif group == "text":
+        for words, value in (
+            ("Timecode", s.burn_timecode),
+            ("File Name", s.burn_filename),
+            ("Date & Time", s.burn_datetime),
+        ):
+            if value:
+                on.append(words)
+        if s.burns and s.burn_style == "vhs":
+            on.append("VHS Look")
+        if s.timecode_mode in TIMECODE_WORDS:
+            on.append(TIMECODE_WORDS[s.timecode_mode])
+    elif group == "captions":
+        if s.captions:
+            on.append("On")
+            if s.caption_srt:
+                on.append(".srt File")
+    elif group == "advanced":
+        if s.collision in COLLISION_WORDS:
+            on.append(COLLISION_WORDS[s.collision])
+        if not s.keep_dates:
+            on.append("New File Dates")
+        if not s.verify:
+            on.append("No Double-Check")
+        if not s.hardware:
+            on.append("No Hardware Encoding")
+        if s.parallel:
+            on.append("Two at Once")
+    return ", ".join(on)
 
 
 class ConvertSettings(QWidget):
@@ -150,7 +167,6 @@ class ConvertSettings(QWidget):
         self._emit_timer.timeout.connect(self._emit_changed)
 
         lay = vbox(self, 0, SPACE_3)
-        top = vbox(spacing=SPACE_3)
         recipe = Section("Recipe")
         self.recipe = QComboBox()
         self.recipe.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -159,30 +175,54 @@ class ConvertSettings(QWidget):
         )
         self.recipe.activated.connect(self._recipe_picked)
         recipe.add(self.recipe)
-        top.addWidget(recipe)
-        self.tabs = Segmented([("video", "Video"), ("photo", "Photo"), ("audio", "Audio")])
-        top.addWidget(self.tabs)
-        lay.addLayout(top)
-        self.stack = _Pages()
-        lay.addWidget(self.stack)
+        lay.addWidget(recipe)
 
+        # a heading and settings for each kind of file in the list (set_kinds shows the ones there)
+        self.kinds: dict[str, tuple[QWidget, GroupHeading]] = {}
+        self._kind_key: tuple | None = None
         self._build_video()
         self._build_photo()
         self._build_audio()
-        self.tabs.changed.connect(self._tab)
-        self.tabs.set_value("video")
-        self._tab("video")
+        for key in KINDS:
+            lay.addWidget(self.kinds[key][0])
         self._sync_video()
         self._update_advanced()
         self._sync_photo()
         self._match_recipe()
 
-    # ------------------------------------------------------------------ pages
-    def _tab(self, key: str) -> None:
-        self.stack.setCurrentIndex(["video", "photo", "audio"].index(key))
+    # ------------------------------------------------------------------ kinds
+    def _kind(self, key: str) -> QVBoxLayout:
+        """A kind's block: its heading, then (in the returned layout) its cards."""
+        box = QWidget()
+        lay = vbox(box, 0, SPACE_3)
+        head = GroupHeading(KINDS[key][2])
+        lay.addWidget(head)
+        self.kinds[key] = (box, head)
+        return lay
+
+    def set_kinds(self, counts: dict[str, int], own: dict[str, int]) -> None:
+        """What's in the list: a heading with its count for each kind there ("9 Videos"), noting the files
+        with their own format (changed on their row). With nothing in the list, all three show."""
+        key = (tuple(counts.get(k, 0) for k in KINDS), tuple(own.get(k, 0) for k in KINDS))
+        if key == self._kind_key:
+            return
+        self._kind_key = key
+        empty = not any(key[0])
+        for k, (one, many, bare) in KINDS.items():
+            box, head = self.kinds[k]
+            n, mine = counts.get(k, 0), own.get(k, 0)
+            box.setVisible(empty or n > 0)
+            title = bare if empty else f"{n} {one if n == 1 else many}"
+            note = f"· {mine} with {'its' if mine == 1 else 'their'} own format" if mine else ""
+            head.set_text(title, note)
+
+    def put_clips(self, w: QWidget) -> None:
+        """Saves To's Clips choice (a file per clip, or one joined video) sits in the video card."""
+        lay = self.v_card.lay
+        lay.insertWidget(lay.indexOf(self.sec_audio), w)
 
     def _build_video(self) -> None:
-        page, lay = _page()
+        lay = self._kind("video")
         fmt = Section("Format")
         self.v_fmt = combo(
             [
@@ -380,7 +420,7 @@ class ConvertSettings(QWidget):
         for w in (self.burn_badge, self.burn_end, self.tape_screen, self.tape_glitches):
             self.sec_tape.add(w)
 
-        self.sec_cc = Section("Captions")
+        self.sec_cc = Section()  # (in the Captions fold)
         self.cc_on = _checkbox(
             "Add Captions",
             self.s.captions,
@@ -455,7 +495,7 @@ class ConvertSettings(QWidget):
         self.sec_cc.add(self.cc_box)
         self.sec_burn.add(self.burn_style)
 
-        speed = Section("Speed")
+        self.sec_speed = speed = Section("Speed")  # for every file: ConvertPanel puts it in Advanced
         self.v_hw = _checkbox(
             "Hardware Encoding (Faster)", self.s.hardware, lambda v: self._set("hardware", v)
         )
@@ -467,32 +507,30 @@ class ConvertSettings(QWidget):
         )
         speed.add(_checks(self.v_hw, self.v_par))
 
-        self.sec_audio = Section("Audio")
+        self.sec_audio = Section()
         self.v_tracks = _checkbox(
             "Keep Every Audio Track", self.s.keep_all_audio, lambda v: self._set("keep_all_audio", v)
         )
         self.sec_audio.add(self.v_tracks)
 
-        card = Card()
-        for sec in (fmt, self.sec_variant, self.sec_size):
+        self.v_card = card = Card()
+        for sec in (fmt, self.sec_variant, self.sec_size, self.sec_audio):
             card.add(sec)
         lay.addWidget(card)
-        self.g_picture = self._group("Image", "picture")
+        self.g_picture = self._group("Picture", "picture")
         for sec in (self.sec_frame, self.sec_deint, self.sec_lut):
             self.g_picture.add(sec)
         self.g_text = self._group("Burn-In", "text")
-        for sec in (self.sec_burn, self.sec_tape, self.sec_cc):
+        for sec in (self.sec_burn, self.sec_tape):
             self.g_text.add(sec)
-        self.g_sound = self._group("Encoding", "sound")
-        for sec in (self.sec_audio, speed):
-            self.g_sound.add(sec)
-        for g in (self.g_picture, self.g_text, self.g_sound):
+        self.g_captions = self._group("Captions", "captions")
+        self.g_captions.add(self.sec_cc)
+        for g in (self.g_picture, self.g_text, self.g_captions):
             lay.addWidget(g)
-        self.stack.addWidget(page)
         self._sync_lut()
 
     def _build_photo(self) -> None:
-        page, lay = _page()
+        lay = self._kind("photo")
         fmt = Section("Format")
         self.p_fmt = combo(
             [
@@ -518,24 +556,19 @@ class ConvertSettings(QWidget):
         self.p_size.currentIndexChanged.connect(lambda: self._set("photo_resize", self.p_size.currentData()))
         size.add(self.p_size)
 
-        meta = Section("Metadata")
         self.p_meta = _checkbox(
             "Keep Camera Info and Color Profile",
             self.s.photo_keep_metadata,
             lambda v: self._set("photo_keep_metadata", v),
         )
-        meta.add(self.p_meta)
         card = Card()
         for sec in (fmt, self.sec_quality, size):
             card.add(sec)
+        card.add(_checks(self.p_meta))
         lay.addWidget(card)
-        self.p_adv = self._group("More", "photo")
-        self.p_adv.add(meta)
-        lay.addWidget(self.p_adv)
-        self.stack.addWidget(page)
 
     def _build_audio(self) -> None:
-        page, lay = _page()
+        lay = self._kind("audio")
         fmt = Section("Format")
         self.a_fmt = combo(
             [(f.key, f"{f.title}   ·   .{f.ext}", AUDIO_TIPS.get(f.key, "")) for f in AUDIO_FORMATS],
@@ -546,7 +579,6 @@ class ConvertSettings(QWidget):
         card = Card()
         card.add(fmt)
         lay.addWidget(card)
-        self.stack.addWidget(page)
 
     # ------------------------------------------------------------------ behavior
     def _set(self, attr: str, value) -> None:
@@ -564,18 +596,15 @@ class ConvertSettings(QWidget):
         return d
 
     def open_groups(self, on: bool) -> None:
-        for d in (self.g_picture, self.g_text, self.g_sound, self.p_adv):
+        for d in (self.g_picture, self.g_text, self.g_captions):
             d.set_open(on, emit=True)
 
     def _update_advanced(self) -> None:
-        """Each folded group says how many of its settings differ from a fresh start."""
-        if not hasattr(self, "p_adv"):
+        """Each folded group says what's on inside it ("Burn-In · Timecode, File Name")."""
+        if not hasattr(self, "g_captions"):
             return
-        base = Settings()
-        for d in (self.g_picture, self.g_text, self.g_sound, self.p_adv):
-            keys = GROUPS[d.property("group")]
-            n = sum(1 for k in keys if getattr(self.s, k) != getattr(base, k))
-            d.set_summary(f"{n} changed" if n else "")
+        for d in (self.g_picture, self.g_text, self.g_captions):
+            d.set_summary(summary(d.property("group"), self.s, self._has_interlaced))
 
     def _emit_changed(self) -> None:
         self._update_advanced()
@@ -909,3 +938,4 @@ class ConvertSettings(QWidget):
         if has_interlaced != self._has_interlaced:
             self._has_interlaced = has_interlaced
             self._sync_video()
+            self._update_advanced()
