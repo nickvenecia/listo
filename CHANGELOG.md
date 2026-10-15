@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.2
+- **Scrolling past a setting leaves it alone.** Scrolling Convert To with the pointer over a dropdown used to quietly hand that dropdown your keyboard, so the next ↓ changed it (a format, a timecode choice) instead of moving to the next file. Now the arrow keys stay with your list until you click a setting
+- **The file list keeps pace with your trackpad.** A small two-finger swipe used to send the list flying past several clips; now it moves exactly as far as your fingers, like the right panel. A mouse wheel still scrolls the list in steps
+
 ## 3.1.1
 - **Words are never cut off.** The bar under the list ends a long summary in "…" instead of chopping it mid-word (point at it to read it all), and its buttons always show their whole names, even on the smallest window
 - **Windows can't be shrunk past their words.** Dragging a window like a file's details or About Listo smaller stops before any line gets cut off at the bottom

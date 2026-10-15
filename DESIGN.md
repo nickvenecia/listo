@@ -140,7 +140,9 @@ controls), `RADIUS_LG` 12 (cards, alerts), `GLASS_R` 18 (floating panels), `ROW_
 **Every list of choices looks the same** (menus, dropdown lists, the sidebar, Settings' sections): rows `LIST_ROW_H`
 tall, inset `LIST_INSET` inside a list whose corners are `LIST_R`, so the corners run parallel. `app._RoundPopups`
 makes menus and dropdown lists see-through so those corners are what you see, opens a button's menu just below
-it (`MENU_GAP`), and stops the wheel from changing a dropdown or slider (it scrolls the panel instead).
+it (`MENU_GAP`), and stops the wheel from changing a dropdown or slider (it scrolls the panel instead) or
+giving it the keyboard (only a click or Tab does). The file list follows a trackpad swipe pixel for pixel
+(`FileList.wheelEvent`); a mouse wheel moves it in steps.
 
 ## 5. Color
 

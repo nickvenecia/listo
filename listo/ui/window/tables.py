@@ -647,6 +647,18 @@ class FileList(QListView):
         iid, _part, _r = self._hit(e.pos())
         self.menu_wanted.emit(iid, e.globalPos())
 
+    def wheelEvent(self, e):
+        """A trackpad swipe moves the list exactly as far as the fingers did. Qt's steps are a whole row, so
+        a small swipe flew past several clips (the right panel already follows the fingers). A mouse wheel
+        keeps its steps."""
+        px = e.pixelDelta()
+        if e.phase() != Qt.ScrollPhase.NoScrollPhase and abs(px.y()) > abs(px.x()):
+            bar = self.verticalScrollBar()
+            bar.setValue(bar.value() - px.y())
+            e.accept()
+            return
+        super().wheelEvent(e)
+
     def keyPressEvent(self, e):
         if e.key() == Qt.Key.Key_Escape and self._lift is not None:
             self.end_lift(drop=False)  # put it back

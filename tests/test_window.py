@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from typing import ClassVar
 
@@ -195,6 +196,83 @@ def test_convert_to_shows_a_heading_for_each_kind_in_the_list(qapp, clips):
         assert w.export_panel.videos_sec.isVisibleTo(w.panel)  # 2 videos: Clips, in the video card
         assert sb.v_card.isAncestorOf(w.export_panel.videos_sec)
         assert w.export_panel.adv.isAncestorOf(sb.v_par)  # speed is for every file: under Advanced
+    finally:
+        w.close()
+
+
+def _scroll(w, widget, angle: int, pixels: int = 0, phase=Qt.ScrollPhase.NoScrollPhase) -> None:
+    """A wheel or trackpad scroll over `widget`, delivered the way a real one is (passed up to whatever scrolls)."""
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtTest import QTest
+
+    at = QPointF(widget.mapTo(w, widget.rect().center()))
+    QTest.wheelEvent(
+        w.windowHandle(), at, QPoint(0, angle), QPoint(0, pixels), Qt.KeyboardModifier.NoModifier, phase
+    )
+
+
+def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, clips):
+    """Scrolling Convert To with the pointer over a dropdown scrolls the panel. The dropdown keeps its choice and
+    doesn't take the keyboard: ↑↓ still go through the list (they used to change the dropdown instead)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication, QComboBox
+
+    from listo.ui.window.main_window import MainWindow
+
+    w = MainWindow()
+    w._restored = True
+    w.resize(1280, 800)
+    w.show()
+    try:
+        w.add_paths([str(c) for c in clips[:3]])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        w._refresh_now()
+        area = w.panel.scroll
+        bar, view = area.verticalScrollBar(), area.viewport()
+        assert bar.maximum() > 0  # there's more than fits
+
+        def in_view(c: QComboBox) -> bool:
+            top = c.mapTo(view, QPoint(0, 0)).y()
+            return c.isVisible() and top >= 0 and top + c.height() <= view.height()
+
+        combo = next(c for c in w.panel.findChildren(QComboBox) if in_view(c))
+        w.table.setFocus()
+        choice, top = combo.currentIndex(), bar.value()
+        _scroll(w, combo, -120)
+        assert bar.value() > top  # the panel scrolled
+        assert combo.currentIndex() == choice  # the dropdown didn't change
+        assert QApplication.focusWidget() is w.table  # and the keys still go to the list
+    finally:
+        w.close()
+
+
+def test_a_trackpad_swipe_moves_the_list_as_far_as_the_fingers(qapp, clips, tmp_path):
+    """A trackpad swipe moves the list exactly as far as the fingers did. Qt's whole-row steps made a small
+    swipe fly past several clips. A mouse wheel still moves in steps."""
+    from PySide6.QtWidgets import QApplication
+
+    from listo.ui.window.main_window import MainWindow
+
+    many = []
+    for n in range(12):
+        f = tmp_path / f"B001_C{n:03d}.mov"
+        shutil.copy(clips[0], f)
+        many.append(str(f))
+    w = MainWindow()
+    w._restored = True
+    w.resize(1280, 800)
+    w.show()
+    try:
+        w.add_paths(many)
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        bar, view = w.table.verticalScrollBar(), w.table.viewport()
+        assert bar.maximum() > 100  # room to scroll
+        for phase in (Qt.ScrollPhase.ScrollUpdate,) * 3 + (Qt.ScrollPhase.ScrollEnd,):  # four moves of 10 px
+            _scroll(w, view, -20, -10, phase)
+        assert bar.value() == 40
+        bar.setValue(0)
+        _scroll(w, view, -120)  # a mouse wheel's click
+        assert bar.value() == min(bar.maximum(), QApplication.wheelScrollLines() * bar.singleStep())
     finally:
         w.close()
 
