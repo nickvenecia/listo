@@ -17,7 +17,7 @@ dependencies = [
     "Pillow>=10.3",
     "pillow-heif>=0.18",
     "rawpy>=0.21",
-    "certifi>=2024.2",
+    "certifi>=2026.10.23",
 ]
 
 [project.optional-dependencies]
