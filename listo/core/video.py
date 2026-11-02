@@ -216,6 +216,22 @@ def _audio_only(
     return Plan(args, fmt.muxer, notes)
 
 
+def first_timecode(
+    src: str, info: MediaInfo, s: Settings, trim: tuple[float, float] | None = None, timecode: str = ""
+) -> str:
+    """Timecode of the first frame kept (so trimmed clips still line up in the edit): the clip's own,
+    else `timecode` (Continuous Timecode: already counts from where the trimmed clip starts), else the
+    time of day it was recorded ("record"), else "" (the clip has none)."""
+    start_tc = info.timecode
+    if trim and info.timecode and info.rate:
+        start_tc = tc_add(info.timecode, trim[0], info.rate)
+    if timecode:
+        start_tc = timecode
+    elif not info.timecode and timecode_mode(s) == "record":
+        start_tc = record_timecode(src, info, trim[0] if trim else 0.0)
+    return start_tc
+
+
 def build(
     src: str,
     out: str,
@@ -247,14 +263,7 @@ def build(
     notes: list[str] = []
     args = [*_input_args(src, trim), "-map", f"0:{info.video_index}"]
     shot = recorded(src, info, trim[0] if trim else 0.0) if p.key != "gif" else None
-    # Timecode of the first frame we keep (so trimmed clips still line up in the edit)
-    start_tc = info.timecode
-    if trim and info.timecode and info.rate:
-        start_tc = tc_add(info.timecode, trim[0], info.rate)
-    if timecode:
-        start_tc = timecode  # already counts from where the (trimmed) clip starts
-    elif not info.timecode and timecode_mode(s) == "record":
-        start_tc = record_timecode(src, info, trim[0] if trim else 0.0)
+    start_tc = first_timecode(src, info, s, trim, timecode)
 
     # ---- audio track selection
     tracks = info.audio if (p.edit_format and s.keep_all_audio) else info.audio[:1]
@@ -594,7 +603,7 @@ def preview_plan(
     """ffmpeg args that save ONE frame at `at` seconds, with exactly the picture steps the real
     conversion would use (LUT, frame, size, burn-ins). Call plan.cleanup() afterwards.
     clock: (t, timecode) = the clip shows this timecode at t seconds (Continuous Timecode)."""
-    if s.video_preset in ("gif", "audio"):
+    if s.video_preset in ("gif", "audio", "transcript"):
         s = s.copy()
         s.video_preset = "h264"  # same look; a GIF's palette step needs the whole clip
     length = max(info.duration, 0.1)

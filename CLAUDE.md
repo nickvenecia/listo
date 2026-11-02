@@ -26,14 +26,15 @@ listo/
                    re-encode, combined .srt, cleanup), mismatch() for Rewrap
     captions.py    speech to text (faster-whisper, model downloaded into data_dir()/models on first use; audio decoded
                    by our ffmpeg, PyAV left out via a stub), Transcript store (data_dir()/captions, keyed by path+size+mtime),
-                   split_cues / wrap / for_output (trim shift) / to_srt
+                   split_cues / wrap / for_output (trim shift) / to_srt; paragraphs / to_transcript (the Transcript format)
     burnin.py      burn-ins drawn by Listo (Pillow PNGs + overlay; digits via crop-expression "strips"), so they
                    work with ANY ffmpeg (no drawtext). Timecode math mirrors probe.tc_add (drop-frame aware)
     frame.py       picture shape: desqueeze, aspect crop / black bars / cinema bars, short-edge resize
                    (shared by video.build and naming.output_size so names and files agree)
     photo.py       photo decode (incl. RAW/HEIC) + save
     presets.py     preset/format definitions + Settings dataclass (saved in settings.json, key "settings")
-    naming.py      {token} templates, output folder rules, collision handling (never overwrite the source)
+    naming.py      {token} templates, output folder rules, collision handling (never overwrite the source);
+                   name_key (Sort By Name: Finder-like, JVC Everio's hex MOVxxx in order)
     probe.py       ffprobe JSON -> MediaInfo; file-type lists by extension; timecode math; file_date /
                    shot_moment / recorded(): when a clip was shot (wall time / with its zone / what files store)
     runner.py      ffmpeg subprocess: -progress parsing, stderr drained on a thread, pause/resume via psutil
@@ -93,7 +94,8 @@ listo/
                    set_progress, set_output, set_format, set_trim, set_captions, set_name, set_meta, set_thumb)
     window/lift.py         drag a row's grip to reorder (FileList.reordered -> MainWindow._reordered)
     window/history.py      undo / redo steps (settings, files taken off the list, order, a file's format and trim)
-    window/jobs.py         threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads, captions process)
+    window/jobs.py         threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads, captions process);
+                   PreviewTask (a video's exact frame; still_of: a photo, or an audio file's waveform, cached)
     panels/convert_to.py   ConvertPanel (the right panel, a SidePanel): preview on top, then ConvertSettings, then
                    ExportSettings (it puts Clips in the video card and Speed in Advanced); set_width() on a smaller window
     panels/convert.py      ConvertSettings: recipe, then a GroupHeading + cards per kind in the list (set_kinds: "9 Videos";
@@ -158,6 +160,21 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   it) or paints its own "…" with an Ignored width policy (ToggleRow, the folds' headers); never a smaller font.
   Every dialog stays at least as tall as its wrapped lines need (app._RoundPopups -> widgets.keep_words_whole).
 - Recipes are user-made only (full Settings dicts in settings.json "recipes"); `presets.BUILTIN_RECIPES` is intentionally empty.
+- Transcript format (presets.TRANSCRIPT: video_preset "transcript", or audio_format "transcript" for audio files and
+  a video's Audio Only; presets.transcript_only(kind, s)): just the words, as .txt or .srt (Settings.transcript_layout:
+  "text" / "times" / "srt", captions.to_transcript). MainWindow._wants_captions includes these files (videos and
+  audio, a row's own format too: _words_only), so the words are made by the same background process and Convert
+  waits for them; Conversion(captions=cues) then writes text instead of running ffmpeg (no length check, no tape
+  screen, no extra .srt). "With Timecode" uses video.first_timecode, the same start timecode build() uses (the
+  clip's own, Continuous, or Record Time). join.can_join is False for it. Language and accuracy are the captions'
+  settings, shown in each transcript card too (ConvertSettings._shared keeps the dropdowns in step).
+- The preview (right panel, Preview window, caption check) shows videos, photos and audio files (MainWindow
+  ._previewable): ClipPlayer.kind "photo" = one still, no play / scrubber; "audio" = the waveform still (jobs.still_of,
+  ffmpeg showwavespic) with a PLAYHEAD_W accent line, plays its sound. It steps through the files showing in the
+  list (MainWindow._preview_files), so the Photos place previews photos.
+- Sort By (MainWindow.sort_list, "shot" / "name") reorders the whole list once, one undo step; never while converting.
+- Reset to Defaults (MainWindow.reset_settings): Settings() after an alert, one undo step (_put_settings replaces the
+  flavors, video_variant, since its values are always a whole snapshot). Recipes and rows' own formats stay.
 - Trim is per file (`Item.trim` -> `Conversion(trim=)` -> `video.build(trim=)`): `-ss` before `-i`, `-t` after;
   timecode is shifted with `probe.tc_add` (drop-frame aware). Progress/verify use the trimmed length (`Item.length`).
 - Filter order in video.build: deinterlace → tone-map → LUT → frame (desqueeze, crop/bars/matte) → resize → even size → burn-ins → conform (join parts only).

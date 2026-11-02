@@ -56,6 +56,13 @@ def _moving(win: QWidget) -> bool:
     return any(a.state() == QAbstractAnimation.State.Running for a in win.findChildren(QAbstractAnimation))
 
 
+def _due(win: QWidget) -> bool:
+    """The window has a change of its own still to come: the live preview loading the file it now shows
+    (a new clock under it), or a list-wide refresh."""
+    timers = (getattr(win, "_live_timer", None), getattr(win, "_soon_timer", None))
+    return any(t is not None and t.isActive() for t in timers)
+
+
 class Looker:
     """Looks at windows and keeps what doesn't fit, named by where it was seen."""
 
@@ -68,10 +75,12 @@ class Looker:
 
     def look(self, win: QWidget, where: str) -> None:
         _wait(self.app, self.settle_ms)
-        # a slow machine can still be mid-slide after that: wait for every slide and fade to end, then for
-        # the layout to catch up with what their ending changed (a faded-out button leaving its row)
-        _until(self.app, lambda: not _moving(win), timeout=10.0)
+        # a slow machine can still be mid-slide after that: wait for every slide and fade to end, and for the
+        # changes the window has scheduled (the preview showing another file), then for the layout to catch
+        # up with what they changed (a faded-out button leaving its row, a clock "00:00 / 00:02" now wider)
+        _until(self.app, lambda: not _moving(win) and not _due(win), timeout=10.0)
         _wait(self.app, 50)
+        self.app.sendPostedEvents(None, QEvent.Type.LayoutRequest)
         self.found += [f"{where}: {problem}" for problem in cut_off(win)]
 
     def sizes(self, win: QWidget, where: str, normal: tuple[int, int] | None = None) -> None:
@@ -204,6 +213,22 @@ def test_no_words_cut_off_in_the_window(qapp, looker, files, monkeypatch):
         w.export_panel.adv.set_open(False)
         look("every fold closed, saying what's on")
 
+        w.settings.apply(
+            {"video_preset": "transcript", "audio_format": "transcript", "transcript_layout": "times"}
+        )
+        w.convert.reload()
+        w._settings_changed()
+        w._refresh_now()
+        wanted = [it for it in w.items.values() if w._wants_captions(it)]  # (the sound file's words too now)
+        assert _until(qapp, lambda: all(it.transcript is not None for it in wanted))
+        w._refresh_now()
+        kinds = {w.items[i].kind: i for i in reversed(w.order)}
+        w._select({kinds["photo"]})
+        look("every file as a transcript, a photo in the preview")
+        w._select({kinds["audio"]})
+        look("a sound file in the preview")
+        w._select(set())
+
         w.go("done")
         look("a place with nothing in it")
         w.go("attention")
@@ -280,7 +305,13 @@ def test_no_words_cut_off_in_any_dialog(qapp, looker, files, monkeypatch):
         w.clear_all()
         w.trim_item(first)
         w.open_preview()
+        kinds = {w.items[i].kind: i for i in reversed(w.order)}
+        for kind in ("photo", "audio"):  # the Preview window with a photo, then a sound
+            w._select({kinds[kind]})
+            w.open_preview()
+        w._select(set(w.order))
         w.check_captions()
+        w.reset_settings()  # its alert
 
         it = w.items[first]
         it.state = "done"

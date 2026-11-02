@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.2.0
+- **Sort the list** by **Date & Time Shot** or by **Name**: the round arrows button beside the +, a right-click on the list, or Edit › Sort By. The list's order is the order a joined video plays in, so sorting by when it was shot puts camcorder clips back in the order you filmed them, whatever their names. Sorting by name counts like the Finder (Clip 2 before Clip 10) and knows JVC Everio's numbering (MOV009, MOV00A … MOV00F, MOV010). ⌘Z puts the old order back
+- **Export just a transcript.** Pick **Transcript** as the format for videos or audio files and Convert saves only the words that are said, as a text file next to each one. Choose the layout: **Plain Text**, **With Timecode** (each paragraph starts with the same timecode as the converted video) or **Subtitles · .srt**, and the language and accuracy right there. Listo listens on this computer, in the background, as soon as you pick it
+- **Photos and sound in the preview.** Pick a photo and the preview shows it (RAW and HEIC too). Pick an audio file and it shows the waveform, with a line where it's playing, and plays it. The ‹ › arrows step through every file, and the Photos and Audio places preview their own files. The bigger Preview window does the same
+- **Reset to Defaults**: the round arrow at the top of Convert To (or Edit › Reset Settings to Defaults…) puts every setting back to how Listo starts, after asking. Undo brings yours back, and your recipes stay
+- **Scrolling past a setting leaves it alone.** Scrolling Convert To with the pointer over a dropdown used to quietly hand that dropdown your keyboard, so the next ↓ changed it (a format, a timecode choice) instead of moving to the next file. Now the arrow keys stay with your list until you click a setting
+- **The file list keeps pace with your trackpad.** A small two-finger swipe used to send the list flying past several clips; now it moves exactly as far as your fingers, like the right panel. A mouse wheel still scrolls the list in steps
+
 ## 3.1.1
 - **Words are never cut off.** The bar under the list ends a long summary in "…" instead of chopping it mid-word (point at it to read it all), and its buttons always show their whole names, even on the smallest window
 - **Windows can't be shrunk past their words.** Dragging a window like a file's details or About Listo smaller stops before any line gets cut off at the bottom

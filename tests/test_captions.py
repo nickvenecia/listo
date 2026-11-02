@@ -234,6 +234,71 @@ def test_captions_are_made_in_the_background_before_convert(tmp_path: Path, monk
     app.processEvents()
 
 
+def test_paragraphs_break_at_pauses_and_layouts():
+    cues = [
+        Cue(0.5, 2.0, "So where did you grow up?"),
+        Cue(2.2, 4.0, "By the coast."),
+        Cue(7.0, 9.0, "Why film?"),
+    ]
+    assert captions.paragraphs(cues) == [(0.5, "So where did you grow up? By the coast."), (7.0, "Why film?")]
+    stamp = lambda t: f"{t:.1f}"  # noqa: E731
+    assert (
+        captions.to_transcript(cues, "text", 7, stamp)
+        == "So where did you grow up? By the coast.\n\nWhy film?\n"
+    )
+    assert captions.to_transcript(cues, "times", 7, stamp).startswith("[0.5]\nSo where")
+    assert captions.to_transcript(cues, "srt", 7, stamp) == to_srt(cues, 7)
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
+def test_a_transcript_alone_for_a_video_and_an_audio_file(tmp_path: Path, monkeypatch):
+    """The Transcript format: Convert waits for the words, then saves just them (no video, no sound)."""
+    import os
+    import time
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import listo.ui.window.jobs as wk
+    import listo.ui.window.main_window as mw
+    from tests import speech_standin
+
+    monkeypatch.setattr(captions, "data_dir", lambda: tmp_path / "data")
+    monkeypatch.setattr(wk.TranscribeThread, "target", staticmethod(speech_standin.serve))
+    app = QApplication.instance() or QApplication([])
+    clip, sound = tmp_path / "talk.mov", tmp_path / "memo.wav"
+    ff("-f", "lavfi", "-i", "color=c=gray:s=320x240:d=2", "-f", "lavfi", "-i", "sine=d=2", "-shortest",
+       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip))  # fmt: skip
+    ff("-f", "lavfi", "-i", "sine=d=2", str(sound))
+    w = mw.MainWindow()
+    w.settings.video_preset, w.settings.audio_format = "transcript", "transcript"
+    w.convert.reload()
+    assert not w.convert.g_picture.isVisibleTo(w.convert) and w.convert.v_words.isVisibleTo(w.convert)
+    w.add_paths([str(clip), str(sound)])
+
+    def wait(cond, timeout=60):
+        end = time.monotonic() + timeout
+        while not cond() and time.monotonic() < end:
+            app.processEvents()
+            time.sleep(0.02)
+        return cond()
+
+    assert wait(lambda: all(it.state == "ready" for it in w.items.values()))
+    assert {it.card.fmt[0] for it in w.items.values()} == {"Transcript"}
+    w.start()  # waits for the words if they're still being made, then saves them
+    assert wait(lambda: all(it.state == "done" for it in w.items.values()))
+    assert (tmp_path / "talk.txt").read_text() == "Hello there.\n"
+    assert (tmp_path / "memo.txt").read_text() == "Hello there.\n"
+    assert sorted(f.name for f in tmp_path.iterdir() if f.is_file()) == [
+        "memo.txt",
+        "memo.wav",
+        "talk.mov",
+        "talk.txt",
+    ]
+    w.close()
+    app.processEvents()
+
+
 @pytest.mark.skipif(not HAS_FFMPEG, reason="needs ffmpeg")
 def test_preview_task_draws_captions(tmp_path: Path):
     import os
@@ -251,6 +316,10 @@ def test_preview_task_draws_captions(tmp_path: Path):
     sig.done.connect(lambda seq, data, err: got.append((data, err)))
     s = Settings(video_preset="h264", captions=True)
     PreviewTask(1, str(clip), probe(clip), s, 0.5, False, sig, captions=[Cue(0.0, 2.0, "Hello")]).run()
+    app.processEvents()
+    assert got and got[0][0] and not got[0][1]
+    got.clear()  # a video set to Transcript has no picture of its own: the preview shows the clip as it is
+    PreviewTask(2, str(clip), probe(clip), Settings(video_preset="transcript"), 0.5, False, sig).run()
     app.processEvents()
     assert got and got[0][0] and not got[0][1]
 

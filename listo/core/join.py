@@ -22,7 +22,7 @@ from listo.core import naming, tape, video
 from listo.core.engine import Result, _plan_lock
 from listo.core.fileutil import copy_dates
 from listo.core.log import get_logger
-from listo.core.presets import AUDIO_BY_KEY, Settings
+from listo.core.presets import AUDIO_BY_KEY, Settings, transcript_only
 from listo.core.probe import MediaInfo, Shot, fmt_duration, probe, recorded
 from listo.core.runner import Canceled, FFmpegFailed, FFmpegRun
 from listo.core.tools import Capabilities
@@ -30,12 +30,13 @@ from listo.core.tools import Capabilities
 log = get_logger(__name__)
 
 MUXERS = {"mov": "mov", "mp4": "mp4", "webm": "webm"}
-MUXERS.update({f.ext: f.muxer for f in AUDIO_BY_KEY.values()})
+MUXERS.update({f.ext: f.muxer for f in AUDIO_BY_KEY.values() if f.muxer})  # (a transcript has none)
 
 
 def can_join(s: Settings) -> bool:
-    """A GIF can't be glued from parts (each has its own palette); everything else can."""
-    return s.video_preset != "gif"
+    """A GIF can't be glued from parts (each has its own palette), and a transcript isn't a video;
+    everything else can."""
+    return s.video_preset != "gif" and not transcript_only("video", s)
 
 
 def conform_for(info: MediaInfo, s: Settings) -> video.Conform:

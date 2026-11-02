@@ -123,7 +123,9 @@ class _RoundPopups(QObject):
     """Qt gives menus and dropdown lists square windows; make them see-through so the
     stylesheet's rounded corners are what you actually see. A button's menu opens just below it, with a
     little air (place_menu); so does a dropdown's list. Also: scrolling never changes a value
-    (dropdowns and sliders pass the wheel on to the panel, which scrolls instead), text in a
+    (dropdowns and sliders pass the wheel on to the panel, which scrolls instead) and never hands them the
+    keyboard (Qt's dropdowns take it when scrolled over: the next ↓ changed one instead of picking the next
+    file; a click or Tab still does), text in a
     label is shown as typed (a file called "<b>clip.mov" keeps that name), and a dialog can't be made
     shorter than its words need (widgets.keep_words_whole)."""
 
@@ -160,6 +162,8 @@ class _RoundPopups(QObject):
                 if obj.y() >= below.y() - 1:  # opened below the box: leave the same air
                     obj.move(obj.x(), below.y() + tokens.MENU_GAP)
         if ev.type() == QEvent.Type.Polish and isinstance(obj, QWidget):
+            if wheel_on_control and obj.focusPolicy() == Qt.FocusPolicy.WheelFocus:
+                obj.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
             if (
                 isinstance(obj, QLabel)
                 and obj.textFormat() == Qt.TextFormat.AutoText

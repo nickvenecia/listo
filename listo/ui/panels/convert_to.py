@@ -24,6 +24,7 @@ class ConvertPanel(SidePanel):
         self.settings_part.put_clips(self.export_part.videos_sec)  # a file per clip or joined: a video choice
         self.export_part.adv.add(self.settings_part.sec_speed)  # speed is for every file, not just videos
         self.btn_preview = self.header_icon("eye", "Bigger Preview")
+        self.btn_reset = self.header_icon("reset", "Reset to Defaults…")  # (before the eye)
         self.lay.addWidget(self.export_part.preview_box)
         self.lay.addWidget(self.settings_part)
         self.lay.addWidget(self.export_part)

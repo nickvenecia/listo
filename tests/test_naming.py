@@ -85,3 +85,20 @@ def test_same_name_clips_from_prg_folders_never_skip_each_other(tmp_path: Path):
     old = out / "MOV02A.mp4"
     old.write_bytes(b"old")
     assert naming.resolve_output(b, old, "skip", reserved)[0] is None
+
+
+def test_names_sort_as_the_finder_does_and_everio_counts_in_hex():
+    from listo.core.naming import name_key
+
+    names = ["Clip 10.mov", "clip 2.mov", "Clip 1.mov", "A001_C010.MOV", "A001_C002.MOV", "b.wav", "a.wav"]
+    assert sorted(names, key=name_key) == [
+        "A001_C002.MOV", "A001_C010.MOV", "a.wav", "b.wav", "Clip 1.mov", "clip 2.mov", "Clip 10.mov",
+    ]  # fmt: skip
+    everio = ["MOV010.MOD", "MOV00A.MOD", "MOV009.MOD", "MOV00F.MOD", "MOV001.MOD"]
+    assert sorted(everio, key=name_key) == [
+        "MOV001.MOD",
+        "MOV009.MOD",
+        "MOV00A.MOD",
+        "MOV00F.MOD",
+        "MOV010.MOD",
+    ]

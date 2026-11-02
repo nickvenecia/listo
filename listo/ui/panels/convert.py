@@ -29,9 +29,12 @@ from listo.core.presets import (
     PHOTO_FORMATS,
     RESIZE_PHOTO,
     RESIZE_VIDEO,
+    TRANSCRIPT,
+    TRANSCRIPT_LAYOUTS,
     VIDEO_BY_KEY,
     VIDEO_PRESETS,
     Settings,
+    transcript_only,
 )
 from listo.core.store import Prefs, loads
 from listo.core.tape import BLUE, NO_EFFECTS
@@ -69,6 +72,12 @@ AUDIO_TIPS = {
     "flac": "Lossless, half the size",
     "mp3": "Plays everywhere",
     "aac": "Small, great quality",
+    "transcript": "Just the words that are said",
+}
+LAYOUT_TIPS = {
+    "text": "Paragraphs of what's said",
+    "times": "Each paragraph starts with its timecode, as in the converted video",
+    "srt": "Subtitles for players, YouTube and editing apps",
 }
 
 
@@ -78,6 +87,24 @@ def _checks(*rows: ToggleRow) -> QVBoxLayout:
     for r in rows:
         lay.addWidget(r)
     return lay
+
+
+def _language_combo(current: str) -> QComboBox:
+    c = combo([(k, t, "") for k, t in LANGUAGES], current)
+    c.setToolTip("'Detect automatically' also follows people switching languages")
+    return c
+
+
+def _accuracy_combo(current: str) -> QComboBox:
+    c = combo(
+        [
+            (k, f"{t} · {CAPTION_MODELS[k][1]} download", "")
+            for k, t in (("fast", "Fast"), ("balanced", "Balanced Accuracy"), ("best", "Most Accurate"))
+        ],
+        current,
+    )
+    c.setToolTip("Downloaded once the first time it's used. More accurate = slower")
+    return c
 
 
 def _checkbox(text: str, value: bool, on_toggle, tip: str = "") -> ToggleRow:
@@ -97,6 +124,11 @@ KINDS: dict[str, tuple[str, str, str]] = {
 DEINTERLACE_WORDS = {"film": "Film-Look Deinterlace", "off": "Leave Interlaced"}
 TIMECODE_WORDS = {"restart": "Restart Timecode", "record": "Match Record Time"}
 COLLISION_WORDS = {"skip": "Skip Taken Names", "replace": "Replace Old Copies"}
+
+
+def _kind_of_file(p) -> str:
+    """What a video format makes, after its name in the list: ".mov", "audio file", "text file"."""
+    return {"audio": "audio file", TRANSCRIPT: "text file"}.get(p.key, f".{p.ext}")
 
 
 def _label(choices, key: str) -> str:
@@ -161,6 +193,7 @@ class ConvertSettings(QWidget):
         self._hw_ok: bool | None = None  # None until the hardware check finishes
         self._has_interlaced = False  # any interlaced file in the list
         self._current_recipe: str | None = None
+        self._twins: dict[str, list[QComboBox]] = {}  # a setting shown in more than one place (_shared)
         self._emit_timer = QTimer(self)
         self._emit_timer.setSingleShot(True)
         self._emit_timer.setInterval(120)
@@ -228,7 +261,7 @@ class ConvertSettings(QWidget):
             [
                 (
                     p.key,
-                    f"{p.title}   ·   {'.' + p.ext if p.ext else 'audio file'}",
+                    f"{p.title}   ·   {_kind_of_file(p)}",
                     p.subtitle.split(" · ")[0],
                 )
                 for p in VIDEO_PRESETS
@@ -430,22 +463,8 @@ class ConvertSettings(QWidget):
         self.sec_cc.add(self.cc_on)
         self.cc_box = QWidget()
         cb = vbox(self.cc_box, 0, SPACE_1)
-        self.cc_lang = combo([(k, t, "") for k, t in LANGUAGES], self.s.caption_language)
-        self.cc_lang.setToolTip("'Detect automatically' also follows people switching languages")
-        self.cc_lang.currentIndexChanged.connect(
-            lambda: self._set("caption_language", self.cc_lang.currentData())
-        )
-        self.cc_model = combo(
-            [
-                (k, f"{t} · {CAPTION_MODELS[k][1]} download", "")
-                for k, t in (("fast", "Fast"), ("balanced", "Balanced Accuracy"), ("best", "Most Accurate"))
-            ],
-            self.s.caption_model,
-        )
-        self.cc_model.setToolTip("Downloaded once the first time it's used. More accurate = slower")
-        self.cc_model.currentIndexChanged.connect(
-            lambda: self._set("caption_model", self.cc_model.currentData())
-        )
+        self.cc_lang = self._shared(_language_combo(self.s.caption_language), "caption_language")
+        self.cc_model = self._shared(_accuracy_combo(self.s.caption_model), "caption_model")
         self.cc_style = combo(
             [
                 ("clean", "Clean", "Like modern subtitles"),
@@ -513,8 +532,9 @@ class ConvertSettings(QWidget):
         )
         self.sec_audio.add(self.v_tracks)
 
+        self.v_words = self._words()  # (the Transcript format's choices)
         self.v_card = card = Card()
-        for sec in (fmt, self.sec_variant, self.sec_size, self.sec_audio):
+        for sec in (fmt, self.v_words, self.sec_variant, self.sec_size, self.sec_audio):
             card.add(sec)
         lay.addWidget(card)
         self.g_picture = self._group("Picture", "picture")
@@ -571,14 +591,67 @@ class ConvertSettings(QWidget):
         lay = self._kind("audio")
         fmt = Section("Format")
         self.a_fmt = combo(
-            [(f.key, f"{f.title}   ·   .{f.ext}", AUDIO_TIPS.get(f.key, "")) for f in AUDIO_FORMATS],
+            [
+                (
+                    f.key,
+                    f"{f.title}   ·   {'text file' if f.key == TRANSCRIPT else '.' + f.ext}",
+                    AUDIO_TIPS.get(f.key, ""),
+                )
+                for f in AUDIO_FORMATS
+            ],
             self.s.audio_format,
         )
-        self.a_fmt.currentIndexChanged.connect(lambda: self._set("audio_format", self.a_fmt.currentData()))
+        self.a_fmt.currentIndexChanged.connect(lambda: self._audio_format(self.a_fmt.currentData()))
         fmt.add(self.a_fmt)
+        self.a_words = self._words()
         card = Card()
         card.add(fmt)
+        card.add(self.a_words)
         lay.addWidget(card)
+        self._sync_audio()
+
+    def _words(self) -> QWidget:
+        """The Transcript format's choices (in the video card and the audio card): how the words are laid out,
+        then the language and accuracy they're heard with (the same settings as the captions')."""
+        box = QWidget()
+        lay = vbox(box, 0, SPACE_3)
+        layout = Section("Layout")
+        layout.add(
+            self._shared(
+                combo(
+                    [(c.key, c.label, LAYOUT_TIPS[c.key]) for c in TRANSCRIPT_LAYOUTS],
+                    self.s.transcript_layout,
+                ),
+                "transcript_layout",
+            )
+        )
+        listen = Section("Language and Accuracy")
+        listen.add(self._shared(_language_combo(self.s.caption_language), "caption_language"))
+        listen.add(self._shared(_accuracy_combo(self.s.caption_model), "caption_model"))
+        lay.addWidget(layout)
+        lay.addWidget(listen)
+        return box
+
+    def _shared(self, box: QComboBox, attr: str) -> QComboBox:
+        """A dropdown for a setting shown in more than one place: picking in one moves the others too."""
+        self._twins.setdefault(attr, []).append(box)
+        box.currentIndexChanged.connect(lambda _i, b=box, a=attr: self._twin_picked(a, b.currentData()))
+        return box
+
+    def _twin_picked(self, attr: str, value: str) -> None:
+        if self._loading:
+            return
+        for b in self._twins[attr]:
+            set_combo(b, value)
+        self._set(attr, value)
+
+    def _audio_format(self, key: str) -> None:
+        self._set("audio_format", key)
+        self._sync_audio()
+        self._sync_video()  # (a video's Audio Only follows the audio format)
+
+    def _sync_audio(self) -> None:
+        self.a_words.setVisible(self.s.audio_format == TRANSCRIPT)
 
     # ------------------------------------------------------------------ behavior
     def _set(self, attr: str, value) -> None:
@@ -687,6 +760,12 @@ class ConvertSettings(QWidget):
         self._sync_frame()
         self._sync_text()
         self.sec_audio.setVisible(p.edit_format)
+        words = transcript_only("video", self.s)  # just the words: nothing to picture or burn in
+        self.v_words.setVisible(words)
+        if words:
+            self.sec_size.hide()
+        for g in (self.g_picture, self.g_text, self.g_captions):
+            g.setVisible(not words)
 
     def _sync_photo(self) -> None:
         q = next(f for f in PHOTO_FORMATS if f.key == self.s.photo_format).has_quality
@@ -859,8 +938,6 @@ class ConvertSettings(QWidget):
                 (self.tape_glitches, self.s.tape_glitches),
                 (self.tape_screen, self._screen_key()),
                 (self.burn_end, "stop" if self.s.burn_stop else "none"),
-                (self.cc_lang, self.s.caption_language),
-                (self.cc_model, self.s.caption_model),
                 (self.cc_style, self.s.caption_style),
                 (self.cc_size, self.s.caption_size),
                 (self.cc_lines, str(self.s.caption_lines)),
@@ -869,6 +946,9 @@ class ConvertSettings(QWidget):
                 (self.a_fmt, self.s.audio_format),
             ):
                 set_combo(box, key)
+            for attr, boxes in self._twins.items():
+                for box in boxes:
+                    set_combo(box, getattr(self.s, attr))
             for box, val in (
                 (self.v_hw, self.s.hardware),
                 (self.v_tracks, self.s.keep_all_audio),
@@ -898,6 +978,7 @@ class ConvertSettings(QWidget):
             self.sec_quality.set_title(f"Quality · {self.s.photo_quality}")
             self._sync_video()
             self._sync_photo()
+            self._sync_audio()
             self._sync_lut()
             self._sync_screen()
         finally:

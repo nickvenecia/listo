@@ -32,6 +32,22 @@ def sanitize(name: str) -> str:
     return name[:200] or "untitled"
 
 
+_RUNS = re.compile(r"\d+|\D+")
+_EVERIO = re.compile(r"(MOV)([0-9A-F]{3})", re.IGNORECASE)  # JVC Everio counts its clips in hex
+
+
+def name_key(name: str) -> tuple:
+    """Sort names as the Finder does: case doesn't matter and numbers count as numbers ("Clip 2" before
+    "Clip 10"). JVC Everio clips are numbered in hex (MOV009, MOV00A … MOV00F, MOV010) and keep that order."""
+    stem, ext = os.path.splitext(name)
+    jvc = _EVERIO.fullmatch(stem)
+    if jvc:
+        runs = ((1, jvc.group(1).casefold()), (0, int(jvc.group(2), 16)), (1, ext.casefold()))
+    else:
+        runs = tuple((0, int(r)) if r.isdigit() else (1, r.casefold()) for r in _RUNS.findall(name))
+    return runs, name  # (names alike but for case or zeros: the exact name decides)
+
+
 def render(template: str, ctx: dict[str, str]) -> str:
     empty = "\x00"
 

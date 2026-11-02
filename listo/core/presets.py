@@ -147,10 +147,20 @@ VIDEO_PRESETS: tuple[VideoPreset, ...] = (
         "",
         "audio",
     ),
+    VideoPreset(
+        "transcript",
+        "Transcript",
+        "Just the words that are said, no video",
+        "txt",
+        "transcript",
+    ),
 )
 
-_GROUPS = {"prores": "edit", "dnxhr": "edit", "proxy": "edit", "rewrap": "edit", "audio": "extract"}
-_ORDER = ["prores", "dnxhr", "proxy", "rewrap", "h264", "hevc", "av1", "webm", "gif", "audio"]
+_GROUPS = {
+    "prores": "edit", "dnxhr": "edit", "proxy": "edit", "rewrap": "edit", "audio": "extract",
+    "transcript": "extract",
+}  # fmt: skip
+_ORDER = ["prores", "dnxhr", "proxy", "rewrap", "h264", "hevc", "av1", "webm", "gif", "audio", "transcript"]
 VIDEO_PRESETS = tuple(
     sorted(
         (VideoPreset(**{**p.__dict__, "group": _GROUPS.get(p.key, "share")}) for p in VIDEO_PRESETS),
@@ -178,8 +188,17 @@ AUDIO_FORMATS: tuple[AudioFormat, ...] = (
     AudioFormat("flac", "FLAC · lossless", "flac", "flac", "flac"),
     AudioFormat("mp3", "MP3 · 320 kbps", "mp3", "mp3", "libmp3lame", ("-b:a", "320k"), needs="libmp3lame"),
     AudioFormat("aac", "AAC · 256 kbps", "m4a", "ipod", "aac", ("-b:a", "256k")),
+    AudioFormat("transcript", "Transcript", "txt", "", ""),  # just the words (no ffmpeg: engine writes text)
 )
 AUDIO_BY_KEY = {a.key: a for a in AUDIO_FORMATS}
+
+# The Transcript format: what the words come out as.
+TRANSCRIPT = "transcript"
+TRANSCRIPT_LAYOUTS = (
+    Choice("text", "Plain Text"),  # paragraphs, as said
+    Choice("times", "With Timecode"),  # each paragraph starts with where it is in the clip
+    Choice("srt", "Subtitles · .srt"),  # for players, YouTube and editing apps
+)
 
 
 @dataclass(frozen=True)
@@ -302,6 +321,7 @@ class Settings:
     tape_glitches: str = "off"
     verify: bool = True
     parallel: bool = False
+    transcript_layout: str = "text"  # the Transcript format's layout, see TRANSCRIPT_LAYOUTS
 
     @property
     def burns(self) -> bool:
@@ -362,6 +382,8 @@ class Settings:
             s.audio_format = "wav24"
         if s.photo_format not in PHOTO_BY_KEY:
             s.photo_format = "jpeg"
+        if s.transcript_layout not in {c.key for c in TRANSCRIPT_LAYOUTS}:
+            s.transcript_layout = "text"
         return s
 
 
@@ -392,8 +414,17 @@ def timecode_mode(s: Settings, joining: bool = False, preset: str = "") -> str:
     return s.timecode_mode if s.timecode_mode in {c.key for c in TIMECODE_MODES} else "continuous"
 
 
+def transcript_only(kind: str, s: Settings) -> bool:
+    """This file comes out as just its words (the Transcript format), not as a picture or sound."""
+    if kind == "video":
+        return s.video_preset == TRANSCRIPT or (s.video_preset == "audio" and s.audio_format == TRANSCRIPT)
+    return kind == "audio" and s.audio_format == TRANSCRIPT
+
+
 def format_label(kind: str, s: Settings) -> str:
     """Short name of what this file will become, e.g. 'ProRes 422' or 'JPEG'."""
+    if transcript_only(kind, s):
+        return "Transcript"
     if kind == "photo":
         return PHOTO_BY_KEY[s.photo_format].title.split(" ·")[0]
     if kind == "audio" or (kind == "video" and s.video_preset == "audio"):
@@ -407,6 +438,8 @@ def format_label(kind: str, s: Settings) -> str:
 
 
 def output_ext(kind: str, s: Settings) -> str:
+    if transcript_only(kind, s):
+        return "srt" if s.transcript_layout == "srt" else "txt"
     if kind == "photo":
         return PHOTO_BY_KEY[s.photo_format].ext
     if kind == "audio" or (kind == "video" and s.video_preset == "audio"):
@@ -415,6 +448,8 @@ def output_ext(kind: str, s: Settings) -> str:
 
 
 def preset_tag(kind: str, s: Settings) -> str:
+    if transcript_only(kind, s):
+        return TRANSCRIPT
     if kind == "photo":
         return s.photo_format
     if kind == "audio" or s.video_preset == "audio":

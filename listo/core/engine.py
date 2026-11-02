@@ -14,8 +14,8 @@ from pathlib import Path
 from listo.core import naming, photo, tape, video
 from listo.core.fileutil import copy_dates
 from listo.core.log import get_logger
-from listo.core.presets import Settings
-from listo.core.probe import MediaInfo, Shot
+from listo.core.presets import Settings, transcript_only
+from listo.core.probe import MediaInfo, Shot, tc_add
 from listo.core.runner import Canceled, FFmpegFailed, FFmpegRun
 from listo.core.tools import Capabilities
 
@@ -62,8 +62,9 @@ class Conversion:
         self.marks = marks  # burnin.Marks: PLAY / STOP timing around a tape blue screen
         # tape blue screen around a single video (a joined video gets one around the whole thing)
         self.blue_added = 0.0  # seconds of blue screen at each end, once added
+        self.words_only = transcript_only(info.kind, settings)  # the Transcript format: just the words
         self.blue = (
-            target is None and info.kind == "video" and tape.wants_blue(settings)
+            target is None and info.kind == "video" and tape.wants_blue(settings) and not self.words_only
         )  # reviewed caption cues for this clip (captions.Cue), or None
         self.src = src
         self.info = info
@@ -93,6 +94,26 @@ class Conversion:
         tmp.write_text(to_srt(cues, self.s.caption_words), encoding="utf-8")
         os.replace(tmp, srt)
         notes.append(f"Caption file saved: {srt.name}.")
+
+    def _write_transcript(self, tmp: Path) -> None:
+        """The Transcript format: the clip's words (as checked) as text or .srt. "With Timecode" stamps each
+        paragraph with the timecode the converted video would have (video.first_timecode), else the time
+        from the start of the clip."""
+        from listo.core.captions import for_output, to_transcript
+
+        start, length = (self.trim[0], self.trim[1] - self.trim[0]) if self.trim else (0.0, None)
+        cues = for_output(self.captions or [], start, length)
+        rate = self.info.rate if self.info.kind == "video" else ""
+        first = video.first_timecode(self.src, self.info, self.s, self.trim, self.timecode) if rate else ""
+
+        def stamp(t: float) -> str:
+            if first:
+                return tc_add(first, t, rate)
+            n = int(t)
+            return f"{n // 3600:02d}:{n // 60 % 60:02d}:{n % 60:02d}"
+
+        text = to_transcript(cues, self.s.transcript_layout, self.s.caption_words, stamp)
+        tmp.write_text(text, encoding="utf-8")
 
     def _length(self) -> float:
         return (self.trim[1] - self.trim[0]) if self.trim else self.info.duration
@@ -186,6 +207,12 @@ class Conversion:
         kind = self.info.kind
         if kind == "unknown":
             return Result("failed", message=self.info.error or "Listo can't read this file.")
+        if self.words_only and not any(c.text.strip() for c in self.captions or []):
+            if self.captions is None:
+                return Result(
+                    "failed", message="Listo couldn't listen to this file, so there's no transcript."
+                )
+            return Result("skipped", message="No speech heard in this file, so there's no transcript.")
         with _plan_lock:
             target, note = self.plan_target()
             if target is None:
@@ -209,7 +236,9 @@ class Conversion:
         try:
             if self._canceled:
                 raise Canceled()
-            if kind == "photo":
+            if self.words_only:
+                self._write_transcript(tmp)
+            elif kind == "photo":
                 notes += photo.convert(self.src, str(tmp), self.s)
             else:
                 if not self.caps.ffmpeg:
@@ -244,9 +273,16 @@ class Conversion:
                 log.info("recording time stored in %s: %s", target.name, video.date_tags(plan.shot))
             if self.s.keep_dates:
                 copy_dates(self.src, target)
-            if self.s.captions and self.s.caption_srt and self.captions and kind == "video":
+            if (
+                self.s.captions
+                and self.s.caption_srt
+                and self.captions
+                and kind == "video"
+                and not self.words_only
+            ):
                 self._write_srt(target, notes)
-            warning = self._verify(target, notes) if (self.s.verify and kind != "photo") else ""
+            checks = self.s.verify and kind != "photo" and not self.words_only  # (text has no length)
+            warning = self._verify(target, notes) if checks else ""
             log.info(
                 "done in %.1f s: %s%s",
                 time.monotonic() - started,

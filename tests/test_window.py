@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
+from pathlib import Path
 from typing import ClassVar
 
 import pytest
@@ -195,6 +197,196 @@ def test_convert_to_shows_a_heading_for_each_kind_in_the_list(qapp, clips):
         assert w.export_panel.videos_sec.isVisibleTo(w.panel)  # 2 videos: Clips, in the video card
         assert sb.v_card.isAncestorOf(w.export_panel.videos_sec)
         assert w.export_panel.adv.isAncestorOf(sb.v_par)  # speed is for every file: under Advanced
+    finally:
+        w.close()
+
+
+def _scroll(w, widget, angle: int, pixels: int = 0, phase=Qt.ScrollPhase.NoScrollPhase) -> None:
+    """A wheel or trackpad scroll over `widget`, delivered the way a real one is (passed up to whatever scrolls)."""
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtTest import QTest
+
+    at = QPointF(widget.mapTo(w, widget.rect().center()))
+    QTest.wheelEvent(
+        w.windowHandle(), at, QPoint(0, angle), QPoint(0, pixels), Qt.KeyboardModifier.NoModifier, phase
+    )
+
+
+def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, clips):
+    """Scrolling Convert To with the pointer over a dropdown scrolls the panel. The dropdown keeps its choice and
+    doesn't take the keyboard: ↑↓ still go through the list (they used to change the dropdown instead)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QApplication, QComboBox
+
+    from listo.ui.window.main_window import MainWindow
+
+    w = MainWindow()
+    w._restored = True
+    w.resize(1280, 800)
+    w.show()
+    try:
+        w.add_paths([str(c) for c in clips[:3]])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        w._refresh_now()
+        area = w.panel.scroll
+        bar, view = area.verticalScrollBar(), area.viewport()
+        assert bar.maximum() > 0  # there's more than fits
+
+        def in_view(c: QComboBox) -> bool:
+            top = c.mapTo(view, QPoint(0, 0)).y()
+            return c.isVisible() and top >= 0 and top + c.height() <= view.height()
+
+        combo = next(c for c in w.panel.findChildren(QComboBox) if in_view(c))
+        w.table.setFocus()
+        choice, top = combo.currentIndex(), bar.value()
+        _scroll(w, combo, -120)
+        assert bar.value() > top  # the panel scrolled
+        assert combo.currentIndex() == choice  # the dropdown didn't change
+        assert QApplication.focusWidget() is w.table  # and the keys still go to the list
+    finally:
+        w.close()
+
+
+def test_a_trackpad_swipe_moves_the_list_as_far_as_the_fingers(qapp, clips, tmp_path):
+    """A trackpad swipe moves the list exactly as far as the fingers did. Qt's whole-row steps made a small
+    swipe fly past several clips. A mouse wheel still moves in steps."""
+    from PySide6.QtWidgets import QApplication
+
+    from listo.ui.window.main_window import MainWindow
+
+    many = []
+    for n in range(12):
+        f = tmp_path / f"B001_C{n:03d}.mov"
+        shutil.copy(clips[0], f)
+        many.append(str(f))
+    w = MainWindow()
+    w._restored = True
+    w.resize(1280, 800)
+    w.show()
+    try:
+        w.add_paths(many)
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        bar, view = w.table.verticalScrollBar(), w.table.viewport()
+        assert bar.maximum() > 100  # room to scroll
+        for phase in (Qt.ScrollPhase.ScrollUpdate,) * 3 + (Qt.ScrollPhase.ScrollEnd,):  # four moves of 10 px
+            _scroll(w, view, -20, -10, phase)
+        assert bar.value() == 40
+        bar.setValue(0)
+        _scroll(w, view, -120)  # a mouse wheel's click
+        assert bar.value() == min(bar.maximum(), QApplication.wheelScrollLines() * bar.singleStep())
+    finally:
+        w.close()
+
+
+def test_sorting_the_list_by_when_it_was_shot_or_by_name(qapp, tmp_path):
+    """Sort By puts the whole list in order (the order a joined video plays in), as one undo step."""
+    from listo.ui.window.main_window import MainWindow
+
+    shot = {
+        "take 2.mov": "2024-05-01T12:00:00Z",
+        "Take 10.mov": "2024-05-01T09:00:00Z",
+        "Take 1.mov": "2024-05-01T10:30:00Z",
+    }
+    for name, when in shot.items():
+        ff("-f", "lavfi", "-i", "testsrc2=s=160x90:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+           "-metadata", f"creation_time={when}", str(tmp_path / name))  # fmt: skip
+    w = MainWindow()
+    w._restored = True
+    w.show()
+    try:
+        w.add_paths([str(tmp_path / n) for n in shot])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+
+        def names():
+            return [Path(w.items[i].path).name for i in w.order]
+
+        assert w.btn_sort.isVisibleTo(w)  # two or more files: something to put in order
+        w.sort_list("shot")
+        assert names() == ["Take 10.mov", "Take 1.mov", "take 2.mov"]
+        w.sort_list("name")
+        assert names() == ["Take 1.mov", "take 2.mov", "Take 10.mov"]  # 2 before 10, case aside
+        w.history.undo()
+        assert names() == ["Take 10.mov", "Take 1.mov", "take 2.mov"]
+        w.history.undo()
+        assert names() == list(shot)  # as they were added
+    finally:
+        w.close()
+
+
+def test_reset_puts_every_setting_back_and_undo_brings_them_back(qapp, monkeypatch):
+    import listo.ui.window.main_window as mw
+
+    asked = []
+    monkeypatch.setattr(mw, "confirm", lambda *a, **k: asked.append(a[1]) or True)
+    w = mw.MainWindow()
+    try:
+        w.settings.apply({"video_preset": "h264", "burn_timecode": True, "naming": "{name}_{date}"})
+        w.settings.video_variant["prores"] = "3"
+        w.convert.reload()
+        w.export_panel.reload()
+        w._settings_changed()
+        w.reset_settings()
+        assert asked == ["Reset Convert To?"]
+        s = w.settings
+        assert (s.video_preset, s.burn_timecode, s.naming, s.variant_for("prores")) == (
+            "prores",
+            False,
+            "{name}",
+            "2",
+        )
+        assert w.convert.v_fmt.currentData() == "prores"  # the panel shows it too
+        w.undo()
+        s = w.settings
+        assert (s.video_preset, s.burn_timecode, s.naming, s.variant_for("prores")) == (
+            "h264",
+            True,
+            "{name}_{date}",
+            "3",
+        )
+        w.history.redo()
+        w.reset_settings()  # already as Listo starts: nothing to ask
+        assert asked == ["Reset Convert To?"]
+    finally:
+        w.close()
+
+
+def test_the_preview_shows_photos_and_sound_too(qapp, clips, tmp_path):
+    """A photo shows as itself (no play button), a sound as its waveform with where it's playing; the
+    Photos place previews a photo."""
+    from listo.ui.components import player as player_mod
+    from listo.ui.window.jobs import still_of
+    from listo.ui.window.main_window import MainWindow
+
+    sound = tmp_path / "room tone.wav"
+    ff("-f", "lavfi", "-i", "sine=d=2", str(sound))
+    assert still_of(str(clips[2]), "photo")[0] and still_of(str(sound), "audio")[0]
+    w = MainWindow()
+    w._restored = True
+    w.resize(1280, 800)
+    w.show()
+    try:
+        w.add_paths([str(clips[0]), str(clips[2]), str(sound)])
+        assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        player = w.export_panel.player
+        kinds = {w.items[i].kind: i for i in w.order}
+
+        def shows(kind: str) -> bool:
+            return _wait(
+                qapp, lambda: player.path == w.items[kinds[kind]].path and not player.still.pixmap().isNull()
+            )
+
+        w._card_pressed(kinds["photo"], Qt.KeyboardModifier.NoModifier)
+        assert shows("photo")
+        assert not player.btn_play.isVisibleTo(w) and not player.slider.isVisibleTo(w)
+        w._card_pressed(kinds["audio"], Qt.KeyboardModifier.NoModifier)
+        assert shows("audio")
+        assert player.playhead.isVisible()  # the waveform, with where it's playing
+        assert (
+            player.btn_play.isVisibleTo(w) == player_mod.HAS_PLAYER
+        )  # (it plays where Qt's player is installed)
+        w._select(set())
+        w.go("photo")
+        assert shows("photo")  # nothing picked: the first file showing
     finally:
         w.close()
 

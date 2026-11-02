@@ -8,14 +8,17 @@ import multiprocessing
 import os
 import subprocess
 import threading
+from functools import lru_cache
 
 from PySide6.QtCore import QObject, QRunnable, QThread, Signal
 
 from listo.core.captions_worker import serve as serve_captions
 from listo.core.engine import Conversion, Result
 from listo.core.log import get_logger
+from listo.core.presets import transcript_only
 from listo.core.probe import MediaInfo, probe
 from listo.core.tools import capabilities, detect_hardware, popen_kwargs
+from listo.ui.style import tokens
 
 log = get_logger(__name__)
 
@@ -237,6 +240,57 @@ class PreviewSignals(QObject):
     done = Signal(int, bytes, str)  # request number, PNG bytes, error message
 
 
+def still_of(path: str, kind: str) -> tuple[bytes, str]:
+    """The picture a preview shows for a photo (upright, RAW and HEIC included) or an audio file (its
+    waveform), and why not if there isn't one. Kept for the last few files, so a changed setting doesn't
+    decode them again."""
+    try:
+        st = os.stat(path)
+        data = _still(path, kind, (st.st_size, st.st_mtime_ns), tokens.SCREEN_TEXT)
+    except OSError:
+        data = b""
+    if data:
+        return data, ""
+    return b"", "Couldn't show this photo." if kind == "photo" else "Couldn't draw this sound."
+
+
+@lru_cache(maxsize=24)
+def _still(path: str, kind: str, _stamp: tuple, color: str) -> bytes:
+    """(_stamp: the file's size and time, so a changed file is read again.)"""
+    import tempfile
+    from pathlib import Path
+
+    if kind == "photo":
+        from listo.core import photo
+
+        img = photo.thumbnail(path, tokens.PHOTO_PREVIEW)
+        if img is None:
+            return b""
+        buf = io.BytesIO()
+        img.save(buf, "JPEG", quality=90)
+        return buf.getvalue()
+    caps = capabilities()
+    fd, name = tempfile.mkstemp(prefix="listo-wave-", suffix=".png")
+    os.close(fd)
+    try:
+        wave = f"showwavespic=s={tokens.WAVE_W}x{tokens.WAVE_H}:colors=0x{color.lstrip('#')}:scale=sqrt"
+        cp = subprocess.run(
+            [caps.ffmpeg, "-v", "error", "-i", path, "-filter_complex", f"aformat=channel_layouts=mono,{wave}",
+             "-frames:v", "1", "-update", "1", "-f", "image2", "-c:v", "png", "-y", name],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=120, **popen_kwargs(),
+        )  # fmt: skip
+        if cp.returncode == 0:
+            log.debug("waveform drawn for %s", path)
+            return Path(name).read_bytes()
+        log.warning("waveform failed: %s", cp.stderr[-2000:].decode("utf-8", "replace"))
+        return b""
+    except (OSError, subprocess.SubprocessError):
+        log.warning("waveform failed", exc_info=True)
+        return b""
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
 class PreviewTask(QRunnable):
     """Render one frame exactly as the conversion would (or the untouched original)."""
 
@@ -275,10 +329,13 @@ class PreviewTask(QRunnable):
                 self._emit(b"", "No preview (ffmpeg is missing)")
                 return
             self.path, self.info = sample, probe(sample)
+        if self.info is not None and self.info.kind in ("photo", "audio"):
+            self._emit(*still_of(self.path, self.info.kind))  # the photo, or the sound's waveform
+            return
         fd, name = tempfile.mkstemp(prefix="listo-preview-", suffix=".png")
         os.close(fd)
         try:
-            if self.original:
+            if self.original or transcript_only(self.info.kind, self.s):  # (a transcript has no picture)
                 args = original_frame_args(self.path, self.info, self.at, name)
             else:
                 args, plan = preview_plan(

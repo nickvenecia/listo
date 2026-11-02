@@ -18,6 +18,10 @@ them, so hardware decoding is also switched off for playback: see app.py).
 
 Without Qt's player (or for a file it can't open) the widget becomes a still-frame viewer with a
 scrubber: `fallback` is True, the play button hides, and `settled` still drives the frames.
+
+It shows photos and sound too (`kind`): a photo is one still picture (no play button or scrubber, the
+‹ › arrows stay); an audio file is its waveform (the owner's still) with a line in the accent where it's
+playing, and plays its sound.
 """
 
 from __future__ import annotations
@@ -26,9 +30,10 @@ import io
 import os
 
 from PySide6.QtCore import QRectF, QSizeF, Qt, QTimer, QUrl, Signal
-from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QKeySequence, QPixmap, QShortcut
+from PySide6.QtGui import QBrush, QColor, QFont, QGuiApplication, QKeySequence, QPen, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsSimpleTextItem,
     QGraphicsView,
@@ -44,7 +49,7 @@ from listo.core.probe import MediaInfo
 from listo.ui.components.widgets import hbox, icon_button, vbox
 from listo.ui.dialogs.trim import fmt_clock
 from listo.ui.style import theme
-from listo.ui.style.tokens import ICON, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
+from listo.ui.style.tokens import ICON, PLAYHEAD_W, SCREEN, SCREEN_TEXT, SPACE_1, SPACE_2, TEXT_SM
 
 # No hardware decoding for playback: Qt's player crashed on MPEG-2 (.MOD) when the Mac's decoder
 # refused it. "," = an empty list (Qt docs: Advanced FFmpeg Configuration). Must be set before Qt
@@ -148,6 +153,12 @@ class ClipPlayer(QWidget):
         self.still.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
         self.still.setZValue(2)
         self.scene.addItem(self.still)
+        self.kind = "video"  # or "photo" / "audio" (see the top)
+        self.playhead = QGraphicsRectItem()  # an audio file: where it's playing, over its waveform
+        self.playhead.setPen(QPen(Qt.PenStyle.NoPen))
+        self.playhead.setZValue(2.8)
+        self.playhead.hide()
+        self.scene.addItem(self.playhead)
         self.message = QGraphicsSimpleTextItem()
         self.message.setBrush(QBrush(QColor(SCREEN_TEXT)))
         f = QFont(self.font())
@@ -176,6 +187,7 @@ class ClipPlayer(QWidget):
         self.clock = QLabel()
         self.clock.setObjectName("Muted")
         tr.addWidget(self.clock)
+        tr.addStretch(0)  # (a photo has no scrubber: its ‹ › stay on the left)
         lay.addWidget(self.transport)
 
         self._settle = QTimer(self)
@@ -229,15 +241,21 @@ class ClipPlayer(QWidget):
         play: bool = False,
         range_: tuple[float, float] | None = None,
     ) -> None:
-        """Open a clip at `at` seconds (paused unless play=True). range_ = the part of a trimmed clip."""
+        """Open a clip at `at` seconds (paused unless play=True). range_ = the part of a trimmed clip.
+        A photo or an audio file works too (see the top)."""
         self.path, self.info, self.s, self.range = path, info, settings, range_
+        self.kind = info.kind if info.kind in ("photo", "audio") else "video"
         self._shown = None
         self.overlay.setPixmap(QPixmap())
         self.still.setPixmap(QPixmap())  # the old clip's frame
         self._still_at = None
         self._layout()
         self._pos = at
-        self.fallback = not HAS_PLAYER
+        self.fallback = not HAS_PLAYER or self.kind == "photo"  # (a photo doesn't play)
+        for w in (self.slider, self.clock):
+            w.setVisible(self.kind != "photo")
+        if HAS_PLAYER:
+            self.video.setVisible(self.kind == "video")  # sound only: the waveform stays the picture
         self._close()
         self._duration(int(info.duration * 1000))
         self._sync_slider(int(at * 1000))
@@ -311,6 +329,7 @@ class ClipPlayer(QWidget):
         self._still_pm = pm if pm is not None and not pm.isNull() else None
         if pm is None or pm.isNull():
             self.still.setPixmap(QPixmap())
+            self.playhead.hide()
             return
         r = fit(pm.width(), pm.height(), QRectF(0, 0, self.W, self.H))
         scaled = pm.scaled(
@@ -326,8 +345,23 @@ class ClipPlayer(QWidget):
     def _still_visibility(self) -> None:
         """Show the exact frame only while paused where it was taken (a moved player shows the clip
         until the new frame arrives); without a player it's the only picture, so always."""
+        if self.kind != "video":  # a photo, or a sound's waveform: the only picture there is
+            self.still.setVisible(True)
+            self._place_playhead()
+            return
         near = self._still_at is None or abs(self._still_at - self.position()) < 0.08
         self.still.setVisible(self.fallback or not self._open or (not self.is_playing() and near))
+
+    def _place_playhead(self) -> None:
+        """An audio file: a line in the accent over its waveform, where it's playing (or paused)."""
+        pm = self.still.pixmap()
+        length = self.info.duration if self.info else 0.0
+        on = self.kind == "audio" and not pm.isNull() and length > 0
+        self.playhead.setVisible(on)
+        if on:
+            x = self.still.x() + min(1.0, max(0.0, self.position() / length)) * pm.width()
+            self.playhead.setRect(QRectF(x - PLAYHEAD_W / 2, self.still.y(), PLAYHEAD_W, pm.height()))
+            self.playhead.setBrush(QBrush(QColor(theme.ACCENT)))
 
     def set_message(self, text: str) -> None:
         self.message.setText(text)
