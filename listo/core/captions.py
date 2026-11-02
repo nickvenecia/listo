@@ -216,6 +216,40 @@ def to_srt(cues: list[Cue], words_per_line: int) -> str:
     return "\n".join(blocks)
 
 
+PARAGRAPH_GAP = 1.5  # seconds of quiet that start a new paragraph in a transcript
+PARAGRAPH_WORDS = 80  # past this many words, a paragraph ends with its next sentence
+
+
+def paragraphs(cues: list[Cue]) -> list[tuple[float, str]]:
+    """The words as paragraphs, (start, text): a new one after a pause, or after a long run of words once
+    a sentence ends."""
+    out: list[tuple[float, str]] = []
+    last_end = 0.0
+    for c in cues:
+        text = " ".join(c.text.split())
+        if not text:
+            continue
+        prev = out[-1][1] if out else ""
+        long_enough = len(prev.split()) >= PARAGRAPH_WORDS and prev.endswith(_SENTENCE_END)
+        if out and c.start - last_end < PARAGRAPH_GAP and not long_enough:
+            out[-1] = (out[-1][0], f"{prev} {text}")
+        else:
+            out.append((c.start, text))
+        last_end = c.end
+    return out
+
+
+def to_transcript(cues: list[Cue], layout: str, words_per_line: int, stamp: Callable[[float], str]) -> str:
+    """A clip's words as a file (presets.TRANSCRIPT_LAYOUTS): "text" = paragraphs, "times" = each paragraph
+    after its timecode (`stamp(seconds)`), "srt" = subtitles."""
+    if layout == "srt":
+        return to_srt(cues, words_per_line)
+    paras = paragraphs(cues)
+    if layout == "times":
+        return "\n\n".join(f"[{stamp(t)}]\n{text}" for t, text in paras) + "\n"
+    return "\n\n".join(text for _, text in paras) + "\n"
+
+
 # ---------------------------------------------------------------------------- speech to text
 def models_dir() -> Path:
     return data_dir() / "models"

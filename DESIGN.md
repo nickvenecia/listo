@@ -44,8 +44,9 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
   Check for Updates and Settings).
 - **The toolbar** (`TOOLBAR_H`): the place's large title and count ("12", or "3 selected") on the left, the
   **search capsule** centred (it shrinks to `SEARCH_MIN` before anything collides), the primary round **+** on
-  the right (Add Files / a Folder / a Link). While there are files and the right panel is closed, a round
-  sliders button after the + brings it back (`MainWindow.btn_panel`; it fades in where the panel's ✕ was).
+  the right (Add Files / a Folder / a Link). Before the +, with two or more files, a round sort button (**Sort
+  By** › Date & Time Shot, Name; `MainWindow.btn_sort`). While there are files and the right panel is closed, a
+  round sliders button after the + brings it back (`MainWindow.btn_panel`; it fades in where the panel's ✕ was).
   Nothing else.
 - **The file list** (`window/tables.FileList`): one painted row per file, `TABLE_ROW_H` tall (never a widget per
   row). Left to right: the grip (drag to reorder), a 16:9 thumbnail on `SCREEN`, the name, what the file is,
@@ -62,17 +63,21 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
   click, Space or Return picks it. No headline, no search (there's nothing to search). Files dragged over the
   window light the Add Files tile.
 - **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**, one recipe
-  for every file in the list. On top, the live preview (the picked clip, or the first, exactly as it will come
-  out; under it the clip's name and where it is in the list, "1 of 9"; the sample test pattern when the list is
-  empty). Then Recipe, then a **heading for each kind of file in the list** with how many there are ("9 Videos",
+  for every file in the list. On top, the live preview of the picked file, or the first one showing in the list:
+  a video exactly as it will come out, a photo as it is (no play button or scrubber), an audio file as its
+  waveform with a `PLAYHEAD_W` line in the accent where it's playing. Under it the file's name and where it is
+  among the files showing, "1 of 9"; the sample test pattern when the list is empty. Then Recipe, then a **heading for each kind of file in the list** with how many there are ("9 Videos",
   "2 Photos", "1 Audio File"; `widgets.GroupHeading`), noting the files given their own format on their row
   ("· 1 with its own format"). A kind that isn't in the list doesn't show (with nothing in the list, all three
   do). **Never tabs for the kinds**: "Video | Audio" tabs read as an export's picture and sound settings, as in
   Resolve or Premiere. Videos: the format card (Format, Flavor, Size, Clips: a file per clip or one joined
   video, Keep Every Audio Track), then the fold-away **Picture**, **Burn-In** and **Captions**. Photos: one card
-  (format, quality, size, camera info). Audio: the format. Then **Saves To** (the example name, Where, Name) and
-  **Advanced** (name taken, dates, double-check, and Speed: these are for every file). Its header: the title,
-  a round eye (the bigger Preview window), the round ✕.
+  (format, quality, size, camera info). Audio: the format. **Transcript** is a format for videos and audio
+  (just the words that are said, as a text file): it shows its Layout and Language and Accuracy in the card (the
+  same settings in every card and in Captions), and a video's Picture, Burn-In and Captions hide. Then **Saves
+  To** (the example name, Where, Name) and **Advanced** (name taken, dates, double-check, and Speed: these are
+  for every file). Its header: the title, a round reset (Reset to Defaults…, after an alert; undo brings the
+  settings back), a round eye (the bigger Preview window), the round ✕.
 - **The right panel belongs to the list, not to a picked file.** It slides in (`DOCK_MS`) when the first file
   arrives and away when the last one leaves: no files, no panel (the start tiles have the window). Picking a
   file only changes which clip the preview shows; it never opens or closes the panel, and neither do Esc or a
@@ -244,6 +249,9 @@ subfolder's name) shows under it only for that choice.
 - **Drag to reorder** by a row's grip: the row lifts onto a card and follows the pointer, the others slide apart
   to show where it will land, the list scrolls near its edges, Esc puts it back. List order is the order a joined
   video plays in and Continuous Timecode runs in. A batch keeps its order while it converts.
+- **Sort By** (the toolbar's sort button, the list's right-click, Edit › Sort By) puts the whole list in order
+  once, as one undo step: **Date & Time Shot** (`probe.shot_moment`, then the name) or **Name** (as the Finder
+  sorts: numbers as numbers, case aside; JVC Everio's hex clip numbers in their order, `naming.name_key`).
 - **Only show what applies.** A control that depends on another appears only when that one is on. A feature this
   computer or these files can't use is hidden, not greyed out (hardware encoding without a hardware encoder,
   deinterlacing without interlaced files); an item in a format list stays, disabled, with a tooltip saying why.
@@ -254,7 +262,8 @@ subfolder's name) shows under it only for that choice.
   its progress on the clip's captions icon. Nothing slow runs on the window's thread.
 - **Checking is watching.** Every picture of a clip can play with sound (double-click a clip, the preview, the
   Preview window, the caption check). Paused shows the exact result; playing shows the clip with its captions.
-  Space plays and pauses when you're not typing.
+  A photo shows as it is; an audio file shows its waveform and plays. Space plays and pauses when you're not
+  typing.
 - **Updates**: every launch (unless switched off in Settings › General), Listo checks for a newer version just
   after the window is up; if there is one, the update window opens by itself (never over another window, a menu
   or a batch that's converting), and "Update to …" stays at the bottom of the sidebar. The update window shows

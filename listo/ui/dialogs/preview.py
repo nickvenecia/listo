@@ -3,6 +3,7 @@
 Paused, the picture is one frame through the real conversion steps (LUT, frame, size, burn-ins,
 captions). Playing, it's the clip as shot with its captions over it (ClipPlayer). "Original" shows
 the clip untouched. Double-clicking a clip in the list opens this and starts playing.
+Photos show as they are, and audio files as their waveform, playing their sound.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QWidget
 
 from listo.core import naming
-from listo.core.presets import VIDEO_BY_KEY
+from listo.core.presets import format_label, transcript_only
 from listo.ui.components.player import ClipPlayer, space_plays
 from listo.ui.components.widgets import Segmented, combo, hbox, vbox
 from listo.ui.style.tokens import SPACE_1, SPACE_2, SPACE_3, SPACE_5, VIEWER_H, VIEWER_W
@@ -20,8 +21,8 @@ from listo.ui.window.jobs import PreviewSignals, PreviewTask
 
 
 class PreviewDialog(QDialog):
-    """`clips` = [(label, path, info, settings, captions or None, clock or None)] — every video in the
-    list (clock: Continuous Timecode, see video.preview_plan)."""
+    """`clips` = [(label, path, info, settings, captions or None, clock or None)] — every file in the list
+    a preview can show: videos, photos, audio (clock: Continuous Timecode, see video.preview_plan)."""
 
     def __init__(self, clips: list[tuple], start: int = 0, parent: QWidget | None = None, play: bool = False):
         super().__init__(parent)
@@ -92,14 +93,14 @@ class PreviewDialog(QDialog):
         i = max(0, self.pick.currentIndex())
         self.player.set_steps(i > 0, i < len(self.clips) - 1)
         _, path, info, s, cues, _clock = self._clip()
-        w, h = naming.output_size(info, s, "video")
-        size = f"{w}×{h}" if w and h else ""
-        preset = VIDEO_BY_KEY[s.video_preset].title
-        self.info_line.setText(
-            f"Comes out as {preset}"
-            + (f" · {size}" if size else "")
-            + " · Paused: the exact result. Playing: the clip with its captions."
-        )
+        kind = info.kind if info.kind in ("photo", "audio") else "video"
+        w, h = naming.output_size(info, s, kind)
+        size = f"{w}×{h}" if w and h and not transcript_only(kind, s) else ""
+        line = f"Comes out as {format_label(kind, s)}" + (f" · {size}" if size else "")
+        if kind == "video" and not transcript_only(kind, s):
+            line += " · Paused: the exact result. Playing: the clip with its captions."
+        self.info_line.setText(line)
+        self.view.setVisible(kind == "video")  # (a photo or a sound has no "original" to compare)
         self.player.set_still(None)
         self.player.set_message("Making a preview…")
         at = 0.0  # every player opens on the first frame

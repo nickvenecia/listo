@@ -56,13 +56,15 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Trim:** click ✂ on any video or audio file to keep just part of it (with frame previews). Burned-in and embedded timecode follow the cut.
 
 **Workflow:**
-- **Recipes**: save your favorite format + folder + naming combos and reuse them in one click.
+- **Recipes**: save your favorite format + folder + naming combos and reuse them in one click. Reset to Defaults starts over (undo brings yours back).
 - **Per-file formats**: click the format tag on any file to give just that one a different format.
 - **Look for review copies**: pick any LUT (`.cube` and more; the ones you used before stay in the list) and burn in timecode, the file name and the date & time the clip was shot (read from the clip, with a running clock). Choose a clean style or a **VHS camcorder** style (PLAY ►, date and clock in a VCR font). With the VHS look you can also add STOP ■ at the end and **Tape Effects**: a screen at the start and end (VCR blue, black, color bars & tone, or any color; PLAY blinks going in, STOP ■ coming out), a tracking glitch at each cut of a joined video, and random glitches if you like.
 - **Frame**: desqueeze anamorphic footage (1.33×–2×), and change the shape to 16:9, 8:5, 4:3, 1:1, 4:5, 9:16, 1.85, 2:1, 2.35 or 2.39. Crop to fill, add black bars, or draw cinema bars over the picture with adjustable opacity.
 - **Size** means the short edge, so 1080 gives 1920×1080 for widescreen and 1080×1920 for vertical video. It scales up too (old 720×480 camcorder footage at 1080 comes out 1440×1080, in its true 4:3 shape).
 - **Captions**: Listo listens to each clip on your computer (nothing is uploaded), you check and fix the words, then they're burned in (Clean or VHS look) and/or saved as an .srt file. The speech model downloads once the first time (150 MB to 1.6 GB depending on accuracy). Check them with the Check Captions button: play the clip with sound, watch each caption light up as it's spoken, click to jump, fix or add lines.
-- **Play anything**: double-click a clip, or press play on the preview, to watch it with sound right in Listo.
+- **Transcripts**: pick Transcript as the format for videos or audio files to save just the words that are said: plain text, text with timecode, or subtitles (.srt).
+- **Play anything**: double-click a clip, or press play on the preview, to watch it with sound right in Listo. Photos show in the preview too, and audio files as their waveform.
+- **Sort the list** by the date & time each clip was shot, or by name (Everio's MOV00A-style numbers included). List order is the order a joined video plays in.
 - **Join into one video**: turn every clip in the list into one long video (named first-last, e.g. MOV001-MOV014.mov), matched to the first clip's size and frame rate, without a second re-encode.
 - **Preview**: see one frame of any clip exactly as it will come out, side by side with the original.
 - **Double-checks every file**: re-reads each new video/audio file and flags it if the length doesn't match.

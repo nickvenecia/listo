@@ -15,9 +15,11 @@ from listo.core.presets import (
     AUDIO_BY_KEY,
     PHOTO_BY_KEY,
     TIMECODE_MODES,
+    TRANSCRIPT_LAYOUTS,
     VIDEO_BY_KEY,
     Settings,
     timecode_mode,
+    transcript_only,
 )
 from listo.core.probe import KNOWN_EXTS, ext_of, probe
 from listo.core.tools import capabilities, detect_hardware
@@ -38,6 +40,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--collision", choices=["number", "skip", "replace"], default="number")
     ap.add_argument("--no-hardware", action="store_true")
     ap.add_argument(
+        "--layout", choices=[c.key for c in TRANSCRIPT_LAYOUTS], default="text",
+        help="--video / --audio transcript: plain text, text with timecode, or subtitles (.srt)",
+    )  # fmt: skip
+    ap.add_argument("--language", default="auto", help="transcript: the language spoken (en, es…; auto)")
+    ap.add_argument(
         "--timecode", choices=[c.key for c in TIMECODE_MODES], default=Settings().timecode_mode,
         help="clips without their own timecode: run on through the files, restart each, or the record time",
     )  # fmt: skip
@@ -55,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         collision=a.collision,
         hardware=not a.no_hardware,
         timecode_mode=a.timecode,
+        transcript_layout=a.layout,
+        caption_language=a.language,
     )
     if a.variant:
         s.video_variant[a.video] = a.variant
@@ -89,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
 
             tc = running_timecodes([(info, info.duration)], tape)[0]
             tape += info.duration
-        r = Conversion(f, info, s, caps, reserved, counter=n, timecode=tc).run()
+        r = Conversion(f, info, s, caps, reserved, counter=n, timecode=tc, captions=_words(f, info, s)).run()
         out = f" -> {r.output}" if r.output else ""
         print(f"[{r.status}] {f}{out} {r.message} {' '.join(r.notes)}".rstrip())
         if r.status == "failed":
@@ -97,6 +106,26 @@ def main(argv: list[str] | None = None) -> int:
             if r.log:
                 print("    " + "\n    ".join(r.log.splitlines()[-8:]), file=sys.stderr)
     return 1 if failed else 0
+
+
+def _words(path: str, info, s: Settings) -> list | None:
+    """The Transcript format: the file's words, the ones already made in Listo if they match, else heard
+    now (here, in this process: no window to keep responsive)."""
+    if not transcript_only(info.kind, s) or not info.audio:
+        return None
+    from listo.core import captions
+
+    t = captions.load(path)
+    model = captions.MODELS.get(s.caption_model, captions.MODELS["balanced"])[0]
+    if t is None or (not t.edited and t.model != model):
+        print(f"listening to {path}…", file=sys.stderr)
+        try:
+            t = captions.transcribe(path, info, s.caption_model, s.caption_language)
+        except captions.CaptionError as e:
+            print(f"    {e}", file=sys.stderr)
+            return None
+        captions.save(t)
+    return t.cues_for(s.caption_words, s.caption_lines)
 
 
 if __name__ == "__main__":

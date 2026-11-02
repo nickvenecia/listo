@@ -204,6 +204,22 @@ def test_no_words_cut_off_in_the_window(qapp, looker, files, monkeypatch):
         w.export_panel.adv.set_open(False)
         look("every fold closed, saying what's on")
 
+        w.settings.apply(
+            {"video_preset": "transcript", "audio_format": "transcript", "transcript_layout": "times"}
+        )
+        w.convert.reload()
+        w._settings_changed()
+        w._refresh_now()
+        wanted = [it for it in w.items.values() if w._wants_captions(it)]  # (the sound file's words too now)
+        assert _until(qapp, lambda: all(it.transcript is not None for it in wanted))
+        w._refresh_now()
+        kinds = {w.items[i].kind: i for i in reversed(w.order)}
+        w._select({kinds["photo"]})
+        look("every file as a transcript, a photo in the preview")
+        w._select({kinds["audio"]})
+        look("a sound file in the preview")
+        w._select(set())
+
         w.go("done")
         look("a place with nothing in it")
         w.go("attention")
@@ -280,7 +296,13 @@ def test_no_words_cut_off_in_any_dialog(qapp, looker, files, monkeypatch):
         w.clear_all()
         w.trim_item(first)
         w.open_preview()
+        kinds = {w.items[i].kind: i for i in reversed(w.order)}
+        for kind in ("photo", "audio"):  # the Preview window with a photo, then a sound
+            w._select({kinds[kind]})
+            w.open_preview()
+        w._select(set(w.order))
         w.check_captions()
+        w.reset_settings()  # its alert
 
         it = w.items[first]
         it.state = "done"

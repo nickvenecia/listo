@@ -63,6 +63,7 @@ from listo.core.presets import (
     Settings,
     format_label,
     timecode_mode,
+    transcript_only,
 )
 from listo.core.probe import (
     KNOWN_EXTS,
@@ -73,6 +74,7 @@ from listo.core.probe import (
     fmt_duration,
     kind_from_ext,
     probe,
+    shot_moment,
 )
 from listo.core.progress import BatchClock, time_left
 from listo.core.sample import sample_clip, sample_clip_if_made
@@ -118,6 +120,7 @@ log = get_logger(__name__)
 
 _ORPHANS: list = []
 SOON_MS = 60  # how long list-wide refreshes wait to gather changes
+SORTS = {"shot": "Date && Time Shot", "name": "Name"}  # Sort By (&& is a literal "&" in a menu)
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
 
 
@@ -304,6 +307,7 @@ class MainWindow(QMainWindow):
         self.export_panel.preview_clicked.connect(self.open_preview)
         self.convert.recipe_applied.connect(self.export_panel.reload)
         self.panel.btn_preview.clicked.connect(self.open_preview)
+        self.panel.btn_reset.clicked.connect(self.reset_settings)
         self.panel.close_wanted.connect(lambda: self.show_panel(False))
         self.dock = Dock(glass(self.panel), root, self.sidebar, body)  # the glass panel on the right, sliding
         self.dock.follower = lambda: self.pages.currentWidget()
@@ -350,6 +354,11 @@ class MainWindow(QMainWindow):
         grid.addLayout(mid, 0, 1, Qt.AlignmentFlag.AlignCenter)
         right = hbox(spacing=tokens.SPACE_2)
         right.addStretch(1)
+        self.btn_sort = circle_button("sort", "Sort the List by Date & Time Shot or by Name")
+        self.btn_sort.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_sort.setMenu(self._sort_menu(self.btn_sort))
+        self.btn_sort.hide()  # only with two or more files to put in order
+        right.addWidget(self.btn_sort)
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("CirclePrimary")
         self.btn_add.setIcon(theme.icon("plus", theme.ON_ACCENT))
@@ -465,6 +474,15 @@ class MainWindow(QMainWindow):
         m.addAction(theme.menu_icon("link"), "Add a Link…", self.ask_link)
         return m
 
+    def _sort_menu(self, owner: QWidget) -> QMenu:
+        """Sort By: Date & Time Shot, Name (not while converting: a batch keeps its order)."""
+        m = QMenu("Sort By", owner)
+        m.setIcon(theme.menu_icon("sort"))
+        for key, label in SORTS.items():
+            m.addAction(label, lambda k=key: self.sort_list(k))
+        m.aboutToShow.connect(lambda: [a.setEnabled(not self.running) for a in m.actions()])
+        return m
+
     def _menus(self) -> None:
         """Commands with shortcuts. The menu bar shows on the Mac; on Windows and Linux it's hidden and the
         shortcuts still work (Settings, feedback and updates are in the profile card's menu)."""
@@ -513,6 +531,9 @@ class MainWindow(QMainWindow):
         act(e, "Remove from the List…", self.remove_selected, [Qt.Key.Key_Backspace, Qt.Key.Key_Delete])
         act(e, "Clear Finished", self.clear_finished)
         act(e, "Clear All…", self.clear_all)
+        e.addSeparator()
+        e.addMenu(self._sort_menu(e))
+        act(e, "Reset Settings to Defaults…", self.reset_settings)
         e.addSeparator()
         act(e, "Find", self.search.setFocus, QKeySequence.StandardKey.Find)
 
@@ -581,6 +602,7 @@ class MainWindow(QMainWindow):
         self.table.show_ids([i for i in self.order if self._shown(self.items[i])])
         self._show_page()
         self._show_count()
+        self._schedule_live()  # the preview shows what's showing (Photos: a photo)
 
     def _show_page(self) -> None:
         has = bool(self.items)
@@ -588,6 +610,7 @@ class MainWindow(QMainWindow):
             self._had_files = has
             self.show_panel(has)  # the first files bring Convert To in; the last one going takes it away
         self.search.setVisible(has)  # nothing to search yet
+        self.btn_sort.setVisible(len(self.items) > 1)  # nothing to put in order yet
         if not self.items:
             self.pages.setCurrentWidget(self.empty)
         elif not self.table.shown_ids():
@@ -730,6 +753,7 @@ class MainWindow(QMainWindow):
     def _put_settings(self, values: dict) -> None:
         self._history_busy = True
         try:
+            self.settings.video_variant.clear()  # a whole snapshot: its flavors replace the ones there
             self.settings.apply(values)
             self.convert.reload()
             self.export_panel.reload()
@@ -737,6 +761,42 @@ class MainWindow(QMainWindow):
             self._settings_before = self.settings.to_dict()
         finally:
             self._history_busy = False
+
+    def reset_settings(self) -> None:
+        """Convert To's reset button: every setting back to how Listo starts, after an alert. One undo step;
+        recipes and the files' own formats (changed on their rows) stay."""
+        self._settings_timer.stop()
+        self._record_settings()  # a change still settling is a step of its own
+        before, after = self.settings.to_dict(), Settings().to_dict()
+
+        def plain(values: dict) -> dict:  # (with every format's flavor spelled out)
+            s = Settings.from_dict(values)
+            flavors = {p.key: s.variant_for(p.key) for p in VIDEO_PRESETS if p.variants}
+            return {**s.to_dict(), "video_variant": flavors}
+
+        if plain(before) == plain(after):
+            self.toast("Convert To is already set the way Listo starts.")
+            return
+        if not confirm(
+            self,
+            "Reset Convert To?",
+            "Every setting goes back to how Listo starts. Undo brings yours back.",
+            "Reset",
+            danger=False,
+        ):
+            return
+        self._put_settings(after)
+        self.history.push(
+            Step(
+                "the settings",
+                lambda: self._put_settings(before),
+                lambda: self._put_settings(after),
+                "settings",
+                (before, after),
+            )
+        )
+        log.info("Convert To reset to the defaults")
+        self.toast("Convert To is back to the defaults.", "done")
 
     def _reordered(self, shown: list[int]) -> None:
         """A dragged row landed: the files showing are in this order now (the others keep their places)."""
@@ -749,6 +809,34 @@ class MainWindow(QMainWindow):
             return
         self._put_order(after)
         self._step("the order", lambda: self._put_order(before), lambda: self._put_order(after))
+
+    def sort_list(self, by: str) -> None:
+        """Sort By: the whole list in order of when each file was shot ("shot"), or by name ("name"). It's
+        the order a joined video plays in and Continuous Timecode runs in, and one undo step."""
+        if self.running or by not in SORTS:
+            return
+
+        def name(iid: int) -> tuple:
+            it = self.items[iid]
+            return naming.name_key(it.card.name or Path(it.path).name)
+
+        def shot(iid: int) -> tuple:
+            it = self.items[iid]
+            try:
+                return (0, shot_moment(it.path, it.info), name(iid))
+            except (OSError, ValueError, OverflowError):  # still downloading, or gone: at the end
+                return (1, name(iid))
+
+        before = list(self.order)
+        after = sorted(before, key=shot if by == "shot" else name)
+        words = {"shot": "when they were shot", "name": "name"}[by]
+        log.info("sorting the list by %s", by)
+        if after == before:
+            self.toast(f"Already sorted by {words}.")
+            return
+        self._put_order(after)
+        self._step("the order", lambda: self._put_order(before), lambda: self._put_order(after))
+        self.toast(f"Sorted by {words}.", "done")
 
     def _put_order(self, order: list[int]) -> None:
         self.order = [i for i in order if i in self.items] + [i for i in self.order if i not in set(order)]
@@ -919,6 +1007,11 @@ class MainWindow(QMainWindow):
         self._sync_captions()
         self._schedule_live()
 
+    def _words_word(self, wanted: list[Item]) -> str:
+        """What the words being made are called on the bar: "Transcripts" when every file listened to comes
+        out as just its words, else "Captions"."""
+        return "Transcripts" if wanted and all(self._words_only(it) for it in wanted) else "Captions"
+
     def _update_check_button(self) -> None:
         wanted = [it for it in self.items.values() if self._wants_captions(it)]
         self.btn_check.setVisible(bool(wanted) and not self.running)
@@ -926,12 +1019,13 @@ class MainWindow(QMainWindow):
         new = sum(1 for it in ready if not it.transcript.reviewed)
         making = len(wanted) - len(ready) - sum(1 for it in wanted if it.id in self._tx_failed)
         self.btn_check.setEnabled(bool(ready))
+        words = self._words_word(wanted)
         if not ready and making:
-            self.btn_check.setText("Making Captions…")
+            self.btn_check.setText(f"Making {words}…")
         elif new:
-            self.btn_check.setText(f"Check Captions · {new} New")
+            self.btn_check.setText(f"Check {words} · {new} New")
         else:
-            self.btn_check.setText("Check Captions")
+            self.btn_check.setText(f"Check {words}")
 
     def _show_log(self) -> None:
         from listo.core.fileutil import reveal
@@ -1232,10 +1326,15 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ captions
     def _wants_captions(self, it: Item) -> bool:
-        return (
-            it.kind == "video" and it.info is not None and bool(it.info.audio) and self._base(it).captions
-            and it.state in ("ready", "waiting", "done", "warning")
-        )  # fmt: skip
+        """Its speech should be turned into words: captions are on, or it comes out as a transcript."""
+        if it.info is None or not it.info.audio or it.state not in ("ready", "waiting", "done", "warning"):
+            return False
+        return (it.kind == "video" and self._base(it).captions) or self._words_only(it)
+
+    def _words_only(self, it: Item) -> bool:
+        """It comes out as just its words (the Transcript format, for every file or on its own row)."""
+        s = self._base(it)
+        return transcript_only(it.kind, s.with_override(it.override) if it.override else s)
 
     def _made_differently(self, it: Item) -> bool:
         """These captions came from another accuracy setting or language than the one chosen now."""
@@ -1411,23 +1510,29 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _previewable(it: Item) -> bool:
-        return (
-            it.kind == "video"
-            and it.info is not None
-            and it.info.video_index is not None
-            and not it.info.error
-        )
+        """The preview can show it: a video's picture, a photo, an audio file's waveform (and sound)."""
+        if it.info is None or it.info.error:
+            return False
+        if it.kind == "video":
+            return it.info.video_index is not None
+        return it.kind == "photo" or (it.kind == "audio" and bool(it.info.audio))
+
+    def _preview_files(self) -> list[Item]:
+        """What the preview steps through, in list order: the files showing in the list (Photos shows
+        photos), or every file it can show if none of those can be."""
+        shown = [self.items[i] for i in self.table.shown_ids() if self._previewable(self.items[i])]
+        return shown or [self.items[i] for i in self.order if self._previewable(self.items[i])]
 
     # ------------------------------------------------------------------ live preview
     def _schedule_live(self) -> None:
         self._live_timer.start()
 
     def _live_clip(self) -> Item | None:
-        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        clips = self._preview_files()
         return next((it for it in clips if it.id in self.selected), clips[0] if clips else None)
 
     def _clip_cues(self, it: Item | None, s: Settings):
-        if not s.captions:
+        if not s.captions or (it is not None and it.kind != "video"):  # (captions are burned into videos)
             return None
         if it is not None and it.transcript is not None:
             return it.transcript.cues_for(s.caption_words, s.caption_lines)
@@ -1451,7 +1556,7 @@ class MainWindow(QMainWindow):
             rng = (start, start + length) if it.trim else None
             at = start  # players open on the first frame (of the trimmed part)
         cues = self._clip_cues(it, s)
-        clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+        clips = self._preview_files()
         n = clips.index(it) if it in clips else -1
         player.set_steps(n > 0, 0 <= n < len(clips) - 1)
         if key != self._live_loaded and path and info is not None:
@@ -1481,9 +1586,10 @@ class MainWindow(QMainWindow):
                 and not any(c.text.strip() for c in it.transcript.cues)
             ):
                 heard = " · No speech heard in this clip"
-            clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+            clips = self._preview_files()
             of = f" · {clips.index(it) + 1} of {len(clips)}" if len(clips) > 1 and it in clips else ""
-            self._live_note = f"{Path(it.path).name}{of} · {fmt_duration(at)}{heard}"
+            when = "" if it.kind == "photo" else f" · {fmt_duration(at)}"
+            self._live_note = f"{Path(it.path).name}{of}{when}{heard}"
         self.pool.start(
             PreviewTask(
                 self._live_seq,
@@ -1500,7 +1606,7 @@ class MainWindow(QMainWindow):
 
     def _live_step(self, direction: int) -> None:
         """The live preview's arrows: select the previous / next clip in the list and show it."""
-        clips = [c for c in (self.items[i] for i in self.order) if self._previewable(c)]
+        clips = self._preview_files()
         cur = self._live_clip()
         if cur not in clips:
             return
@@ -1536,7 +1642,9 @@ class MainWindow(QMainWindow):
         if it is None or not self._previewable(it):
             return
         self.export_panel.player.pause()
-        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        clips = self._preview_files()
+        if it not in clips:
+            clips = [it]
         clocks = self._clocks()
         PreviewDialog(
             [
@@ -1557,7 +1665,7 @@ class MainWindow(QMainWindow):
 
     def open_preview(self) -> None:
         self.export_panel.player.pause()  # one thing playing at a time
-        clips = [self.items[i] for i in self.order if self._previewable(self.items[i])]
+        clips = self._preview_files()
         if not clips:
             sample = sample_clip()
             if sample:
@@ -1929,7 +2037,12 @@ class MainWindow(QMainWindow):
                 self._anchor = iid
             s = it.state
             if self._previewable(it):
-                m.addAction(theme.menu_icon("play"), "Play", lambda: self.play_item(iid))
+                label = "Preview" if it.kind == "photo" else "Play"
+                m.addAction(
+                    theme.menu_icon("eye" if it.kind == "photo" else "play"),
+                    label,
+                    lambda: self.play_item(iid),
+                )
             if s in ("ready", "waiting") and it.info is not None:
                 m.addAction(
                     theme.menu_icon("film"),
@@ -1948,6 +2061,9 @@ class MainWindow(QMainWindow):
                 m.addAction(theme.menu_icon("retry"), "Try Again", lambda: self.retry_item(iid))
             if not m.isEmpty():
                 m.addSeparator()
+        if len(self.items) > 1:
+            m.addMenu(self._sort_menu(m))
+            m.addSeparator()
         n = sum(1 for i in self.selected if i not in self.active)
         a = m.addAction(
             theme.menu_icon("x"),
@@ -2075,7 +2191,7 @@ class MainWindow(QMainWindow):
             it.base = self.settings.copy()
         s = self.eff(it)
         cues = None
-        if s.captions and it.transcript is not None:
+        if (s.captions or transcript_only(it.kind, s)) and it.transcript is not None:
             cues = it.transcript.cues_for(s.caption_words, s.caption_lines)
         job = self.join_job
         if job is not None and it.id in job.ids:
@@ -2454,6 +2570,7 @@ class MainWindow(QMainWindow):
         )
         self._refresh_places()
         self.table.can_reorder = not self.running  # (a batch keeps its order while it converts)
+        self.btn_sort.setEnabled(not self.running)
         if finished:
             self._show_summary = True
         elif self.running:
@@ -2465,7 +2582,8 @@ class MainWindow(QMainWindow):
         self.f_time.setVisible(self.running)
         self.f_sub.setVisible(not self.running)
         if self._convert_after_captions and not self.running:  # Convert was pressed; Stop calls it off
-            self.f_title.set_full_text("Waiting for Captions")
+            wanted = [it for it in items if self._wants_captions(it)]
+            self.f_title.set_full_text(f"Waiting for {self._words_word(wanted)}")
             self.f_sub.set_full_text("Converts as soon as they're ready.")
             self.f_bar.hide()
             self.btn_start.setEnabled(False)
