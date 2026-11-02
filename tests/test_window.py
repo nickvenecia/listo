@@ -353,6 +353,7 @@ def test_reset_puts_every_setting_back_and_undo_brings_them_back(qapp, monkeypat
 def test_the_preview_shows_photos_and_sound_too(qapp, clips, tmp_path):
     """A photo shows as itself (no play button), a sound as its waveform with where it's playing; the
     Photos place previews a photo."""
+    from listo.ui.components import player as player_mod
     from listo.ui.window.jobs import still_of
     from listo.ui.window.main_window import MainWindow
 
@@ -379,7 +380,10 @@ def test_the_preview_shows_photos_and_sound_too(qapp, clips, tmp_path):
         assert not player.btn_play.isVisibleTo(w) and not player.slider.isVisibleTo(w)
         w._card_pressed(kinds["audio"], Qt.KeyboardModifier.NoModifier)
         assert shows("audio")
-        assert player.btn_play.isVisibleTo(w) and player.playhead.isVisible()
+        assert player.playhead.isVisible()  # the waveform, with where it's playing
+        assert (
+            player.btn_play.isVisibleTo(w) == player_mod.HAS_PLAYER
+        )  # (it plays where Qt's player is installed)
         w._select(set())
         w.go("photo")
         assert shows("photo")  # nothing picked: the first file showing
