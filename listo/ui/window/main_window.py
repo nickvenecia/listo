@@ -1121,7 +1121,7 @@ class MainWindow(QMainWindow):
             return
         if frac >= 0:
             it.card.set_progress(frac)
-        it.card.set_state("downloading", text if len(text) < 34 else text[:32] + "…")
+        it.card.set_state("downloading", text)  # the row fits it (tables.fit_status)
         if frac < 0:
             it.card.set_meta(text)
 

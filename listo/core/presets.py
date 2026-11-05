@@ -275,7 +275,7 @@ TIMECODE_MODES = (
 
 @dataclass
 class Settings:
-    video_preset: str = "prores"
+    video_preset: str = "h264"  # what a new video converts to (Reset to Defaults too)
     video_variant: dict[str, str] = field(default_factory=dict)
     video_resize: str = "orig"
     deinterlace: str = "smooth"
@@ -377,7 +377,7 @@ class Settings:
             if hasattr(s, k) and type(v) is type(getattr(s, k)):
                 setattr(s, k, v)
         if s.video_preset not in VIDEO_BY_KEY:
-            s.video_preset = "prores"
+            s.video_preset = "h264"
         if s.audio_format not in AUDIO_BY_KEY:
             s.audio_format = "wav24"
         if s.photo_format not in PHOTO_BY_KEY:

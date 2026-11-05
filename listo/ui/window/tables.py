@@ -26,7 +26,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QFont, QImage, QPainter, QPainterPath, QPixmap, QRegion
+from PySide6.QtGui import QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPixmap, QRegion
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -253,6 +253,22 @@ def _font(size: int, weight: int) -> QFont:
     return theme.font(size, weight)
 
 
+def fit_status(text: str, fm: QFontMetrics, width: int) -> str:
+    """The status words as they fit `width`. The details after a " · " go first ("Downloading 40% · 00:23 left"
+    becomes "Downloading 40%"), and a percentage at the end always stays ("Setting up link dow… 40%")."""
+    parts = text.split(" · ")
+    while len(parts) > 1 and fm.horizontalAdvance(" · ".join(parts)) > width:
+        parts.pop()
+    words = " · ".join(parts)
+    if fm.horizontalAdvance(words) <= width:
+        return words
+    head, _sp, last = words.rpartition(" ")
+    if head and last.endswith("%") and last[:-1].isdigit():
+        tail = " " + last
+        return fm.elidedText(head, Qt.TextElideMode.ElideRight, width - fm.horizontalAdvance(tail)) + tail
+    return fm.elidedText(words, Qt.TextElideMode.ElideRight, width)
+
+
 class _Parts:
     """Where everything sits in one row (painting and clicking use the same numbers)."""
 
@@ -274,6 +290,7 @@ class _Parts:
         self.top_row = QRect(self.status_area.left(), top_y, tokens.STATUS_W, tokens.SMALL_H)
         self.bar = QRect(self.status_area.left(), mid + tokens.SPACE_1, tokens.STATUS_W, tokens.BAR_H)
         self.buttons: dict[str, QRect] = {}
+        self.status = ""  # the status words as painted (fit_status)
         self.status_w = 0
         self.show_buttons = show_buttons
         self._row = row
@@ -303,11 +320,14 @@ class RowPainter(QStyledItemDelegate):
     def parts(self, rect: QRect, row: Row) -> _Parts:
         show = row.selected or self.view.hover_id == row.item_id
         pt = _Parts(rect, row, show)
-        f = _font(tokens.TEXT_SM, tokens.WEIGHT_SEMIBOLD)
-        from PySide6.QtGui import QFontMetrics
-
-        status_w = min(pt.top_row.width() // 2, QFontMetrics(f).horizontalAdvance(row.status) + 1)
-        pt.place_buttons(status_w)
+        fm = QFontMetrics(_font(tokens.TEXT_SM, tokens.WEIGHT_SEMIBOLD))
+        # the status gets the column, less room for the buttons this row can show (kept while they're hidden too,
+        # so pointing at the row never changes the words), and never less than half of it
+        keys = row.buttons()
+        room = len(keys) * (tokens.SMALL_H + tokens.SPACE_1 // 2) + tokens.SPACE_2 if keys else 0
+        width = pt.top_row.width()
+        pt.status = fit_status(row.status, fm, max(width // 2, width - room))
+        pt.place_buttons(fm.horizontalAdvance(pt.status) + 1)
         return pt
 
     def chip_rect(self, rect: QRect, row: Row) -> QRect:
@@ -316,8 +336,6 @@ class RowPainter(QStyledItemDelegate):
         return self._lines(pt, row)[2]
 
     def _lines(self, pt: _Parts, row: Row) -> tuple[QRect, QRect, QRect, int]:
-        from PySide6.QtGui import QFontMetrics
-
         name_h = QFontMetrics(_font(tokens.TEXT_MD, tokens.WEIGHT_SEMIBOLD)).height()
         meta_h = QFontMetrics(_font(tokens.TEXT_SM, tokens.WEIGHT_REGULAR)).height()
         third = tokens.CHIP_SM_H if (row.fmt[0] or row.trim or row.output) else 0
@@ -415,7 +433,7 @@ class RowPainter(QStyledItemDelegate):
         p.drawText(
             pt.top_row,
             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-            p.fontMetrics().elidedText(row.status, Qt.TextElideMode.ElideRight, pt.status_w),
+            pt.status,
         )
         for key, rect in pt.buttons.items():
             hot = self.view.hover_id == row.item_id and self.view.hover_part == key
@@ -671,7 +689,7 @@ class FileList(QListView):
 
     def viewportEvent(self, e):
         if e.type() == QEvent.Type.ToolTip:
-            iid, part, _r = self._hit(e.pos())
+            iid, part, rect = self._hit(e.pos())
             row = self.model_.rows.get(iid)
             tip = ""
             if row is not None:
@@ -684,7 +702,10 @@ class FileList(QListView):
                 elif part in dict((k, t) for k, _i, t in BUTTONS):
                     tip = dict((k, t) for k, _i, t in BUTTONS)[part]
                 elif part == "row":
-                    tip = theme.plain_tip("\n".join(w for w in (row.name, row.meta, row.output) if w))
+                    words = [row.name, row.meta, row.output]
+                    if self.painter_.parts(rect, row).status != row.status:
+                        words.append(row.status)  # shortened in the row: the whole of it here
+                    tip = theme.plain_tip("\n".join(w for w in words if w))
             if tip:
                 QToolTip.showText(e.globalPos(), tip, self.viewport())
             else:
