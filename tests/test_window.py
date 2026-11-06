@@ -215,7 +215,7 @@ def _scroll(w, widget, angle: int, pixels: int = 0, phase=Qt.ScrollPhase.NoScrol
 def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, clips):
     """Scrolling Convert To with the pointer over a dropdown scrolls the panel. The dropdown keeps its choice and
     doesn't take the keyboard: ↑↓ still go through the list (they used to change the dropdown instead)."""
-    from PySide6.QtCore import QPoint
+    from PySide6.QtCore import QAbstractAnimation, QPoint
     from PySide6.QtWidgets import QApplication, QComboBox
 
     from listo.ui.window.main_window import MainWindow
@@ -227,6 +227,9 @@ def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, cli
     try:
         w.add_paths([str(c) for c in clips[:3]])
         assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        # Convert To slides in with the first file: aim at its dropdowns once it's in place (the files can be
+        # read before it gets there, and the scroll then landed past the window's edge)
+        assert _wait(qapp, lambda: w.dock.opened and w.dock._anim.state() != QAbstractAnimation.State.Running)
         w._refresh_now()
         area = w.panel.scroll
         bar, view = area.verticalScrollBar(), area.viewport()
