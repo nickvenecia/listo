@@ -215,7 +215,7 @@ def _scroll(w, widget, angle: int, pixels: int = 0, phase=Qt.ScrollPhase.NoScrol
 def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, clips):
     """Scrolling Convert To with the pointer over a dropdown scrolls the panel. The dropdown keeps its choice and
     doesn't take the keyboard: ↑↓ still go through the list (they used to change the dropdown instead)."""
-    from PySide6.QtCore import QPoint
+    from PySide6.QtCore import QAbstractAnimation, QPoint
     from PySide6.QtWidgets import QApplication, QComboBox
 
     from listo.ui.window.main_window import MainWindow
@@ -227,6 +227,9 @@ def test_scrolling_the_panel_over_a_dropdown_leaves_the_dropdown_alone(qapp, cli
     try:
         w.add_paths([str(c) for c in clips[:3]])
         assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
+        # Convert To slides in with the first file: aim at its dropdowns once it's in place (the files can be
+        # read before it gets there, and the scroll then landed past the window's edge)
+        assert _wait(qapp, lambda: w.dock.opened and w.dock._anim.state() != QAbstractAnimation.State.Running)
         w._refresh_now()
         area = w.panel.scroll
         bar, view = area.verticalScrollBar(), area.viewport()
@@ -320,7 +323,7 @@ def test_reset_puts_every_setting_back_and_undo_brings_them_back(qapp, monkeypat
     monkeypatch.setattr(mw, "confirm", lambda *a, **k: asked.append(a[1]) or True)
     w = mw.MainWindow()
     try:
-        w.settings.apply({"video_preset": "h264", "burn_timecode": True, "naming": "{name}_{date}"})
+        w.settings.apply({"video_preset": "prores", "burn_timecode": True, "naming": "{name}_{date}"})
         w.settings.video_variant["prores"] = "3"
         w.convert.reload()
         w.export_panel.reload()
@@ -329,16 +332,16 @@ def test_reset_puts_every_setting_back_and_undo_brings_them_back(qapp, monkeypat
         assert asked == ["Reset Convert To?"]
         s = w.settings
         assert (s.video_preset, s.burn_timecode, s.naming, s.variant_for("prores")) == (
-            "prores",
+            "h264",
             False,
             "{name}",
             "2",
         )
-        assert w.convert.v_fmt.currentData() == "prores"  # the panel shows it too
+        assert w.convert.v_fmt.currentData() == "h264"  # the panel shows it too
         w.undo()
         s = w.settings
         assert (s.video_preset, s.burn_timecode, s.naming, s.variant_for("prores")) == (
-            "h264",
+            "prores",
             True,
             "{name}_{date}",
             "3",
@@ -484,3 +487,31 @@ def test_undo_redo_and_reorder(qapp, clips, monkeypatch):
         assert w.order == [a, c]
     finally:
         w.close()
+
+
+def test_a_download_shows_its_whole_percentage(qapp):
+    """The status column gives the words its room (it once stopped at half: "Downloading 4…" for 40%); words
+    that still don't fit drop the time left first and keep the percentage, and the row's tooltip has them all."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QFontMetrics
+
+    from listo.ui.style import theme, tokens
+    from listo.ui.window.tables import FileList, Row, fit_status
+
+    fl = FileList()
+    row = Row(item_id=1, name="El Paso Aerial Views", kind="link")
+    fl.add_row(row)
+    row.set_state("downloading", "Downloading 40% · 00:23 left")
+    rect = QRect(0, 0, 900, tokens.TABLE_ROW_H)
+    assert fl.painter_.parts(rect, row).status == "Downloading 40% · 00:23 left"
+
+    fm = QFontMetrics(theme.font(tokens.TEXT_SM, tokens.WEIGHT_SEMIBOLD))
+    assert (
+        fit_status("Downloading sound 40% · 01:23 left", fm, 10_000) == "Downloading sound 40% · 01:23 left"
+    )
+    narrow = fm.horizontalAdvance("Downloading sound 40%") + 2
+    assert fit_status("Downloading sound 40% · 01:23 left", fm, narrow) == "Downloading sound 40%"
+    tight = fit_status("Setting up link downloads (one time)… 40%", fm, 100)
+    assert tight.endswith("… 40%") and fm.horizontalAdvance(tight) <= 100
+    assert fit_status("Check This One", fm, 100) == "Check This One"
+    fl.deleteLater()

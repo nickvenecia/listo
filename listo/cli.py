@@ -28,7 +28,7 @@ from listo.core.tools import capabilities, detect_hardware
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="listo cli", description="Convert files with Listo's engine.")
     ap.add_argument("files", nargs="+")
-    ap.add_argument("--video", choices=sorted(VIDEO_BY_KEY), default="prores")
+    ap.add_argument("--video", choices=sorted(VIDEO_BY_KEY), default="h264")
     ap.add_argument("--variant", help="flavor/quality for the video preset (e.g. 2, dnxhr_hq, high)")
     ap.add_argument("--audio", choices=sorted(AUDIO_BY_KEY), default="wav24")
     ap.add_argument("--photo", choices=sorted(PHOTO_BY_KEY), default="jpeg")

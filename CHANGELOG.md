@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.1
+- **H.264 (.mp4) is the starting format for videos**, the one that plays everywhere (it was ProRes). ProRes and the rest are one click away in Format. If you've used Listo before it keeps the format you have now; **Reset to Defaults** switches it to H.264
+- **A download's percentage is never cut off.** A link's row used to show "Downloading 4…" at 40%: the words now get the whole status column, and when room runs short the time left goes first, so the percentage always shows. Point at the row to read everything
+
 ## 3.2.0
 - **Sort the list** by **Date & Time Shot** or by **Name**: the round arrows button beside the +, a right-click on the list, or Edit › Sort By. The list's order is the order a joined video plays in, so sorting by when it was shot puts camcorder clips back in the order you filmed them, whatever their names. Sorting by name counts like the Finder (Clip 2 before Clip 10) and knows JVC Everio's numbering (MOV009, MOV00A … MOV00F, MOV010). ⌘Z puts the old order back
 - **Export just a transcript.** Pick **Transcript** as the format for videos or audio files and Convert saves only the words that are said, as a text file next to each one. Choose the layout: **Plain Text**, **With Timecode** (each paragraph starts with the same timecode as the converted video) or **Subtitles · .srt**, and the language and accuracy right there. Listo listens on this computer, in the background, as soon as you pick it
