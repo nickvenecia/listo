@@ -83,7 +83,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15  # Apple Silicon (GitHub retired the macos-14 machines)
             name: mac-apple-silicon
           - os: macos-15-intel
             name: mac-intel
