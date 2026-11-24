@@ -50,7 +50,7 @@ from listo import APP_NAME, __version__
 from listo.core import captions, console, join, naming, store, tape, update
 from listo.core.captions import sample_cues
 from listo.core.engine import Conversion, Result
-from listo.core.fileutil import reveal
+from listo.core.fileutil import TRASH, reveal
 from listo.core.links import is_link
 from listo.core.log import get_logger
 from listo.core.paths import data_dir
@@ -115,6 +115,7 @@ from listo.ui.window.jobs import (
 )
 from listo.ui.window.sidebar import PLACES, Sidebar, in_place
 from listo.ui.window.tables import FileList, Row
+from listo.ui.window.trash import safe_to_trash, to_trash
 
 log = get_logger(__name__)
 
@@ -159,6 +160,7 @@ class Item:
     trim: tuple[float, float] | None = None
     transcript: object | None = None  # captions.Transcript once speech has been turned into text
     clock: str | None = None  # Continuous Timecode: its place on the tape (None = not given yet)
+    gone: bool = False  # converted, and its original moved to the Trash (Move Originals to the Trash)
 
     @property
     def length(self) -> float:
@@ -226,6 +228,7 @@ class MainWindow(QMainWindow):
         self._tx_failed: dict[int, str] = {}
         self._tx_retry = False
         self._convert_after_captions = False  # Convert was pressed while captions were still being made
+        self._convert_after_links = False  # Convert was pressed; its links download first (joining, captions)
         self._redo_edited: set[int] = (
             set()
         )  # hand-edited clips you said to redo with a new accuracy / language
@@ -1048,7 +1051,12 @@ class MainWindow(QMainWindow):
         edit_ = QLineEdit(clip if is_link(clip) else "")
         edit_.setPlaceholderText("Paste a video link — YouTube, Vimeo, Instagram…")
         lay.addWidget(edit_)
-        lay.addWidget(hint("Only download videos you have the rights to use. Saved to Downloads › Listo."))
+        lay.addWidget(
+            hint(
+                "It downloads when you press Convert, into Downloads › Listo. "
+                "Only download videos you have the rights to use."
+            )
+        )
         row = QHBoxLayout()
         row.addStretch(1)
         cancel = QPushButton("Cancel")
@@ -1098,13 +1106,25 @@ class MainWindow(QMainWindow):
             iid = self._new_card(url, "link", display=_short_url(url))
             it = self.items[iid]
             it.url = url
-            self._start_download(it)
+            if self.running:  # added while converting: it follows the rest
+                self._start_download(it)
+            else:
+                self._link_waits(it)
             added += 1
         if not added:
             self.toast("That link is already in the list.")
         self._refresh_footer()
 
+    def _link_waits(self, it: Item) -> None:
+        """A link in the list: nothing is downloaded until Convert, so the settings can still change."""
+        it.state, it.message = "linked", ""
+        it.card.set_state("linked")
+        it.card.set_progress(0)
+        it.card.set_meta("Downloads when you press Convert")
+        it.card.set_output("")
+
     def _start_download(self, it: Item) -> None:
+        log.info("downloading the link: %s", it.url)
         it.state = "downloading"
         it.card.set_state("downloading", "Starting…")
         it.card.set_progress(0)
@@ -1139,11 +1159,13 @@ class MainWindow(QMainWindow):
         it = self.items.get(iid)
         if not it:
             return
-        if error:
+        if error == "Canceled":  # Stop was pressed: the link waits for the next Convert
+            self._link_waits(it)
+        elif error:
             log.warning("download failed: %s — %s", it.url, error)
             it.state = "failed"
             it.message = error
-            it.card.set_state("failed", "Download Failed" if error != "Canceled" else "Canceled")
+            it.card.set_state("failed", "Download Failed")
             it.card.set_output(error)
         else:
             it.path = path
@@ -1157,6 +1179,17 @@ class MainWindow(QMainWindow):
         self._refresh_footer()
         if self.running:
             self._kick()
+        self._convert_if_in()
+
+    def _reading(self) -> bool:
+        """Some files aren't in yet: still being read, or a link still downloading."""
+        return any(it.state in ("probing", "downloading") for it in self.items.values())
+
+    def _convert_if_in(self) -> None:
+        """Convert was pressed and had to wait for links to download: start once every file is in."""
+        if self._convert_after_links and not self.running and not self._reading():
+            self._convert_after_links = False
+            self.start()
 
     # ------------------------------------------------------------------ trim
     def trim_item(self, iid: int) -> None:
@@ -1323,6 +1356,7 @@ class MainWindow(QMainWindow):
         self._refresh_soon(captions=True)
         if self.running:
             self._kick()
+        self._convert_if_in()
 
     # ------------------------------------------------------------------ captions
     def _wants_captions(self, it: Item) -> bool:
@@ -1511,7 +1545,7 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _previewable(it: Item) -> bool:
         """The preview can show it: a video's picture, a photo, an audio file's waveform (and sound)."""
-        if it.info is None or it.info.error:
+        if it.info is None or it.info.error or it.gone:
             return False
         if it.kind == "video":
             return it.info.video_index is not None
@@ -1842,6 +1876,7 @@ class MainWindow(QMainWindow):
         self._refresh_footer()
         if self.running:
             self._kick()
+        self._convert_if_in()
         if record:
             n = len(gone)
             names = Path(gone[0][1].path).name if n == 1 else f"{n} files"
@@ -1857,9 +1892,8 @@ class MainWindow(QMainWindow):
         for index, it in sorted(gone, key=lambda g: g[0]):
             if it.id in self.items:
                 continue
-            if it.state == "downloading":  # its download stopped when it went: try again from its row
-                it.state, it.message = "failed", "Canceled"
-                it.card.set_state("failed", "Canceled")
+            if it.state == "downloading":  # its download stopped when it went: it waits for Convert again
+                self._link_waits(it)
             elif it.state == "waiting" and not self.running:
                 it.state, it.base = "ready", None
                 it.card.set_state("ready")
@@ -1878,10 +1912,12 @@ class MainWindow(QMainWindow):
     def retry_item(self, iid: int) -> None:
         it = self.items.get(iid)
         if it and it.url and not it.info and iid not in self.downloads:
-            it.message = ""
-            self._start_download(it)  # the download itself failed: try it again
-            if self.running and iid not in self.batch:
-                self.batch.append(iid)
+            if self.running:  # the download itself failed: try it again
+                self._start_download(it)
+                if iid not in self.batch:
+                    self.batch.append(iid)
+            else:
+                self._link_waits(it)  # with the next Convert
             self._refresh_footer()
             return
         if not it or not it.info:
@@ -2090,7 +2126,11 @@ class MainWindow(QMainWindow):
         if not self.caps.ok and any(it.kind != "photo" for it in self.items.values()):
             self._missing_ffmpeg()
             return
-        todo = [iid for iid in self.order if self.items[iid].state in ("ready", "probing", "downloading")]
+        todo = [
+            iid
+            for iid in self.order
+            if self.items[iid].state in ("ready", "probing", "downloading", "linked")
+        ]
         if not todo:
             again = [
                 iid
@@ -2100,15 +2140,32 @@ class MainWindow(QMainWindow):
             if again:
                 self.toast("Everything here is finished. Use ↻ on a file to run it again, or add more.")
             return
+        links = [self.items[i] for i in todo if self.items[i].state == "linked"]
+        for it in links:  # Convert is what downloads a link
+            self._start_download(it)
+        # Joining needs every clip in before it starts, and captions are made before converting:
+        # the links download first, then Convert starts by itself.
+        whole = (
+            self.export_panel.joining() or self.settings.captions or transcript_only("video", self.settings)
+        )
+        if whole and self._reading():
+            self._convert_after_links = True
+            if links:
+                n = len(links)
+                self.toast(
+                    f"Downloading {'the link' if n == 1 else f'{n} links'} first. "
+                    "Listo converts as soon as everything is in."
+                )
+            else:
+                self.toast("Still reading some files. Listo converts as soon as every file is in.")
+            self._refresh_footer()
+            return
         self.join_job = None
         self._last_joined = 0
         self._tape_s = 0.0  # one Convert = one tape
         for iid in todo:
             self.items[iid].clock = None
         if self.export_panel.joining():
-            if any(it.state in ("probing", "downloading") for it in self.items.values()):
-                self.toast("Still reading some files. Press Convert again once every clip is in.", "problem")
-                return
             vids = [
                 self.items[i]
                 for i in self.order
@@ -2116,6 +2173,7 @@ class MainWindow(QMainWindow):
             ]
             if len(vids) >= 2:
                 s = self.settings.copy()
+                s.verify = s.verify or s.trash_originals  # an original only goes after the check
                 self.join_job = JoinJob(
                     ids=[it.id for it in vids], settings=s, conform=join.conform_for(vids[0].info, s),
                     folder=join.parts_folder(vids[0].path, s),
@@ -2132,6 +2190,7 @@ class MainWindow(QMainWindow):
         # Every file in the list counts as "taken": Replace can never overwrite another original.
         self.reserved = {naming.reserve_key(Path(it.path)) for it in self.items.values()}
         self.counter = 0
+        self._trashed = 0  # originals moved to the Trash by this Convert
         self.btn_show.hide()
         log.info(
             "convert pressed: %s%s", format_label("video", self.settings),
@@ -2144,6 +2203,8 @@ class MainWindow(QMainWindow):
         """Ready files (including ones added mid-batch) join, locking in the current settings."""
         for iid in self.order:
             it = self.items[iid]
+            if it.state == "linked":  # a link that came (back) while converting: Convert downloads it
+                self._start_download(it)
             if iid in self.batch:
                 if it.state == "waiting" and it.base is None:
                     it.base = self.settings.copy()
@@ -2190,6 +2251,7 @@ class MainWindow(QMainWindow):
         if it.base is None:
             it.base = self.settings.copy()
         s = self.eff(it)
+        s.verify = s.verify or s.trash_originals  # an original only goes after the check
         cues = None
         if (s.captions or transcript_only(it.kind, s)) and it.transcript is not None:
             cues = it.transcript.cues_for(s.caption_words, s.caption_lines)
@@ -2264,7 +2326,7 @@ class MainWindow(QMainWindow):
                 continue
             if it.clock is not None:
                 out[iid] = (it.trim[0] if it.trim else 0.0, it.clock)
-            elif it.state in ("ready", "waiting", "probing", "downloading"):
+            elif it.state in ("ready", "waiting", "probing", "downloading", "linked"):
                 pending.append(it)
         tcs = join.running_timecodes(
             [(it.info, it.length) for it in pending], self._tape_s if self.running else 0.0
@@ -2316,7 +2378,7 @@ class MainWindow(QMainWindow):
                 else:
                     it.state = "done"
                     card.set_state("done", "Listo ✓")
-                    card.set_output(f"→  {where}{r.output.name}")
+                    card.set_output(f"→  {where}{r.output.name}" + self._trash_original(it, r))
             else:
                 it.state = r.status
                 if r.status == "failed":
@@ -2384,8 +2446,11 @@ class MainWindow(QMainWindow):
                 where = r.output.parent.name + "/" if r.output.parent != Path(it.path).parent else ""
                 it.state = "warning" if r.warning else "done"
                 it.card.set_state(it.state, "" if r.warning else "Listo ✓")
+                whole = job.settings.trash_originals and not r.warning and not left_out
                 it.card.set_output(
-                    f"→  {where}{r.output.name}  (joined)" + (f"   ·   {r.warning}" if r.warning else "")
+                    f"→  {where}{r.output.name}  (joined)"
+                    + (f"   ·   {r.warning}" if r.warning else "")
+                    + (self._trash_original(it, r, joined=True) if whole else "")
                 )
             else:
                 it.state = "failed" if r.status == "failed" else r.status
@@ -2396,6 +2461,18 @@ class MainWindow(QMainWindow):
         if r.status == "failed":
             log.warning("join failed: %s", r.message)
         self._finish()
+
+    def _trash_original(self, it: Item, r: Result, joined: bool = False) -> str:
+        """Move Originals to the Trash: this file converted without a problem, so its original goes
+        (never for a transcript: the words aren't a copy of the clip). Returns what to add to its row."""
+        s = self._base(it)
+        if not s.trash_originals or (not joined and self._words_only(it)):
+            return ""
+        if not safe_to_trash(it.path, r.output) or not to_trash(it.path):
+            return f"   ·   Original couldn't go to the {TRASH}"
+        it.gone = True
+        self._trashed += 1
+        return f"   ·   Original in the {TRASH}"
 
     def _drop_join(self) -> None:
         """Stopped before the clips were put together: the parts go, and those clips are ready again."""
@@ -2447,12 +2524,15 @@ class MainWindow(QMainWindow):
         self.btn_pause.setToolTip("Resume" if paused else "Pause")
 
     def stop(self) -> None:
+        for th in self.downloads.values():
+            th.job.cancel()  # each link goes back to waiting for Convert (_dl_done)
         if not self.running:
-            if self._convert_after_captions:  # not converting yet: just don't start when captions are done
-                self._convert_after_captions = False
+            if self._convert_after_captions or self._convert_after_links:
+                # not converting yet: just don't start when the captions / links are in
+                self._convert_after_captions = self._convert_after_links = False
                 self._refresh_footer()
             return
-        self._convert_after_captions = False
+        self._convert_after_captions = self._convert_after_links = False
         log.info("stop pressed")
         self.running = False
         self.paused = False
@@ -2505,7 +2585,9 @@ class MainWindow(QMainWindow):
                 own[it.kind] += 1
         problems = counts["attention"] > 0
         self.sidebar.set_counts(counts, self.running, problems)
-        self.convert.set_kinds({k: counts[k] for k in own}, own)  # "9 Videos", "2 Photos" in Convert To
+        kinds = {k: counts[k] for k in own}
+        kinds["video"] += sum(1 for it in self.items.values() if it.kind == "link")  # a link brings a video
+        self.convert.set_kinds(kinds, own)  # "9 Videos", "2 Photos" in Convert To
         self.footer.setVisible(bool(self.items))
         if self.place != "all" or self.search.text().strip():
             want = [i for i in self.order if self._shown(self.items[i])]
@@ -2591,6 +2673,18 @@ class MainWindow(QMainWindow):
             self.btn_pause.hide()
             self.btn_cancel.show()
             return
+        if self._convert_after_links and not self.running:  # Convert was pressed; Stop calls it off
+            n = sum(1 for it in items if it.state == "downloading")
+            self.f_title.set_full_text(
+                f"Downloading {n} Link{'s' if n != 1 else ''}" if n else "Reading the Files"
+            )
+            self.f_sub.set_full_text("Converts as soon as everything is in.")
+            self.f_bar.hide()
+            self.btn_start.setEnabled(False)
+            self.btn_start.setText("Waiting…")
+            self.btn_pause.hide()
+            self.btn_cancel.show()
+            return
         job = self.join_job
         if self.running and job is not None and job.thread is not None:
             self.f_bar.show()
@@ -2627,7 +2721,7 @@ class MainWindow(QMainWindow):
         self.btn_pause.hide()
         self.btn_cancel.hide()
         self.f_bar.hide()
-        ready = [it for it in items if it.state in ("ready", "probing", "downloading")]
+        ready = [it for it in items if it.state in ("ready", "probing", "downloading", "linked")]
         self.btn_start.setEnabled(bool(ready))
         verb = "Convert && Join" if self.export_panel.joining() else "Convert"  # (&& shows one &)
         self.btn_start.setText(
@@ -2646,6 +2740,9 @@ class MainWindow(QMainWindow):
             ok = not f and not w
             self.f_title.set_full_text(("Listo · " if ok else "Finished · ") + " · ".join(parts))
             ready = "Your video is ready." if joined else "Your files are ready."
+            gone = getattr(self, "_trashed", 0)
+            if gone:
+                ready += f" The original{' is' if gone == 1 else 's are'} in the {TRASH}."
             self.f_sub.set_full_text(ready if ok else "Click ⓘ on a file for details.")
             return
         if n == 0:

@@ -33,7 +33,7 @@ PLACES = {  # key -> (name, icon, section)
     "done": ("Done", "check", "progress"),
     "attention": ("Need a Look", "alert", "progress"),
 }
-TODO = ("probing", "ready", "waiting", "converting", "paused", "downloading", "transcribing")
+TODO = ("probing", "ready", "waiting", "converting", "paused", "downloading", "linked", "transcribing")
 ATTENTION = ("failed", "warning", "unsupported", "canceled", "skipped")
 
 

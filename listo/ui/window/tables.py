@@ -53,6 +53,7 @@ STATES = {
     "warning": "Check This One",
     "transcribing": "Making Captions",
     "downloading": "Downloading",
+    "linked": "Ready",  # a link: it downloads when Convert is pressed
 }
 TONES = {  # the status word's color (tokens), by state
     "probing": "FAINT",
