@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from listo.core import join, naming
+from listo.core.fileutil import TRASH
 from listo.core.log import get_logger
 from listo.core.presets import Settings
 from listo.core.probe import MediaInfo
@@ -203,7 +204,7 @@ class ExportSettings(QWidget):
             ],
             self.s.collision,
         )
-        self.collision.setToolTip("Your original files are never touched, whatever you pick")
+        self.collision.setToolTip("Your original files are never overwritten, whatever you pick")
         self.collision.currentIndexChanged.connect(
             lambda _i: self._set("collision", self.collision.currentData())
         )
@@ -227,6 +228,14 @@ class ExportSettings(QWidget):
         self.k_verify.setChecked(self.s.verify)
         self.k_verify.toggled.connect(lambda v: self._set("verify", v))
         after.add(self.k_verify)
+        self.k_trash = ToggleRow(f"Move Originals to the {TRASH}")
+        self.k_trash.setToolTip(
+            f"Once a file has converted and passed its check, its original goes to the {TRASH}. "
+            "You can put it back from there. Originals of files with a problem stay where they are"
+        )
+        self.k_trash.setChecked(self.s.trash_originals)
+        self.k_trash.toggled.connect(lambda v: self._set("trash_originals", v))
+        after.add(self.k_trash)
         self.adv.add(after)
         lay.addWidget(self.adv)
         self._sync()
@@ -309,6 +318,7 @@ class ExportSettings(QWidget):
             self.collision,
             self.k_dates,
             self.k_verify,
+            self.k_trash,
         )
         for w in widgets:
             w.blockSignals(True)
@@ -323,6 +333,7 @@ class ExportSettings(QWidget):
             set_combo(self.collision, self.s.collision)
             self.k_dates.setChecked(self.s.keep_dates)
             self.k_verify.setChecked(self.s.verify)
+            self.k_trash.setChecked(self.s.trash_originals)
         finally:
             for w in widgets:
                 w.blockSignals(False)

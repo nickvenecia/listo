@@ -13,6 +13,8 @@ from listo.core.tools import popen_kwargs
 
 log = get_logger(__name__)
 
+TRASH = "Recycle Bin" if sys.platform == "win32" else "Trash"  # what this computer calls it
+
 
 def copy_dates(src: str | Path, dst: str | Path) -> None:
     try:

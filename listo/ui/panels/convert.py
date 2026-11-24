@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from listo.core.captions import LANGUAGES
 from listo.core.captions import MODELS as CAPTION_MODELS
+from listo.core.fileutil import TRASH
 from listo.core.presets import (
     ASPECT_CHOICES,
     AUDIO_FORMATS,
@@ -172,7 +173,9 @@ def summary(group: str, s: Settings, interlaced: bool = True) -> str:
             on.append(COLLISION_WORDS[s.collision])
         if not s.keep_dates:
             on.append("New File Dates")
-        if not s.verify:
+        if s.trash_originals:
+            on.append(f"Originals to the {TRASH}")
+        elif not s.verify:
             on.append("No Double-Check")
         if not s.hardware:
             on.append("No Hardware Encoding")

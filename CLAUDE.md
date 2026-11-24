@@ -93,6 +93,7 @@ listo/
     window/tables.py       FileList (QListView + RowPainter): one painted row per file; Row = it.card (set_state,
                    set_progress, set_output, set_format, set_trim, set_captions, set_name, set_meta, set_thumb)
     window/lift.py         drag a row's grip to reorder (FileList.reordered -> MainWindow._reordered)
+    window/trash.py        Move Originals to the Trash: to_trash (system Trash, never a delete), safe_to_trash
     window/history.py      undo / redo steps (settings, files taken off the list, order, a file's format and trim)
     window/jobs.py         threads (ConvertThread, probes/thumbnails in QThreadPool, link downloads, captions process);
                    PreviewTask (a video's exact frame; still_of: a photo, or an audio file's waveform, cached)
@@ -270,7 +271,17 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
 - Selection: `MainWindow.selected` (item ids) + `_anchor` for Shift-click (over the rows showing); FileList emits
   `pressed` / `step` (↑↓) / `menu_wanted` (right-click: MainWindow._list_menu, also on empty space).
 - List order is join order and Continuous Timecode order: dragging a row's grip reorders (not while converting).
-- Link items start in state "downloading" (kind "link"); when done they become a normal file item and get probed.
+- Link items (kind "link") wait in state "linked" (shown as Ready): nothing downloads until Convert
+  (MainWindow.start -> _start_download; state "downloading"), so the settings can still change. When done they
+  become a normal file item and get probed. Stop cancels the download and the link waits again (_link_waits).
+  Joining, captions or a transcript need every file in first: start() sets _convert_after_links and
+  _convert_if_in() presses Convert again once nothing is downloading or being read.
+- Move Originals to the Trash (Settings.trash_originals, off by default; Saves To › Advanced): after a file
+  finishes as "done" (never warning / failed / skipped, never a transcript), MainWindow._trash_original moves
+  its original to the system Trash (ui/window/trash.py: QFile.moveToTrash, a JVC clip's .MOI with it;
+  safe_to_trash checks the new file exists, isn't empty and isn't the original). Never delete outright; what
+  the Trash can't take stays. It forces the Double-Check on. Joined clips go after the join, only if every
+  clip made it in. Item.gone = no preview for that row.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
 

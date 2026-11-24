@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.0
+- **A link downloads when you press Convert, not before.** Add a link and it waits in the list as Ready, so you can set the format, the name and where it's saved first. Convert then downloads it and converts it in one go. Stop puts it back to waiting. Joining, or captions on? The links download first and converting starts by itself once they're in
+- **Move Originals to the Trash** (Convert To › Advanced Options › After Converting, off unless you turn it on): once a file has converted and passed its check, its original goes to the Trash (the Recycle Bin on Windows), so only the new file is left. Nothing is deleted for good: you can put it back from the Trash. A file that failed, was skipped or needs a look keeps its original, and so does a clip you only made a transcript of. Joined clips go once the joined video is finished. The row says "Original in the Trash"
+
 ## 3.2.1
 - **H.264 (.mp4) is the starting format for videos**, the one that plays everywhere (it was ProRes). ProRes and the rest are one click away in Format. If you've used Listo before it keeps the format you have now; **Reset to Defaults** switches it to H.264
 - **A download's percentage is never cut off.** A link's row used to show "Downloading 4…" at 40%: the words now get the whole status column, and when room runs short the time left goes first, so the percentage always shows. Point at the row to read everything

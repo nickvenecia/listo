@@ -10,7 +10,7 @@ a reply, and a fix in a release, as soon as possible.
 
 | What | How |
 | --- | --- |
-| Your files | Never overwritten: a converted file goes to a hidden temp file first and is moved into place only when it's done; a name that matches the original (case-insensitively too) gets a new one |
+| Your files | Never overwritten: a converted file goes to a hidden temp file first and is moved into place only when it's done; a name that matches the original (case-insensitively too) gets a new one. Originals are only moved, to the Trash, when *Move Originals to the Trash* is switched on, and only after the new file passed its check |
 | Your settings, recipes, checked captions | Saved only on your computer, in Listo's data folder; atomic writes; anything unreadable is set aside, never overwritten; Back Up… zips them |
 | What leaves your computer | Nothing, unless you use it: a pasted video link goes to the link downloader; feedback is kept on your computer until sending is switched on |
 | Links | `listo/core/web.py`: only plain http(s) links (no `file://`, `javascript:` or `name@host` tricks) reach the downloader, and always after `--`, so a link can never be read as an option |

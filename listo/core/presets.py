@@ -320,6 +320,8 @@ class Settings:
     # "off"; "cuts" = a glitch at each cut of a joined video; "rare" / "often" = random glitches too
     tape_glitches: str = "off"
     verify: bool = True
+    # once a file has converted and passed its check, its original goes to the Trash (never deleted outright)
+    trash_originals: bool = False
     parallel: bool = False
     transcript_layout: str = "text"  # the Transcript format's layout, see TRANSCRIPT_LAYOUTS
 

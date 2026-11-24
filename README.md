@@ -40,6 +40,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 **Audio**: WAV (24/16-bit), AIFF, FLAC, MP3 and AAC.
 
 **Built for footage:**
+- **Tidy up after, if you like**: turn on *Move Originals to the Trash* and each original goes to the Trash once its new file has passed its check (off by default; nothing is deleted for good).
 - **Your originals are never overwritten.** If a new file would land on top of the source (even `IMG_0001.MOV` → `IMG_0001.mov` on a Mac), it gets a number instead.
 - Interlaced footage is detected and deinterlaced, with a choice of smooth 59.94p or film-look 29.97p.
 - ProRes/DNxHR/Rewrap keep **every audio track** as uncompressed PCM at the source bit depth.
@@ -51,7 +52,7 @@ Reads MOV, MP4, MTS/M2TS, MXF, AVI, MKV, MOD/TOD, MPG, VOB, DV, WMV, FLV, 3GP, W
 - **Hardware encoding** (Apple VideoToolbox, NVIDIA NVENC) for H.264/HEVC when your computer has it.
 - Unfinished files are written to a hidden temp file, so a cancel or crash never leaves a half-written video behind.
 
-**Links:** paste a video link (YouTube, Vimeo, Instagram and [many more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)) and it downloads into the list — then pull the audio, make a GIF of a trimmed snippet, or convert it to anything else. Downloads go to *Downloads › Listo*. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), fetched on first use and kept up to date automatically. Only download videos you have the rights to use.
+**Links:** paste a video link (YouTube, Vimeo, Instagram and [many more](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)) and it joins the list. Set how you want it, press Convert, and it downloads and converts in one go — pull the audio, make a GIF of a trimmed snippet, or convert it to anything else. Downloads go to *Downloads › Listo*. Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp), fetched on first use and kept up to date automatically. Only download videos you have the rights to use.
 
 **Trim:** click ✂ on any video or audio file to keep just part of it (with frame previews). Burned-in and embedded timecode follow the cut.
 
