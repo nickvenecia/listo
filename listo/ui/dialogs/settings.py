@@ -12,7 +12,7 @@ How files convert is set in the window's right panel, not here.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QStackedWidget, QWidget
+from PySide6.QtWidgets import QDialog, QFrame, QLabel, QPushButton, QStackedWidget, QWidget
 
 from listo import __version__
 from listo.core import store
@@ -60,7 +60,11 @@ class SettingsDialog(QDialog):
         body.addWidget(side)
 
         self.stack = QStackedWidget()
-        body.addWidget(self.stack, 1)
+        work = QFrame()  # the sections' pages on the work area, beside the frame's column of sections
+        work.setObjectName("Work")
+        work.setProperty("flat", True)
+        vbox(work, 0, 0).addWidget(self.stack)
+        body.addWidget(work, 1)
         self.panes: dict[str, QWidget] = {}
         for key, label, _icon in PANES:
             page = QWidget()

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.4.0
+- **A new look, from the FeatureSoup family.** Listo now looks like it was made alongside FeatureSoup: cool graphite grays instead of warm charcoal, the sidebar and Convert To sitting flush with the window's edges, and your files on their own work area with softly curved top corners. Light and dark both
+- **One clear main button.** Convert and the round + are now white on the dark look and near-black on the light one, so the thing to press next always stands out. Buttons, dropdowns and fields are soft fills with no outlines
+- **Color only where it means something**: how far along a file is, a switch that's on, what's done, what needs a look. Picked files and menu rows light up in a calm gray instead of the accent
+- **Marigold is a touch brighter**, FeatureSoup's golden yellow. The separate Yellow accent is gone, since it now looked the same; if you had picked it, Listo uses Marigold
+- Titles are bolder and tighter, the toolbar is a little shorter, and the sidebar's rows have a bit more room
+
 ## 3.3.0
 - **A link downloads when you press Convert, not before.** Add a link and it waits in the list as Ready, so you can set the format, the name and where it's saved first. Convert then downloads it and converts it in one go. Stop puts it back to waiting. Joining, or captions on? The links download first and converting starts by itself once they're in
 - **Move Originals to the Trash** (Convert To › Advanced Options › After Converting, off unless you turn it on): once a file has converted and passed its check, its original goes to the Trash (the Recycle Bin on Windows), so only the new file is left. Nothing is deleted for good: you can put it back from the Trash. A file that failed, was skipped or needs a look keeps its original, and so does a clip you only made a transcript of. Joined clips go once the joined video is finished. The row says "Original in the Trash"

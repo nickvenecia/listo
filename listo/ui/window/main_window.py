@@ -364,7 +364,7 @@ class MainWindow(QMainWindow):
         right.addWidget(self.btn_sort)
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("CirclePrimary")
-        self.btn_add.setIcon(theme.icon("plus", theme.ON_ACCENT))
+        self.btn_add.setIcon(theme.icon("plus", theme.ON_PRIMARY))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add Files, a Folder or a Link (or just drop them in)")
         self.btn_add.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
@@ -417,7 +417,15 @@ class MainWindow(QMainWindow):
         self.nothing.setAlignment(Qt.AlignmentFlag.AlignCenter)
         for w in (self.empty, self.table, self.nothing):
             self.pages.addWidget(w)
-        lay.addWidget(self.pages, 1)
+        # the work area: the list and the bar under it, set into the frame (its own fill, its top corners curved)
+        work = QFrame()
+        work.setObjectName("Work")
+        self.work = work
+        work_lay = vbox(work, 0, 0)
+        inside = vbox(margins=(tokens.SPACE_2, tokens.SPACE_2, tokens.SPACE_2, 0))  # the rows clear the curve
+        inside.addWidget(self.pages)
+        work_lay.addLayout(inside, 1)
+        lay.addWidget(work, 1)
 
         footer = QFrame()
         footer.setObjectName("Totals")
@@ -467,7 +475,7 @@ class MainWindow(QMainWindow):
         for b in (self.btn_show, self.btn_pause, self.btn_cancel, self.btn_check, self.btn_start):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
-        lay.addWidget(footer)
+        work_lay.addWidget(footer)
         return center
 
     def _add_menu(self, owner: QWidget) -> QMenu:

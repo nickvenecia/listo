@@ -7,8 +7,14 @@ All numbers and colors live in **`listo/ui/style/tokens.py`**. The stylesheet (`
 every widget read from there. **Never type a size, spacing, font size, timing or color anywhere else.**
 If you need a value that doesn't exist, add a token, give it a comment, and add it to the tables below.
 
-The look is the Mac's: a flat backdrop, floating rounded glass panels, capsule buttons, round icon buttons,
-light and dark. Marigold is Listo's own accent; people can pick another in Settings › General.
+**Listo belongs to the FeatureSoup family** (featuresoup.com, its sister app for film productions): it should feel
+made by the same hands, without copying it screen for screen. The family's look: cool neutral graphite, light and
+dark; a **frame** (the sidebar, the toolbar, the right panel) in one flat material, flush with the window's edges,
+and the **work area** set into it (its own fill, its top corners curved, `WORK_R`); capsule buttons and round icon
+buttons that are fills with no outline; **one inverted primary button** (near-white on dark, near-black on light);
+hover and selection in neutral grays. **Color means something** (how far along, what's on, done, needs a look,
+failed) and never fills a button. Marigold (FeatureSoup's golden yellow) is Listo's own accent; people can pick
+another in Settings › General.
 
 ---
 
@@ -28,13 +34,16 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
 │   Need a Look1│ 9 videos · 2 photos · 1 audio file   [Convert 12 Files]│ Saves To  ╭ … ╮ │
 │ (NV) Your Name│ 0:42 of media                                       │ ╭ ▸ Advanced ╮     │
 └───────────────┴────────────────────────────────────────────────────┴───────────────────┘
-  left panel (glass)        the files (on the backdrop)                   right panel (glass)
+  left column (the frame)   the files (the work area, curved corners)     right column (the frame)
 ```
 
 **Where you are (left) → your files (middle) → what they become (right).**
 
-- **The backdrop** is one flat color (`WINDOW_TOP`), drawn once (`components/glass.GlassRoot`). The file list sits
-  directly on it. Panels float on glass, `GLASS_GAP` from the window's edges and from each other.
+- **The frame** is one flat color (`WINDOW_TOP`, the same as `GLASS`), drawn once (`components/glass.GlassRoot`).
+  The sidebar, the toolbar and the right panel sit on it, flush with the window's edges (`GLASS_GAP` is 0): no
+  edges, no shadows between them. **The work area** (`#Work`, `WORK`) holds the file list and the bar under it:
+  a step deeper than the frame in the dark look, the white page in the gray frame in the light one, its top
+  corners curved (`WORK_R`) where it meets the toolbar and the columns. The rows sit `SPACE_2` inside it.
 - **The left panel** (`window/sidebar.Sidebar`, a `components/panels.LeftPanel`, `SIDEBAR_W`): the wordmark on top
   (`TOOLBAR_H` tall, level with the toolbar), then two sections with small headings that fold when clicked:
   **Files** (All Files, Videos, Photos, Audio) and **Progress** (To Convert, Done, Need a Look), each row with its
@@ -101,9 +110,9 @@ light and dark. Marigold is Listo's own accent; people can pick another in Setti
 | `SECTION_ADD` | 20 | A sidebar section's + |
 | `TOGGLE_ROW_H` · `TOGGLE_W`×`TOGGLE_H` | 32 · 36×20 | An on/off row and its switch |
 | `BAR_H` · `TRACK_H` · `HANDLE` | 6 · 4 · 14 | Progress bars · slider groove · slider handle |
-| `NAV_H` · `NAV_GAP` | 30 · 2 | A sidebar row and the gap between rows |
+| `NAV_H` · `NAV_GAP` | 34 · 2 | A sidebar row (and a menu row) and the gap between rows |
 | `TABLE_ROW_H` · `THUMB_W`×`THUMB_H` · `GRIP_W` · `STATUS_W` | 76 · 96×54 · 20 · 200 | A file row, its thumbnail, grip and status column |
-| `SIDEBAR_W` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 232 · 420 / 360 · 64 | The window's parts |
+| `SIDEBAR_W` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 232 · 420 / 360 · 56 | The window's parts |
 | `ICON_SM` · `ICON` · `ICON_LG` | 14 · 16 · 20 | Icons in small buttons · buttons and menus · placeholders and start tiles |
 | `START_TILE_W` · `START_BADGE` | 184 · 40 | A start tile on the empty list (three fit beside the open panel) · its icon's circle |
 | `NOTES_H` · `NOTES_LINE` | 320 · 140% | What's new in the update window: as tall as its words up to this, then it scrolls · its line height |
@@ -135,15 +144,18 @@ Build layouts with `widgets.vbox(widget, margins, spacing)` / `hbox(...)`. Margi
 | `TEXT_XS` | 11 | Chips, menu headings |
 | `TEXT_SM` | 12 | Section labels (`MUTED`, semibold), secondary text, tooltips, status words |
 | `TEXT_MD` | 13 | Body text and every control (the default) |
-| `TEXT_LG` | 14 | Panel titles, alert titles, the bar's title |
+| `TEXT_LG` | 14 | Alert titles, the bar's title, start tiles' titles |
 | `TEXT_XL` | 18 | Dialog titles |
-| `TEXT_TITLE` | 24 | The page's large title in the toolbar and Settings |
+| `TEXT_TITLE` | 18 | The page's title in the toolbar and Settings, the right panel's (Convert To): bold, tight |
 | `TEXT_BRAND` | 21 | The "listo." wordmark only |
 
-Corners: `RADIUS_XS` 4 (checkbox), `RADIUS_SM` 6 (chips, thumbnails), `RADIUS` 8 (fields, dropdowns, segmented
-controls), `RADIUS_LG` 12 (cards, alerts), `GLASS_R` 18 (floating panels), `ROW_R` 9 (a row's highlight).
-**Every list of choices looks the same** (menus, dropdown lists, the sidebar, Settings' sections): rows `LIST_ROW_H`
-tall, inset `LIST_INSET` inside a list whose corners are `LIST_R`, so the corners run parallel. `app._RoundPopups`
+Titles are bold with tight letter spacing (`TRACK_TITLE`), like FeatureSoup's; everything else stays small and calm.
+
+Corners: `RADIUS_XS` 4 (checkbox), `RADIUS_SM` 7 (chips, thumbnails), `RADIUS` 10 (fields, dropdowns), `RADIUS_LG`
+13 (cards, start tiles, pictures), `RADIUS_XL` 20 (the alert), `WORK_R` 16 (the work area's top corners), `NAV_R`
+9 (a sidebar row), `ROW_R` 9 (a row's highlight). Buttons, the search and segmented controls are capsules.
+**Every list of choices looks the same** (menus, dropdown lists): rows `LIST_ROW_H` tall, inset `LIST_INSET` inside
+a list whose corners are `LIST_R`, so the corners run parallel. `app._RoundPopups`
 makes menus and dropdown lists see-through so those corners are what you see, opens a button's menu just below
 it (`MENU_GAP`), and stops the wheel from changing a dropdown or slider (it scrolls the panel instead) or
 giving it the keyboard (only a click or Tab does). The file list follows a trackpad swipe pixel for pixel
@@ -157,23 +169,30 @@ the computer, also while it's open, unless Settings › General › Appearance p
 
 | Token | Use |
 |---|---|
-| `WINDOW_TOP` / `GLASS` / `GLASS_STROKE` / `GLASS_EDGE` / `GLASS_SHADOW` | The backdrop and the floating panels |
-| `BG` / `PANEL` | Window background / dialogs |
-| `BLOCK` | A card inside a panel (a soft tint, no outline) |
-| `CARD` / `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Surfaces, hover, a picked row |
-| `FIELD` / `FIELD_BORDER` / `FILL` | Text fields and dropdowns / their outline / segmented controls, bar tracks, what's new |
-| `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons, popups, the lifted row |
+| `WINDOW_TOP` / `GLASS` / `BG` | The frame: the sidebar, the toolbar and the right panel, one flat color |
+| `WORK` | The work area set into the frame: the file list and the bar under it, Settings' pages |
+| `PANEL` | Dialogs |
+| `BLOCK` | A card inside the right panel or a dialog (a step off the frame, no outline) |
+| `CARD` / `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Surfaces; hover; a picked row and the current sidebar row (neutral, never the accent) |
+| `TILE` / `TILE_HOVER` | A start tile on the empty work area |
+| `FIELD` / `FIELD_HOVER` / `FIELD_BORDER` / `FOCUS` | Text fields and dropdowns: a fill, no outline (the border stays clear); the edge a field gets while it has the keyboard |
+| `SEG_TRACK` / `SEG_ON` | A segmented control's capsule track and its chosen part |
+| `FILL` | A soft fill on any surface: bar tracks, a row's format chip, what's new |
+| `RAISED` (+ `_HOVER`, `_PRESS`) | Buttons and round icon buttons, key caps, the switch's knob track |
+| `POPUP` / `POPUP_HOVER` / `POPUP_EDGE` | Menus, dropdown lists, tooltips, a lifted row; the row under the pointer; their faint edge (the alert's too: it's a `CARD`, so its buttons stand out) |
+| `PRIMARY` (+ `_HOVER`, `_PRESS`, `_OFF`, `_OFF_TEXT`) / `ON_PRIMARY` | The one primary button and the round +: inverted (near-white on dark, near-black on light), never the accent |
+| `SHADOW` | Under something lifted off the page (a dragged row) |
 | `WELL` | Sunken text: the log |
 | `SCREEN` / `SCREEN_TEXT` / `SCREEN_FAINT` | Behind pictures (players, previews, thumbnails): **black in both looks** |
 | `BORDER` / `BORDER_STRONG` / `BORDER_HOVER` / `BORDER_CHECK` | Hairlines, outlines, hover, an empty checkbox |
 | `TEXT` / `MUTED` / `FAINT` | Main text / secondary text / hints, counts, disabled |
-| `ACCENT` (+ `_HOVER`, `_PRESS`) | The accent: the primary button, selection, progress, focus, the wordmark's dot |
+| `ACCENT` (+ `_HOVER`, `_PRESS`) | The accent, as ink and progress only: progress bars, switches and checkboxes that are on, a slider's filled part, a count that's converting, the current caption line, links, the start tiles' icons, the wordmark's dot |
 | `ON_ACCENT` | Words and icons on the accent (dark on a light accent: never assume white) |
-| `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A disabled primary button |
-| `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (the current sidebar row, a changed format chip, the files tile lit while files are dragged in) |
-| `CHIP` | Key caps in Keyboard Shortcuts, the gap where a dragged row will land |
+| `ACCENT_OFF` / `ACCENT_OFF_TEXT` | A switch that's on but can't be changed |
+| `ACCENT_TINT` / `ACCENT_EDGE` | The accent's wash and outline (a file's own format chip, the files tile lit while files are dragged in, the current caption line) |
+| `CHIP` | The gap where a dragged row will land |
 | `GOOD` / `WARN` / `BAD` (+ `BAD_TINT`, `BAD_EDGE`, `ON_BAD`) | Done / needs a look / failed (a danger button's hover, words on the alert's red button) |
-| `TOAST` / `TOAST_TEXT` / `TOAST_EDGE` / `TOAST_SHADOW` | A toast: a lighter card in dark, a dark card on the white page in light, so it's never missed |
+| `TOAST` / `TOAST_TEXT` / `TOAST_EDGE` / `TOAST_SHADOW` | A toast: the menus' material in dark, a dark card on the white page in light, so it's never missed |
 | `TOAST_DONE` / `TOAST_PROBLEM` (+ `_FILL`, `_EDGE`) | Its icon when something worked; when it didn't (WARN's yellow, not amber, so it never reads as the accent) |
 
 - **The accent** comes from `tokens.use(scheme, accent)`: marigold (`APP_ACCENT`) is hand-set in both looks; the
@@ -181,7 +200,7 @@ the computer, also while it's open, unless Settings › General › Appearance p
   failed or delete). `tests/test_accent.py` checks every choice reads.
 - **Read colors when you draw**: `tokens.NAME` / `theme.NAME` in a stylesheet rule or a `paintEvent`. Never keep
   one from startup: the look and the accent can change while Listo is open.
-- **Icons** are line icons drawn as SVG in `theme._SVG` (24×24 grid, stroke 2, round caps): `theme.icon(name,
+- **Icons** are line icons drawn as SVG in `theme._SVG` (24×24 grid, stroke `ICON_STROKE` 1.85, round caps and joins, no fills): `theme.icon(name,
   theme.MUTED)` for buttons, `theme.menu_icon(name)` in menus. They redraw themselves in the current look and
   accent. A small icon that isn't a button is a `widgets.IconLabel(name, "MUTED")`. Never image files for UI icons.
   `tests/test_icons.py` checks every icon named in the code exists.
@@ -197,7 +216,7 @@ Use these; never build a control's look by hand.
 
 | Kind | How | When |
 |---|---|---|
-| Primary | `setObjectName("Primary")` | The one main action in a view (Convert 12 Files, Send, Delete in an alert) |
+| Primary | `setObjectName("Primary")` | The one main action in a view (Convert 12 Files, Send, Update Now): inverted, near-white on dark, near-black on light |
 | Normal | *(none)* | Everything else (Cancel, Show Files, Back Up…) |
 | Quiet | `Ghost` | Small helpers inside a card, "Update to …" |
 | Danger | `Danger` | Destructive actions in a form (Delete All in Storage & Cache): red words. Stop is a round icon in red |
@@ -225,7 +244,8 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 | `widgets.Toast`, through `MainWindow.toast(text, tone)` | A short message, centred over the list just above the bar under it (`TOAST_LIFT`): it rises and fades in (`TOAST_IN_MS`, `TOAST_RISE`), stays `TOAST_MS` (longer for long ones, `TOAST_MS_PER_CHAR`), fades away (`TOAST_OUT_MS`). Resting the pointer on it keeps it; it never takes a click (what's under it still works). `tone`: "done" (a green check: Backed up, Undid), "problem" (a yellow alert on a yellow-tinted card: it didn't work, and the words say what to do), or "" for news (an info sign: Still making captions…). Never a question |
 | `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
 | `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
-| `glass.GlassRoot` · `Dock` · `glass()` | The backdrop, the sliding right panel, marking a widget as glass |
+| `glass.GlassRoot` · `Dock` · `glass()` | The frame, the sliding right column, marking a widget as a column on the frame |
+| `QFrame` named `Work` | The work area: the file list and the bar under it; Settings' pages (`flat`: no curve) |
 | `empty.EmptyPage` · `StartTile` | The empty list: the ways to start, as tiles |
 
 **Picking a file or folder** (`widgets.PathCombo`), always the same three parts: the fixed choices first ("No LUT";
@@ -277,7 +297,7 @@ subfolder's name) shows under it only for that choice.
 The right panel slides over `DOCK_MS` (ease-out) and the list beside it slides as a picture, then the real one
 comes back. Dragged rows ease toward their places (`LIFT_EASE` per `LIFT_STEP_MS`). A toast rises `TOAST_RISE` as it
 fades in (`TOAST_IN_MS`, ease-out) and fades away (`TOAST_OUT_MS`). Small controls that come and go
-fade over `FADE_MS` (`widgets.fade`). Nothing bounces. The backdrop, the glass, icons and thumbnails are drawn once and reused.
+fade over `FADE_MS` (`widgets.fade`). Nothing bounces. The frame, its columns, icons and thumbnails are drawn once and reused.
 
 ## 9. Words
 
@@ -312,4 +332,4 @@ Listo talks like a helpful person, not like software.
 4. Labels are short and in Title Case; sentences are plain sentences.
 5. Screenshots look right in both looks and in a light accent:
    `QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES` (then `LISTO_LOOK=dark`,
-   then `LISTO_ACCENT=yellow`).
+   then `LISTO_ACCENT=green`).

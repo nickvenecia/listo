@@ -407,12 +407,10 @@ class RowPainter(QStyledItemDelegate):
         # third line: the format chip, a trim, then the new name
         x = pt.text.left()
         if not chip_r.isNull():
-            custom = row.fmt[1]
-            p.setPen(theme.qcolor(tokens.ACCENT_EDGE if custom else tokens.BORDER_STRONG))
-            p.setBrush(theme.qcolor(tokens.ACCENT_TINT) if custom else Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(
-                QRectF(chip_r).adjusted(0.5, 0.5, -0.5, -0.5), tokens.RADIUS_SM, tokens.RADIUS_SM
-            )
+            custom = row.fmt[1]  # a chip is a soft fill, no outline; a file's own format is tinted
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(theme.qcolor(tokens.ACCENT_TINT if custom else tokens.FILL))
+            p.drawRoundedRect(QRectF(chip_r), tokens.RADIUS_SM, tokens.RADIUS_SM)
             p.setFont(_font(tokens.TEXT_XS, tokens.WEIGHT_SEMIBOLD))
             p.setPen(theme.qcolor(tokens.ACCENT if custom else tokens.MUTED))
             p.drawText(chip_r, int(Qt.AlignmentFlag.AlignCenter), row.fmt[0] + ("  ▾" if row.fmt[2] else ""))

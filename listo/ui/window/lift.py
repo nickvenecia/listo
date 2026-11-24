@@ -122,7 +122,7 @@ class Lift(QObject):
         """The lifted file(s): a raised card with a soft shadow, following the pointer."""
         shown = self.ids[: tokens.LIFT_ROWS_SHOWN]
         card = QRectF(tokens.ROW_INSET, y, w - 2 * tokens.ROW_INSET, self.h * len(shown))
-        shadow = theme.qcolor(tokens.GLASS_SHADOW)
+        shadow = theme.qcolor(tokens.SHADOW)
         for i in range(tokens.LIFT_SHADOW_STEPS, 0, -1):  # a soft shadow: rings fading outwards
             c = QColor(shadow)
             c.setAlphaF(shadow.alphaF() * 0.5 / i)
@@ -134,8 +134,8 @@ class Lift(QObject):
             p.fillPath(ring, c)
         path = QPainterPath()
         path.addRoundedRect(card, tokens.ROW_R, tokens.ROW_R)
-        p.fillPath(path, theme.qcolor(tokens.RAISED))
-        p.setPen(theme.qcolor(tokens.ACCENT_EDGE))
+        p.fillPath(path, theme.qcolor(tokens.POPUP))
+        p.setPen(theme.qcolor(tokens.POPUP_EDGE))
         p.drawPath(path)
         p.save()
         p.setClipPath(path)

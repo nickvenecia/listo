@@ -39,11 +39,13 @@ SWATCH = 22  # a color circle in Settings › Accent Color
 SWATCH_RING = 2  # the ring around the chosen one (and the gap inside it)
 
 # ---------------------------------------------------------------- corner radius
+# The FeatureSoup family's corners: capsules for controls, softly rounded cards and lists, one curve on the work area.
 RADIUS_XS = 4  # checkbox box
-RADIUS_SM = 6  # chips, small buttons
-RADIUS = 8  # fields, dropdowns, segmented controls
-RADIUS_LG = 12  # cards, alerts, popups
-GLASS_R = 18  # a floating glass panel's corners
+RADIUS_SM = 7  # chips, thumbnails, small buttons
+RADIUS = 10  # fields, dropdowns
+RADIUS_LG = 13  # cards, alerts, pictures
+RADIUS_XL = 20  # a window drawn by Listo (the alert)
+WORK_R = 16  # the work area's top corners, where it meets the columns beside and above it
 ROW_R = 9  # a table row's rounded highlight
 
 # ---------------------------------------------------------------- type scale (px)
@@ -52,7 +54,7 @@ TEXT_SM = 12  # secondary text, section labels, tooltips
 TEXT_MD = 13  # body text and every control (the default)
 TEXT_LG = 14  # emphasis: names in lists, alert titles
 TEXT_XL = 18  # dialog titles, empty-state headline
-TEXT_TITLE = 24  # the page's large title in the toolbar (All Files, Videos)
+TEXT_TITLE = 18  # the page's title in the toolbar (All Files, Videos) and a panel's (Convert To)
 TEXT_BRAND = 21  # the "listo." wordmark only
 TEXT_TITLEBAR = 15  # the wordmark in the Mac title bar
 
@@ -63,35 +65,34 @@ WEIGHT_BOLD = 700  # wordmark, page and dialog titles
 
 TRACK_BRAND = -0.5  # letter spacing (px): the wordmark
 TRACK_TITLEBAR = -0.3
-TRACK_TITLE = -0.4  # page titles
-ICON_STROKE = 2.0  # the icon set's line width
+TRACK_TITLE = -0.45  # page titles
+ICON_STROKE = 1.85  # the icon set's line width
 
 # ---------------------------------------------------------------- layout
 WINDOW_SIZE = (1600, 1000)
 WINDOW_MIN = (1280, 700)  # the toolbar, the list and the right panel all fit
-GLASS_GAP = 10  # between the window's edge and its floating panels, and between panels
-GLASS_SHADOW_STEPS = 16  # layers of a panel's shadow (soft, like the Mac's)
-GLASS_SHADOW_SPREAD = 24  # how far it reaches: wide and faint, never a dark smudge
-GLASS_SHADOW_DROP = 3  # how far below the panel it sits: barely
-GLASS_EDGE_FADE = 60  # the hairline is brightest along the top, settling over this many px
+GLASS_GAP = 0  # the columns (sidebar, right panel) sit flush with the window's edges and the work area
+SHADOW_STEPS = 16  # layers of a lifted thing's shadow (a toast, a dragged row): soft
+SHADOW_SPREAD = 24  # how far it reaches: wide and faint, never a dark smudge
+SHADOW_DROP = 3  # how far below it sits: barely
 SIDEBAR_W = 232  # the left panel: your files by kind
 INSPECTOR_W = 420  # the right panel: Convert To
 INSPECTOR_MIN = 360  # …on a smaller window
 INSPECTOR_SHARE = 0.27  # of the window's width, between those two
-TOOLBAR_H = 64  # the bar above the list: title, search, +
+TOOLBAR_H = 56  # the bar above the list: title, search, +
 TITLEBAR_H = 32  # Listo's own Mac title bar (fitted to the real one once the window shows)
 SEARCH_W = 440  # the search capsule asks for this much room…
 SEARCH_MIN = 160  # …and gives way down to this
-NAV_H = 30  # one row in the sidebar
+NAV_H = 34  # one row in the sidebar
 NAV_GAP = 2  # between rows in the sidebar
-NAV_INSET = SCROLL_GUTTER  # a sidebar row's gap from the glass edge (the scroll bar's room on the right)
-NAV_R = GLASS_R - NAV_INSET  # its corners: concentric with the glass (the curves run parallel)
+NAV_INSET = SCROLL_GUTTER  # a sidebar row's gap from the column's edges (the scroll bar's room on the right)
+NAV_R = 9  # its corners
 MENU_GAP = 6  # between a button and the menu it opens
-# ---- every list of choices looks like the sidebar and Settings: menus, dropdown lists, pickers.
+# ---- every list of choices looks the same: menus, dropdown lists, pickers.
 # Rows sit LIST_INSET inside a list whose corners are LIST_R, so their corners (LIST_ROW_R) run parallel to it.
-LIST_R = GLASS_R
-LIST_INSET = NAV_INSET
-LIST_ROW_R = NAV_R
+LIST_R = 13
+LIST_INSET = 5
+LIST_ROW_R = LIST_R - LIST_INSET
 LIST_ROW_H = NAV_H
 LIST_GAP = NAV_GAP
 AVATAR = 32  # the initials at the bottom of the sidebar
@@ -149,81 +150,111 @@ UPDATE_WAIT_MS = 1500  # a found update waits this long between looks while anot
 # ---------------------------------------------------------------- colors: a dark and a light set
 # Listo follows the system (or Settings › General › Appearance). Read colors as tokens.X when drawing,
 # never copy them into a constant at import: use() swaps them.
+# The look is FeatureSoup's (Listo's sister app): cool neutral graphite, the frame (sidebar, toolbar, right panel)
+# on one material, the work area set apart by its fill and its curve, no outlines on controls, and one inverted
+# primary button. Color means something (progress, done, failed, on) and never fills a button.
 DARK = {
-    "BG": "#1E1E1E",  # window background: the Mac's dark charcoal, not black
-    "PANEL": "#1E1E1E",  # dialogs
-    "CARD": "#1F1E20",  # cards, fields
-    "CARD_HOVER": "#262527",
-    "CARD_SELECTED": "#392E20",  # a selected row (a hint of the accent)
-    "RAISED": "#2B2A2C",  # buttons, popups
-    "RAISED_HOVER": "#343335",
-    "RAISED_PRESS": "#272628",
-    "BORDER": "#2D2C2E",
-    "BORDER_STRONG": "#3B3A3D",
-    "BORDER_HOVER": "#4D4B4F",
-    "BORDER_CHECK": "#5C5A5F",  # unchecked checkbox outline
-    "TEXT": "#F4F2F1",
-    "MUTED": "#A8A5A6",  # secondary text
-    "FAINT": "#737072",  # hints, disabled, section labels
-    "WELL": "#0C0B0C",  # sunken areas with words: Saves As, logs
-    "SCREEN": "#0C0B0C",  # behind pictures (players, previews, thumbnails): black in both looks, like a monitor
-    "SCREEN_TEXT": "#A8A5A6",  # words on SCREEN ("Making a preview…")
-    "SCREEN_FAINT": "#737072",  # placeholder icons on SCREEN
-    "ACCENT": "#F5A524",  # cempasúchil marigold — selection, the one primary action, progress, focus
-    "ACCENT_HOVER": "#FFB743",
-    "ACCENT_PRESS": "#DB8F12",
+    "BG": "#151518",  # the frame: sidebar, toolbar, right panel (FeatureSoup's "chrome")
+    "PANEL": "#151518",  # dialogs
+    "WORK": "#0D0D10",  # the work area under the toolbar: the list sits here, a step deeper than the frame
+    "CARD": "#1C1C20",  # cards
+    "TILE": "#1C1C20",  # a start tile on the work area
+    "TILE_HOVER": "#26262B",
+    "CARD_HOVER": "#303035",
+    "CARD_SELECTED": "#393940",  # a picked row, the current sidebar row: one neutral language, no accent
+    "RAISED": "#29292E",  # buttons and round icon buttons
+    "RAISED_HOVER": "#303035",
+    "RAISED_PRESS": "#25252A",
+    "POPUP": "#2C2C31",  # menus, dropdown lists, tooltips, the alert
+    "POPUP_HOVER": "#404047",  # the row under the pointer in a menu
+    "POPUP_EDGE": "rgba(255, 255, 255, 0.06)",
+    "BORDER": "#232328",  # the few hairlines left: the bar under the list
+    "BORDER_STRONG": "#39393F",  # menu separators, a switch that's off
+    "BORDER_HOVER": "#4A4A52",
+    "BORDER_CHECK": "#777781",  # unchecked checkbox outline
+    "FOCUS": "#B0B0B8",  # a field with the keyboard: a neutral edge, no glow
+    "TEXT": "#F0F0F3",
+    "MUTED": "#9696A1",  # secondary text
+    "FAINT": "#6E6E79",  # hints, disabled, counts
+    "WELL": "#0D0D10",  # sunken areas with words: logs
+    "SCREEN": "#0B0B0D",  # behind pictures (players, previews, thumbnails): black in both looks, like a monitor
+    "SCREEN_TEXT": "#9696A1",  # words on SCREEN ("Making a preview…")
+    "SCREEN_FAINT": "#6E6E79",  # placeholder icons on SCREEN
+    "PRIMARY": "#E4E5E9",  # the one primary button (Convert, +): inverted, never the accent
+    "PRIMARY_HOVER": "#D6D7DB",
+    "PRIMARY_PRESS": "#C8C9CE",
+    "ON_PRIMARY": "#1A1B20",
+    "PRIMARY_OFF": "#29292E",  # a primary button that can't be pressed yet
+    "PRIMARY_OFF_TEXT": "#5E5E68",
+    "ACCENT": "#FFB81C",  # marigold, FeatureSoup's golden yellow: progress, on, the chosen one, the wordmark's dot
+    "ACCENT_HOVER": "#FFC748",
+    "ACCENT_PRESS": "#E6A20A",
     "ON_ACCENT": "#1B1206",  # words and icons on marigold (white wouldn't read)
-    "ACCENT_OFF": "#463621",  # disabled primary button
-    "ACCENT_OFF_TEXT": "#7F5B22",
-    "ACCENT_TINT": "rgba(245, 165, 36, 0.15)",  # a marigold wash
-    "ACCENT_EDGE": "rgba(255, 183, 67, 0.55)",
+    "ACCENT_OFF": "#4A3A18",  # a switch that's on but can't be changed
+    "ACCENT_OFF_TEXT": "#80652A",
+    "ACCENT_TINT": "rgba(255, 184, 28, 0.15)",  # a marigold wash
+    "ACCENT_EDGE": "rgba(255, 199, 72, 0.55)",
     "GOOD": "#4CC38A",
     "BAD": "#F0616D",  # failed, remove
     "ON_BAD": "#FFFFFF",  # words on a red fill (the alert's Delete)
-    "BAD_TINT": "#2A1A1D",  # danger button hover
+    "BAD_TINT": "#2E1C20",  # danger button hover
     "BAD_EDGE": "#5A2A30",  # a failed outline
     "WARN": "#DCCF45",  # needs a look: shifted toward yellow, away from the marigold accent
     "ROW_HOVER": "rgba(255, 255, 255, 0.05)",  # a list row under the mouse
-    "WINDOW_TOP": "#1E1E1E",  # the window's backdrop: one flat color, no gradient
-    "WINDOW_BOTTOM": "#1E1E1E",
-    "GLASS": "rgba(48, 47, 50, 0.92)",  # a floating panel: one even tone, lighter than the page
-    "GLASS_STROKE": "rgba(255, 255, 255, 0.10)",  # its one hairline: faintly lighter than the panel
-    "GLASS_EDGE": "rgba(255, 255, 255, 0.18)",  # …a little brighter along the top, where light catches it
-    "GLASS_SHADOW": "rgba(0, 0, 0, 0.35)",  # soft and wide
-    "TOAST": "#3A393C",  # a toast: a step lighter than the panels, so it stands out over anything
-    "TOAST_TEXT": "#F4F2F1",
-    "TOAST_EDGE": "rgba(255, 255, 255, 0.12)",
-    "TOAST_SHADOW": "rgba(0, 0, 0, 0.60)",  # …lifted by a deeper shadow than the panels'
+    "WINDOW_TOP": "#151518",  # the window's backdrop: the frame's one flat color
+    "WINDOW_BOTTOM": "#151518",
+    "GLASS": "#151518",  # the columns (sidebar, right panel): the frame's material, flush, no edge or shadow
+    "SHADOW": "rgba(0, 0, 0, 0.45)",  # under something lifted off the page (a dragged row)
+    "TOAST": "#2C2C31",  # a toast: the menus' material, lifted by a deep shadow
+    "TOAST_TEXT": "#F0F0F3",
+    "TOAST_EDGE": "rgba(255, 255, 255, 0.08)",
+    "TOAST_SHADOW": "rgba(0, 0, 0, 0.60)",
     "TOAST_DONE": "#4CC38A",  # its icon: it worked
-    "TOAST_PROBLEM": "#DCCF45",  # …it didn't (WARN's yellow: amber would read as the marigold accent)
+    "TOAST_PROBLEM": "#DCCF45",  # …it didn't (WARN's yellow)
     "TOAST_PROBLEM_FILL": "#47452A",  # a problem's toast is tinted yellow, so it's never missed
     "TOAST_PROBLEM_EDGE": "rgba(220, 207, 69, 0.45)",
-    "CHIP": "rgba(245, 165, 36, 0.16)",  # a tinted capsule (+ Add)
-    "FIELD": "rgba(255, 255, 255, 0.07)",  # a text field or dropdown: lightly frosted
-    "FIELD_BORDER": "rgba(255, 255, 255, 0.08)",
-    "BLOCK": "rgba(255, 255, 255, 0.045)",  # a card inside a glass panel: a soft tint, no outline
-    "FILL": "rgba(255, 255, 255, 0.045)",  # a soft fill on the page: a switch's track, a placeholder
+    "CHIP": "rgba(255, 184, 28, 0.16)",  # a tinted capsule: key caps, where a dragged row lands
+    "FIELD": "#29292E",  # a text field or dropdown: a fill, no outline
+    "FIELD_HOVER": "#303035",
+    "FIELD_BORDER": "rgba(0, 0, 0, 0)",  # (kept clear: the edge is only there so focus can show)
+    "SEG_TRACK": "#29292D",  # a segmented control's track…
+    "SEG_ON": "#434349",  # …and its chosen part
+    "BLOCK": "#1C1C20",  # a card in the right panel: a step lighter than the frame, no outline
+    "FILL": "rgba(255, 255, 255, 0.07)",  # a soft fill on any surface: bar tracks, a placeholder
 }
 LIGHT = {
-    "BG": "#FFFFFF",
-    "PANEL": "#FFFFFF",
+    "BG": "#F6F7F9",
+    "PANEL": "#F7F8FA",
+    "WORK": "#FFFFFF",  # the light look's work area is the white page in the gray frame
     "CARD": "#FFFFFF",
-    "CARD_HOVER": "#F2F2F4",
-    "CARD_SELECTED": "#F6EFE6",
-    "RAISED": "#FFFFFF",
-    "RAISED_HOVER": "#F5F5F7",
-    "RAISED_PRESS": "#E8E8EC",
-    "BORDER": "#E5E5EA",
-    "BORDER_STRONG": "#D8D8DD",
-    "BORDER_HOVER": "#B8B8BF",
-    "BORDER_CHECK": "#A2A2AA",
-    "TEXT": "#1D1D1F",
-    "MUTED": "#6E6E73",
-    "FAINT": "#A1A1A6",
-    "WELL": "#EDEDF0",
-    "SCREEN": "#0C0B0C",
-    "SCREEN_TEXT": "#A8A5A6",
-    "SCREEN_FAINT": "#737072",
+    "TILE": "#F1F3F6",
+    "TILE_HOVER": "#E9ECF0",
+    "CARD_HOVER": "#E9ECF0",
+    "CARD_SELECTED": "#DFE7F1",
+    "RAISED": "#EBEDF1",
+    "RAISED_HOVER": "#E2E5EA",
+    "RAISED_PRESS": "#D9DDE3",
+    "POPUP": "#FFFFFF",
+    "POPUP_HOVER": "#EDF0F4",
+    "POPUP_EDGE": "rgba(0, 0, 0, 0.10)",
+    "BORDER": "#E6E8EC",
+    "BORDER_STRONG": "#D6DAE0",
+    "BORDER_HOVER": "#BCC1C8",
+    "BORDER_CHECK": "#9AA1AB",
+    "FOCUS": "#5F6772",
+    "TEXT": "#20242A",
+    "MUTED": "#646D78",
+    "FAINT": "#9AA1AA",
+    "WELL": "#EDEFF3",
+    "SCREEN": "#0B0B0D",
+    "SCREEN_TEXT": "#9696A1",
+    "SCREEN_FAINT": "#6E6E79",
+    "PRIMARY": "#292C34",
+    "PRIMARY_HOVER": "#3A3E47",
+    "PRIMARY_PRESS": "#1C1E24",
+    "ON_PRIMARY": "#FEFEFF",
+    "PRIMARY_OFF": "#E3E6EA",
+    "PRIMARY_OFF_TEXT": "#A3A9B1",
     "ACCENT": "#A86300",  # a step deeper, so white words on it and marigold words on white both read
     "ACCENT_HOVER": "#B17319",
     "ACCENT_PRESS": "#8F5400",
@@ -234,19 +265,17 @@ LIGHT = {
     "ACCENT_EDGE": "rgba(168, 99, 0, 0.45)",
     "GOOD": "#1E9A5E",
     "BAD": "#D3374A",
-    "ON_BAD": "#FFFFFF",  # words on a red fill (the alert's Delete)
+    "ON_BAD": "#FFFFFF",
     "BAD_TINT": "#FBEAEC",
     "BAD_EDGE": "#EFB7BF",
     "WARN": "#7F7500",
-    "ROW_HOVER": "rgba(0, 0, 0, 0.04)",
-    "WINDOW_TOP": "#FFFFFF",
-    "WINDOW_BOTTOM": "#FFFFFF",
-    "GLASS": "rgba(242, 242, 245, 0.94)",
-    "GLASS_STROKE": "rgba(0, 0, 0, 0.06)",  # a very faint gray hairline
-    "GLASS_EDGE": "rgba(0, 0, 0, 0.04)",  # (fainter still along the top)
-    "GLASS_SHADOW": "rgba(0, 0, 0, 0.08)",  # soft and wide
-    "TOAST": "#2C2C2E",  # dark on the white page: easy to spot
-    "TOAST_TEXT": "#FFFFFF",
+    "ROW_HOVER": "rgba(0, 0, 0, 0.035)",
+    "WINDOW_TOP": "#F6F7F9",
+    "WINDOW_BOTTOM": "#F6F7F9",
+    "GLASS": "#F6F7F9",
+    "SHADOW": "rgba(0, 0, 0, 0.10)",
+    "TOAST": "#292C34",  # dark on the white page: easy to spot
+    "TOAST_TEXT": "#FEFEFF",
     "TOAST_EDGE": "rgba(255, 255, 255, 0.10)",
     "TOAST_SHADOW": "rgba(0, 0, 0, 0.30)",
     "TOAST_DONE": "#4CC38A",  # (the dark look's: these sit on the dark toast)
@@ -254,10 +283,13 @@ LIGHT = {
     "TOAST_PROBLEM_FILL": "#47452A",
     "TOAST_PROBLEM_EDGE": "rgba(220, 207, 69, 0.45)",
     "CHIP": "rgba(168, 99, 0, 0.1)",
-    "FIELD": "rgba(255, 255, 255, 1.0)",
-    "FIELD_BORDER": "rgba(0, 0, 0, 0.10)",
-    "BLOCK": "rgba(255, 255, 255, 0.85)",  # white cards on the gray glass
-    "FILL": "rgba(0, 0, 0, 0.045)",  # light gray on white
+    "FIELD": "#ECEEF2",
+    "FIELD_HOVER": "#E4E7EC",
+    "FIELD_BORDER": "rgba(0, 0, 0, 0)",
+    "SEG_TRACK": "#E6E9EE",
+    "SEG_ON": "#D5DAE2",
+    "BLOCK": "#FFFFFF",  # white cards on the gray frame
+    "FILL": "rgba(0, 0, 0, 0.05)",
 }
 COLORS = tuple(DARK)
 
@@ -266,17 +298,16 @@ COLORS = tuple(DARK)
 # Never red: red means failed or remove.
 APP_ACCENT = "marigold"
 ACCENTS = {  # key -> (name, on dark, on light)
-    "marigold": ("Marigold", "#F5A524", "#A86300"),
+    "marigold": ("Marigold", "#FFB81C", "#A86300"),  # FeatureSoup's golden yellow on dark
     "blue": ("Blue", "#4A90F7", "#2F6FDB"),
     "purple": ("Purple", "#8069F7", "#6A52E8"),
     "pink": ("Pink", "#F25FA6", "#C9387F"),
     "orange": ("Orange", "#F5893A", "#C2600E"),
-    "yellow": ("Yellow", "#EDBA3A", "#9C7104"),
     "green": ("Green", "#3DBE6E", "#1B8747"),
     "turquoise": ("Turquoise", "#2EBFB0", "#0D8178"),
     "graphite": ("Graphite", "#9B999F", "#68666D"),
 }
-DARK_ON_ACCENT = "#141314"  # words on a light accent (yellow, green…), where white wouldn't read
+DARK_ON_ACCENT = "#141314"  # words on a light accent (green, turquoise…), where white wouldn't read
 
 
 def _rgb(c: str) -> tuple[int, int, int]:

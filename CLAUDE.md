@@ -68,7 +68,9 @@ listo/
     feedback.py    Send Feedback: an outbox in data_dir()/feedback until a sender or ADDRESS is set up
   ui/
     style/tokens.py  THE design tokens (sizes, spacing, type, radii, timing, colors). DARK and LIGHT color dicts
-                   (same names); APP_ACCENT "marigold" hand-set in both; ACCENTS + accent_set() build the others;
+                   (same names), in the FeatureSoup family's look (cool graphite, the frame + the work area, an
+                   inverted PRIMARY button, the accent only as ink and progress); APP_ACCENT "marigold" (FeatureSoup's
+                   golden yellow) hand-set in both; ACCENTS + accent_set() build the others;
                    use(scheme, accent) points every color name at the look in use
     style/theme.py   _sheet() (the stylesheet), apply(app, appearance, folder, accent), load_fonts() (Inter + IBM
                    Plex Mono), font(), wordmark(), plain_tip(), qcolor(); SVG icons: icon(name, theme.MUTED) /
@@ -78,7 +80,8 @@ listo/
                    "done" / "problem" / "" for news; floats over the list above the bar), TextBox, IconLabel,
                    circle_button / icon_button, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
     components/panels.py   LeftPanel + NavRow (the sidebar, Settings' sections), SidePanel (the right panel)
-    components/glass.py    GlassRoot (backdrop + glass behind floating panels), Dock (the right panel sliding in/out)
+    components/glass.py    GlassRoot (the frame: one flat color, the columns flush on it), Dock (the right column
+                   sliding in/out), paint_shadow (things lifted off the page: toasts)
     components/empty.py    EmptyPage + StartTile: the empty list's start tiles (Add Files… / a Folder… / a Link…);
                    set_hot() lights the files tile while files are dragged over the window
     components/titlebar.py Mac only: Listo's own title bar (ExpandedClientAreaHint; macOS moves the window;
@@ -141,7 +144,8 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   the stylesheet again, then every window's look_changed(). "system" follows colorSchemeChanged live
   (LISTO_LOOK=light|dark overrides). Never capture a color at startup: read tokens.NAME / theme.NAME when drawing;
   icons take a color value (theme.icon("plus", theme.MUTED)) and redraw themselves; pictures sit on SCREEN (black in
-  both); words on the accent use ON_ACCENT (dark on light accents). tests/test_theme.py and test_accent.py check it.
+  both); words on the accent use ON_ACCENT (dark on light accents). The primary button and the round + are
+  PRIMARY / ON_PRIMARY (inverted), never the accent; hover and selection are neutral (CARD_SELECTED, POPUP_HOVER). tests/test_theme.py and test_accent.py check it.
 - Everything Listo saves lives in settings.json in data_dir() (core/store.Prefs, written atomically on every change):
   "settings", "recipes", "recent_luts", "recent_folders", "group_open/*", "sidebar_folded",
   "geometry" (hex), "last_dir", "updates/*", "appearance", "accent", "auto_update". Older versions kept these in

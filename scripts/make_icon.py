@@ -21,7 +21,7 @@ from listo.ui.style.tokens import ACCENT, TEXT  # noqa: E402
 SIZE = 1024
 TILE = 824  # Apple's icon grid: an 824 px rounded square centred on 1024 (room for the shadow)
 RADIUS = 185
-TILE_TOP = "#1E1E22"  # a soft top-to-bottom shade of the app background (BG #111113)
+TILE_TOP = "#1E1E22"  # a soft top-to-bottom shade of the app's frame (BG #151518)
 TILE_BOTTOM = "#121214"
 FONT = ROOT / "listo" / "assets" / "fonts" / "InterDisplay-Bold.otf"
 

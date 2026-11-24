@@ -136,7 +136,7 @@ packaging/     Installer files per OS
   and fails on any words cut off (`tests/cut_off.py` finds them); a new screen or dialog gets a line there.
 - UI changes: check screenshots in both looks and a light accent
   (`QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES`, then `dark`, then
-  `LISTO_ACCENT=yellow`).
+  `LISTO_ACCENT=green`).
 - Before a release, the packaged app must pass `--smoke-test` (CI does this on every platform).
 
 ---
