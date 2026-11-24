@@ -10,7 +10,8 @@ If you need a value that doesn't exist, add a token, give it a comment, and add 
 **Listo belongs to the FeatureSoup family** (featuresoup.com, its sister app for film productions): it should feel
 made by the same hands, without copying it screen for screen. The family's look: cool neutral graphite, light and
 dark; a **frame** (the sidebar, the toolbar, the right panel) in one flat material, flush with the window's edges,
-and the **work area** set into it (its own fill, its top corners curved, `WORK_R`); capsule buttons and round icon
+and the **work area** set into it as a canvas (its own fill, its top corners curved, `WORK_R`) with the content on
+**cards**; capsule buttons and round icon
 buttons that are fills with no outline; **one inverted primary button** (near-white on dark, near-black on light);
 hover and selection in neutral grays. **Color means something** (how far along, what's on, done, needs a look,
 failed) and never fills a button. Marigold (FeatureSoup's golden yellow) is Listo's own accent; people can pick
@@ -42,8 +43,11 @@ another in Settings › General.
 - **The frame** is one flat color (`WINDOW_TOP`, the same as `GLASS`), drawn once (`components/glass.GlassRoot`).
   The sidebar, the toolbar and the right panel sit on it, flush with the window's edges (`GLASS_GAP` is 0): no
   edges, no shadows between them. **The work area** (`#Work`, `WORK`) holds the file list and the bar under it:
-  a step deeper than the frame in the dark look, the white page in the gray frame in the light one, its top
-  corners curved (`WORK_R`) where it meets the toolbar and the columns. The rows sit `SPACE_2` inside it.
+  a canvas a step deeper than the frame (near-black in the dark look, soft gray in the light one), its top
+  corners curved (`WORK_R`) where it meets the toolbar and the columns. **The list is one card** on it,
+  `SPACE_3` in from its edges: the rows alternate `CARD` / `ROW_ALT`, only the first and last rows are rounded
+  (`RADIUS_LG`), a picked row fills its whole width (`CARD_SELECTED`). The bar under the list sits on the canvas.
+  The colors are FeatureSoup's own (its stylesheet's `--sf-m-*` surfaces), so the two apps sit side by side.
 - **The left panel** (`window/sidebar.Sidebar`, a `components/panels.LeftPanel`, `SIDEBAR_W`): the wordmark on top
   (`TOOLBAR_H` tall, level with the toolbar), then two sections with small headings that fold when clicked:
   **Files** (All Files, Videos, Photos, Audio) and **Progress** (To Convert, Done, Need a Look), each row with its
@@ -170,10 +174,11 @@ the computer, also while it's open, unless Settings › General › Appearance p
 | Token | Use |
 |---|---|
 | `WINDOW_TOP` / `GLASS` / `BG` | The frame: the sidebar, the toolbar and the right panel, one flat color |
-| `WORK` | The work area set into the frame: the file list and the bar under it, Settings' pages |
+| `WORK` | The work area set into the frame, a canvas: the list's card and the bar under it, Settings' pages |
 | `PANEL` | Dialogs |
 | `BLOCK` | A card inside the right panel or a dialog (a step off the frame, no outline) |
-| `CARD` / `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Surfaces; hover; a picked row and the current sidebar row (neutral, never the accent) |
+| `CARD` / `ROW_ALT` | The list's card and every other row on it; the alert |
+| `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Hover; a picked row and the current sidebar row (neutral, never the accent); a row under the pointer |
 | `TILE` / `TILE_HOVER` | A start tile on the empty work area |
 | `FIELD` / `FIELD_HOVER` / `FIELD_BORDER` / `FOCUS` | Text fields and dropdowns: a fill, no outline (the border stays clear); the edge a field gets while it has the keyboard |
 | `SEG_TRACK` / `SEG_ON` | A segmented control's capsule track and its chosen part |

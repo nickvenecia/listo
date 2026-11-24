@@ -220,7 +220,7 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #GroupTitle {{ font-size: {TEXT_MD}px; font-weight: {WEIGHT_BOLD}; }}
 #GroupNote {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #Card {{ background: {tokens.BLOCK}; border: none; border-radius: {RADIUS_LG}px; }}
-#Totals {{ background: transparent; border-top: 1px solid {tokens.BORDER}; }}
+#Totals {{ background: transparent; border: none; }}
 #TotalLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #TotalValue {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_BOLD}; }}
 

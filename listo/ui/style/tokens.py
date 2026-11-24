@@ -150,33 +150,35 @@ UPDATE_WAIT_MS = 1500  # a found update waits this long between looks while anot
 # ---------------------------------------------------------------- colors: a dark and a light set
 # Listo follows the system (or Settings › General › Appearance). Read colors as tokens.X when drawing,
 # never copy them into a constant at import: use() swaps them.
-# The look is FeatureSoup's (Listo's sister app): cool neutral graphite, the frame (sidebar, toolbar, right panel)
-# on one material, the work area set apart by its fill and its curve, no outlines on controls, and one inverted
-# primary button. Color means something (progress, done, failed, on) and never fills a button.
+# The look is FeatureSoup's (Listo's sister app; values from its stylesheet, src/app/globals.css --sf-m-*): cool
+# neutral graphite, the frame (sidebar, toolbar, right panel) in one material, the work area set into it as a canvas
+# (its top corners curved) with the content on cards, no outlines on controls, and one inverted primary button.
+# Color means something (progress, done, failed, on) and never fills a button.
 DARK = {
     "BG": "#151518",  # the frame: sidebar, toolbar, right panel (FeatureSoup's "chrome")
     "PANEL": "#151518",  # dialogs
-    "WORK": "#0D0D10",  # the work area under the toolbar: the list sits here, a step deeper than the frame
-    "CARD": "#1C1C20",  # cards
-    "TILE": "#1C1C20",  # a start tile on the work area
-    "TILE_HOVER": "#26262B",
-    "CARD_HOVER": "#303035",
-    "CARD_SELECTED": "#393940",  # a picked row, the current sidebar row: one neutral language, no accent
-    "RAISED": "#29292E",  # buttons and round icon buttons
-    "RAISED_HOVER": "#303035",
-    "RAISED_PRESS": "#25252A",
-    "POPUP": "#2C2C31",  # menus, dropdown lists, tooltips, the alert
-    "POPUP_HOVER": "#404047",  # the row under the pointer in a menu
+    "WORK": "#0E0E11",  # the work area under the toolbar: a near-black canvas, the list sits on a card on it
+    "CARD": "#1B1B1F",  # cards: the list (its rows alternate with ROW_ALT), the alert
+    "ROW_ALT": "#1F1F23",  # every other row of the list, so long lists are easy to follow
+    "TILE": "#1B1B1F",  # a start tile on the work area
+    "TILE_HOVER": "#222226",
+    "CARD_HOVER": "#2A2A2F",
+    "CARD_SELECTED": "#303036",  # a picked row, the current sidebar row: one neutral language, no accent
+    "RAISED": "#26262B",  # buttons and round icon buttons
+    "RAISED_HOVER": "#2E2E33",
+    "RAISED_PRESS": "#222226",
+    "POPUP": "#232327",  # menus, dropdown lists, tooltips
+    "POPUP_HOVER": "#313137",  # the row under the pointer in a menu
     "POPUP_EDGE": "rgba(255, 255, 255, 0.06)",
-    "BORDER": "#232328",  # the few hairlines left: the bar under the list
-    "BORDER_STRONG": "#39393F",  # menu separators, a switch that's off
-    "BORDER_HOVER": "#4A4A52",
+    "BORDER": "#222226",  # the few hairlines left
+    "BORDER_STRONG": "#38383E",  # menu separators, a switch that's off, the scroll bar
+    "BORDER_HOVER": "#48484F",
     "BORDER_CHECK": "#777781",  # unchecked checkbox outline
     "FOCUS": "#B0B0B8",  # a field with the keyboard: a neutral edge, no glow
     "TEXT": "#F0F0F3",
-    "MUTED": "#9696A1",  # secondary text
+    "MUTED": "#9898A2",  # secondary text
     "FAINT": "#6E6E79",  # hints, disabled, counts
-    "WELL": "#0D0D10",  # sunken areas with words: logs
+    "WELL": "#0E0E11",  # sunken areas with words: logs
     "SCREEN": "#0B0B0D",  # behind pictures (players, previews, thumbnails): black in both looks, like a monitor
     "SCREEN_TEXT": "#9696A1",  # words on SCREEN ("Making a preview…")
     "SCREEN_FAINT": "#6E6E79",  # placeholder icons on SCREEN
@@ -200,7 +202,7 @@ DARK = {
     "BAD_TINT": "#2E1C20",  # danger button hover
     "BAD_EDGE": "#5A2A30",  # a failed outline
     "WARN": "#DCCF45",  # needs a look: shifted toward yellow, away from the marigold accent
-    "ROW_HOVER": "rgba(255, 255, 255, 0.05)",  # a list row under the mouse
+    "ROW_HOVER": "#2A2A2F",  # a list row (or sidebar row) under the mouse
     "WINDOW_TOP": "#151518",  # the window's backdrop: the frame's one flat color
     "WINDOW_BOTTOM": "#151518",
     "GLASS": "#151518",  # the columns (sidebar, right panel): the frame's material, flush, no edge or shadow
@@ -214,36 +216,37 @@ DARK = {
     "TOAST_PROBLEM_FILL": "#47452A",  # a problem's toast is tinted yellow, so it's never missed
     "TOAST_PROBLEM_EDGE": "rgba(220, 207, 69, 0.45)",
     "CHIP": "rgba(255, 184, 28, 0.16)",  # a tinted capsule: key caps, where a dragged row lands
-    "FIELD": "#29292E",  # a text field or dropdown: a fill, no outline
-    "FIELD_HOVER": "#303035",
+    "FIELD": "#26262B",  # a text field or dropdown: a fill, no outline
+    "FIELD_HOVER": "#2E2E33",
     "FIELD_BORDER": "rgba(0, 0, 0, 0)",  # (kept clear: the edge is only there so focus can show)
-    "SEG_TRACK": "#29292D",  # a segmented control's track…
-    "SEG_ON": "#434349",  # …and its chosen part
-    "BLOCK": "#1C1C20",  # a card in the right panel: a step lighter than the frame, no outline
+    "SEG_TRACK": "#222226",  # a segmented control's track…
+    "SEG_ON": "#38383E",  # …and its chosen part
+    "BLOCK": "#1B1B1F",  # a card in the right panel: a step lighter than the frame, no outline
     "FILL": "rgba(255, 255, 255, 0.07)",  # a soft fill on any surface: bar tracks, a placeholder
 }
 LIGHT = {
     "BG": "#F6F7F9",
     "PANEL": "#F7F8FA",
-    "WORK": "#FFFFFF",  # the light look's work area is the white page in the gray frame
+    "WORK": "#E9EBEF",  # the light look's canvas: a soft gray, white cards on it
     "CARD": "#FFFFFF",
-    "TILE": "#F1F3F6",
-    "TILE_HOVER": "#E9ECF0",
+    "ROW_ALT": "#F2F4F7",
+    "TILE": "#FFFFFF",
+    "TILE_HOVER": "#F6F7F9",
     "CARD_HOVER": "#E9ECF0",
-    "CARD_SELECTED": "#DFE7F1",
-    "RAISED": "#EBEDF1",
-    "RAISED_HOVER": "#E2E5EA",
-    "RAISED_PRESS": "#D9DDE3",
+    "CARD_SELECTED": "#DCE4EE",
+    "RAISED": "#ECEEF2",
+    "RAISED_HOVER": "#E4E7EC",
+    "RAISED_PRESS": "#DCE0E6",
     "POPUP": "#FFFFFF",
     "POPUP_HOVER": "#EDF0F4",
     "POPUP_EDGE": "rgba(0, 0, 0, 0.10)",
-    "BORDER": "#E6E8EC",
-    "BORDER_STRONG": "#D6DAE0",
-    "BORDER_HOVER": "#BCC1C8",
+    "BORDER": "#E3E6EA",
+    "BORDER_STRONG": "#D4D9E0",
+    "BORDER_HOVER": "#B9BFC7",
     "BORDER_CHECK": "#9AA1AB",
     "FOCUS": "#5F6772",
-    "TEXT": "#20242A",
-    "MUTED": "#646D78",
+    "TEXT": "#1B1D21",
+    "MUTED": "#5C626B",
     "FAINT": "#9AA1AA",
     "WELL": "#EDEFF3",
     "SCREEN": "#0B0B0D",
@@ -269,7 +272,7 @@ LIGHT = {
     "BAD_TINT": "#FBEAEC",
     "BAD_EDGE": "#EFB7BF",
     "WARN": "#7F7500",
-    "ROW_HOVER": "rgba(0, 0, 0, 0.035)",
+    "ROW_HOVER": "#EEF1F4",
     "WINDOW_TOP": "#F6F7F9",
     "WINDOW_BOTTOM": "#F6F7F9",
     "GLASS": "#F6F7F9",
@@ -283,8 +286,8 @@ LIGHT = {
     "TOAST_PROBLEM_FILL": "#47452A",
     "TOAST_PROBLEM_EDGE": "rgba(220, 207, 69, 0.45)",
     "CHIP": "rgba(168, 99, 0, 0.1)",
-    "FIELD": "#ECEEF2",
-    "FIELD_HOVER": "#E4E7EC",
+    "FIELD": "#EDEFF3",
+    "FIELD_HOVER": "#E5E8ED",
     "FIELD_BORDER": "rgba(0, 0, 0, 0)",
     "SEG_TRACK": "#E6E9EE",
     "SEG_ON": "#D5DAE2",

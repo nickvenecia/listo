@@ -1,7 +1,7 @@
 # Changelog
 
 ## 3.4.0
-- **A new look, from the FeatureSoup family.** Listo now looks like it was made alongside FeatureSoup: cool graphite grays instead of warm charcoal, the sidebar and Convert To sitting flush with the window's edges, and your files on their own work area with softly curved top corners. Light and dark both
+- **A new look, from the FeatureSoup family.** Listo now looks like it was made alongside FeatureSoup, in FeatureSoup's own colors: cool graphite grays instead of warm charcoal, the sidebar and Convert To sitting flush with the window's edges, and your files on a card of softly striped rows, set on a work area with curved top corners. Light and dark both
 - **One clear main button.** Convert and the round + are now white on the dark look and near-black on the light one, so the thing to press next always stands out. Buttons, dropdowns and fields are soft fills with no outlines
 - **Color only where it means something**: how far along a file is, a switch that's on, what's done, what needs a look. Picked files and menu rows light up in a calm gray instead of the accent
 - **Marigold is a touch brighter**, FeatureSoup's golden yellow. The separate Yellow accent is gone, since it now looked the same; if you had picked it, Listo uses Marigold

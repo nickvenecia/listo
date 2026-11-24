@@ -422,7 +422,9 @@ class MainWindow(QMainWindow):
         work.setObjectName("Work")
         self.work = work
         work_lay = vbox(work, 0, 0)
-        inside = vbox(margins=(tokens.SPACE_2, tokens.SPACE_2, tokens.SPACE_2, 0))  # the rows clear the curve
+        inside = vbox(
+            margins=(tokens.SPACE_3, tokens.SPACE_3, tokens.SPACE_3, 0)
+        )  # the list's card on the canvas
         inside.addWidget(self.pages)
         work_lay.addLayout(inside, 1)
         lay.addWidget(work, 1)
@@ -430,7 +432,7 @@ class MainWindow(QMainWindow):
         footer = QFrame()
         footer.setObjectName("Totals")
         self.footer = footer
-        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_2, tokens.SPACE_3), tokens.SPACE_2)
+        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_3, tokens.SPACE_3), tokens.SPACE_2)
         texts = QVBoxLayout()
         texts.setSpacing(tokens.SPACE_1)
         top = hbox(spacing=tokens.SPACE_3)

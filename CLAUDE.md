@@ -93,7 +93,8 @@ listo/
                    Show Files, round Pause / Stop icons, Check Captions, Convert), menus, undo / redo, updates
     window/sidebar.py      places: Files (All Files / Videos / Photos / Audio) and Progress (To Convert / Done /
                    Need a Look) with counts (in_place() decides), the section +, ProfileCard (feedback, updates, Settings)
-    window/tables.py       FileList (QListView + RowPainter): one painted row per file; Row = it.card (set_state,
+    window/tables.py       FileList (QListView + RowPainter): one painted row per file, the rows one striped card
+                   (_card_slice: only the first and last rounded); Row = it.card (set_state,
                    set_progress, set_output, set_format, set_trim, set_captions, set_name, set_meta, set_thumb)
     window/lift.py         drag a row's grip to reorder (FileList.reordered -> MainWindow._reordered)
     window/trash.py        Move Originals to the Trash: to_trash (system Trash, never a delete), safe_to_trash
