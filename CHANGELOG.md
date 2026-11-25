@@ -6,6 +6,9 @@
 - **Color only where it means something**: how far along a file is, a switch that's on, what's done, what needs a look. Picked files and menu rows light up in a calm gray instead of the accent
 - **Marigold is a touch brighter**, FeatureSoup's golden yellow. The separate Yellow accent is gone, since it now looked the same; if you had picked it, Listo uses Marigold
 - Titles are bolder and tighter, the toolbar is a little shorter, and the sidebar's rows have a bit more room
+- **Convert the same files again.** Once a batch is done, the button under the list reads **Convert 9 Files Again** and converts them with the settings as they are now: change a setting, press it, done. You get new files and the earlier ones stay. Right-click a file, or press the round arrow on its row, to convert just that one again
+- **Clean Up**, beside Show Files once a batch has run: **Clear Finished**, **Clear All…**, and **Move Originals to the Trash…**, which asks first and only takes the originals of files that converted without a problem. You can put them back from the Trash. Also in the Edit menu, and on a converted file's right-click. The automatic switch in Advanced is still there for every batch
+- **Listo opens as a compact window**, centred, instead of filling the screen, so it sits beside the Finder or your editor and files drag straight in. Make it bigger and it remembers. On a Mac, double-clicking the title bar still fills the screen, and double-clicking again brings it back to the compact size
 
 ## 3.3.0
 - **A link downloads when you press Convert, not before.** Add a link and it waits in the list as Ready, so you can set the format, the name and where it's saved first. Convert then downloads it and converts it in one go. Stop puts it back to waiting. Joining, or captions on? The links download first and converting starts by itself once they're in

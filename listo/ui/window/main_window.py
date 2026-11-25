@@ -123,6 +123,13 @@ _ORPHANS: list = []
 SOON_MS = 60  # how long list-wide refreshes wait to gather changes
 SORTS = {"shot": "Date && Time Shot", "name": "Name"}  # Sort By (&& is a literal "&" in a menu)
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
+RAN = (
+    "done",
+    "warning",
+    "failed",
+    "skipped",
+    "canceled",
+)  # converted, or tried to: Convert Again can redo these
 
 
 @dataclass
@@ -459,6 +466,12 @@ class MainWindow(QMainWindow):
         texts.addWidget(self.f_bar)
         f.addLayout(texts, 1)
         f.addSpacing(tokens.SPACE_3)
+        # once a batch has run: clearing the list, and the originals (always through a menu or an alert)
+        self.btn_clean = QPushButton("Clean Up")
+        self.btn_clean.setToolTip("Clear the list, or move the originals to the " + TRASH)
+        self.btn_clean.setMenu(QMenu(self.btn_clean))
+        self.btn_clean.menu().aboutToShow.connect(lambda: self._fill_clean_menu(self.btn_clean.menu()))
+        self.btn_clean.hide()
         self.btn_show = QPushButton("Show Files")
         self.btn_show.clicked.connect(self._show_outputs)
         self.btn_show.hide()
@@ -473,8 +486,15 @@ class MainWindow(QMainWindow):
         self.btn_check.hide()
         self.btn_start = QPushButton("Convert")
         self.btn_start.setObjectName("Primary")
-        self.btn_start.clicked.connect(self.start)
-        for b in (self.btn_show, self.btn_pause, self.btn_cancel, self.btn_check, self.btn_start):
+        self.btn_start.clicked.connect(self._convert_pressed)
+        for b in (
+            self.btn_clean,
+            self.btn_show,
+            self.btn_pause,
+            self.btn_cancel,
+            self.btn_check,
+            self.btn_start,
+        ):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
         work_lay.addWidget(footer)
@@ -544,6 +564,9 @@ class MainWindow(QMainWindow):
         act(e, "Remove from the List…", self.remove_selected, [Qt.Key.Key_Backspace, Qt.Key.Key_Delete])
         act(e, "Clear Finished", self.clear_finished)
         act(e, "Clear All…", self.clear_all)
+        e.addSeparator()
+        self.act_again = act(e, "Convert Finished Files Again", lambda: self.convert_again())
+        self.act_trash = act(e, f"Move Originals to the {TRASH}…", lambda: self.trash_originals_now())
         e.addSeparator()
         e.addMenu(self._sort_menu(e))
         act(e, "Reset Settings to Defaults…", self.reset_settings)
@@ -898,6 +921,8 @@ class MainWindow(QMainWindow):
         h = self.history
         self.act_undo.setEnabled(self._text_can_undo() or h.can_undo() or self._settings_timer.isActive())
         self.act_redo.setEnabled(self._text_can_undo(redo=True) or h.can_redo())
+        self.act_again.setEnabled(any(self._redoable(it) for it in self.items.values()))
+        self.act_trash.setEnabled(any(self._trashable(it) for it in self.items.values()))
 
     # ------------------------------------------------------------------ updates (core/update.py)
     def _auto_check_updates(self) -> None:
@@ -1921,6 +1946,9 @@ class MainWindow(QMainWindow):
 
     def retry_item(self, iid: int) -> None:
         it = self.items.get(iid)
+        if it and it.state in ("done", "warning"):  # a converted row's arrow: convert it again, now
+            self.convert_again([iid])
+            return
         if it and it.url and not it.info and iid not in self.downloads:
             if self.running:  # the download itself failed: try it again
                 self._start_download(it)
@@ -2018,6 +2046,125 @@ class MainWindow(QMainWindow):
             return
         self._take_off(ids)
 
+    # ------------------------------------------------------------------ after a batch
+    def _redoable(self, it: Item) -> bool:
+        """It ran (converted, failed, skipped or stopped) and its original is still here to convert again."""
+        return it.state in RAN and it.info is not None and not it.gone and it.id not in self.active
+
+    def _convert_pressed(self) -> None:
+        """The bar's Convert: what's ready, else every finished file again (with the settings as they are now)."""
+        if any(it.state in ("ready", "probing", "downloading", "linked") for it in self.items.values()):
+            self.start()
+        else:
+            self.convert_again()
+
+    def convert_again(self, ids: list[int] | None = None) -> None:
+        """Put finished files back in line and convert them with today's settings (their new files are named
+        by Saves To's rules, so nothing is overwritten unless Advanced says Replace)."""
+        pick = [i for i in (self.order if ids is None else ids) if i in self.items]
+        redo = [self.items[i] for i in pick if self._redoable(self.items[i])]
+        missing = [it for it in redo if not os.path.isfile(it.path)]
+        redo = [it for it in redo if it not in missing]
+        if not redo:
+            gone = [self.items[i] for i in pick if self.items[i].gone]
+            if gone:
+                self.toast(f"The original is in the {TRASH}, so it can't be converted again.", "problem")
+            elif missing:
+                self.toast(
+                    "The original isn't where it was any more, so it can't be converted again.", "problem"
+                )
+            return
+        log.info("converting %d file%s again", len(redo), "s" if len(redo) != 1 else "")
+        for it in redo:
+            it.result, it.processed, it.message, it.base, it.clock = None, 0.0, "", None, None
+            it.state = "waiting" if self.running else "ready"
+            if self.running and it.id not in self.batch:
+                self.batch.append(it.id)
+            it.card.set_state(it.state)
+            it.card.set_progress(0)
+            self._update_output_name(it)
+        if missing:
+            n = len(missing)
+            self.toast(
+                f"{n} original{'s' if n != 1 else ''} moved or deleted, so left as {'it is' if n == 1 else 'they are'}."
+            )
+        if self.running:
+            self._refresh_footer()
+            self._kick()
+        else:
+            self.start()
+
+    def _trashable(self, it: Item) -> bool:
+        """Converted without a problem, its new file is there, and its original hasn't gone yet (never for a
+        transcript: the words aren't a copy of the clip)."""
+        r = it.result
+        return (
+            it.state == "done"
+            and not it.gone
+            and r is not None
+            and r.output is not None
+            and not self._words_only(it)
+            and it.id not in self.active
+        )
+
+    def trash_originals_now(self, ids: list[int] | None = None) -> None:
+        """Move Originals to the Trash, asked for after a batch (the Clean Up menu, Edit, a row's right-click):
+        after an alert, the originals of files that converted cleanly go to the Trash, never deleted outright."""
+        pick = self.order if ids is None else ids
+        its = [self.items[i] for i in pick if i in self.items and self._trashable(self.items[i])]
+        if not its:
+            return
+        n = len(its)
+        what = Path(its[0].path).name if n == 1 else f"{n} Originals"
+        if not confirm(
+            self,
+            f"Move {what} to the {TRASH}?",
+            f"The new files stay. You can put the original{'s' if n != 1 else ''} back from the {TRASH}.",
+            f"Move to {TRASH}",
+        ):
+            return
+        moved = kept = 0
+        for it in its:
+            if safe_to_trash(it.path, it.result.output) and to_trash(it.path):
+                it.gone = True
+                moved += 1
+                it.card.set_output(it.card.output + f"   ·   Original in the {TRASH}")
+            else:
+                kept += 1
+        log.info(
+            "moved %d original%s to the trash (asked for); %d stayed", moved, "s" if moved != 1 else "", kept
+        )
+        self._trashed = getattr(self, "_trashed", 0) + moved
+        if kept:
+            self.toast(
+                f"{kept} original{'s' if kept != 1 else ''} couldn't go to the {TRASH}. "
+                f"{'It is' if kept == 1 else 'They are'} still where {'it was' if kept == 1 else 'they were'}.",
+                "problem",
+            )
+        elif moved:
+            self.toast(f"{moved} original{'s' if moved != 1 else ''} moved to the {TRASH}", "done")
+        self._schedule_live()
+        self._refresh_footer()
+
+    def _fill_clean_menu(self, m: QMenu) -> None:
+        """The bar's Clean Up: clear what's finished or everything; move the originals to the Trash."""
+        m.clear()
+        finished = sum(1 for it in self.items.values() if it.state in FINAL)
+        a = m.addAction(theme.menu_icon("check"), "Clear Finished", self.clear_finished)
+        a.setEnabled(finished > 0)
+        a = m.addAction(theme.menu_icon("list-x"), "Clear All…", self.clear_all)
+        a.setEnabled(bool(self.items))
+        m.addSeparator()
+        n = sum(1 for it in self.items.values() if self._trashable(it))
+        a = m.addAction(
+            theme.menu_icon("trash"),
+            f"Move {n} Original{'s' if n != 1 else ''} to the {TRASH}…"
+            if n
+            else f"Move Originals to the {TRASH}…",
+            self.trash_originals_now,
+        )
+        a.setEnabled(n > 0)
+
     # ------------------------------------------------------------------ selection
     def _select(self, ids: set[int]) -> None:
         if {i for i in ids if i in self.items} != self.selected:
@@ -2103,7 +2250,25 @@ class MainWindow(QMainWindow):
                 m.addAction(theme.menu_icon("reveal"), "Show the New File", lambda: self.reveal_item(iid))
             if s in ("failed", "done", "skipped", "unsupported", "warning"):
                 m.addAction(theme.menu_icon("info"), "Details…", lambda: self.show_details(iid))
-            if s in ("failed", "canceled", "skipped", "warning"):
+            if s in ("done", "warning"):
+                picked = [i for i in self.order if i in self.selected and self._redoable(self.items[i])]
+                k = len(picked)
+                m.addAction(
+                    theme.menu_icon("retry"),
+                    f"Convert {k} Again" if k > 1 else "Convert Again",
+                    lambda: self.convert_again(picked or [iid]),
+                )
+                trash = [i for i in self.order if i in self.selected and self._trashable(self.items[i])]
+                if trash:
+                    k = len(trash)
+                    m.addAction(
+                        theme.menu_icon("trash"),
+                        f"Move {k} Originals to the {TRASH}…"
+                        if k > 1
+                        else f"Move the Original to the {TRASH}…",
+                        lambda: self.trash_originals_now(trash),
+                    )
+            if s in ("failed", "canceled", "skipped"):
                 m.addAction(theme.menu_icon("retry"), "Try Again", lambda: self.retry_item(iid))
             if not m.isEmpty():
                 m.addSeparator()
@@ -2671,6 +2836,8 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         convertible = [it for it in items if it.state not in ("unsupported",)]
+        waiting = self._convert_after_captions or self._convert_after_links
+        self.btn_clean.setVisible(not self.running and not waiting and any(it.state in RAN for it in items))
         self.f_time.setVisible(self.running)
         self.f_sub.setVisible(not self.running)
         if self._convert_after_captions and not self.running:  # Convert was pressed; Stop calls it off
@@ -2732,11 +2899,14 @@ class MainWindow(QMainWindow):
         self.btn_cancel.hide()
         self.f_bar.hide()
         ready = [it for it in items if it.state in ("ready", "probing", "downloading", "linked")]
-        self.btn_start.setEnabled(bool(ready))
+        again = [] if ready else [it for it in items if self._redoable(it)]  # nothing new: the finished ones
+        self.btn_start.setEnabled(bool(ready or again))
         verb = "Convert && Join" if self.export_panel.joining() else "Convert"  # (&& shows one &)
-        self.btn_start.setText(
-            f"{verb} {len(ready)} File{'s' if len(ready) != 1 else ''}" if ready else "Convert"
-        )
+        if ready or again:
+            k = len(ready or again)
+            self.btn_start.setText(f"{verb} {k} File{'s' if k != 1 else ''}" + ("" if ready else " Again"))
+        else:
+            self.btn_start.setText("Convert")
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary
             joined = getattr(self, "_last_joined", 0)
@@ -2828,19 +2998,17 @@ class MainWindow(QMainWindow):
             e.acceptProposedAction()
 
     def show(self) -> None:
-        """The first time: filling the screen (all of it but the menu bar and Dock). After that: the size
-        and place you left it, if it still fits a screen you have (else filling the screen again)."""
+        """The first time: the usual compact size (tokens.WINDOW_SIZE), centred, never bigger than the screen.
+        After that: the size and place you left it, if it still fits a screen you have (else compact again)."""
         if self._restored:
             super().show()
             return
         geo = self.qs.value("geometry")
-        if isinstance(geo, str) and geo and self._fits_after(QByteArray.fromHex(geo.encode())):
-            super().show()
-        elif self.titlebar is not None:  # the Mac: fill the free area ourselves (zooming is unreliable here)
-            titlebar.fill_screen(self)
-            super().show()
-        else:
-            self.showMaximized()
+        if not (isinstance(geo, str) and geo and self._fits_after(QByteArray.fromHex(geo.encode()))):
+            if self.isMaximized() or self.isFullScreen():
+                self.showNormal()
+            titlebar.center_compact(self)
+        super().show()
 
     def _fits_after(self, geo: QByteArray) -> bool:
         """Put the window back where it was; True if that lands wholly on a screen."""

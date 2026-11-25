@@ -85,7 +85,8 @@ listo/
     components/empty.py    EmptyPage + StartTile: the empty list's start tiles (Add Files… / a Folder… / a Link…);
                    set_hot() lights the files tile while files are dragged over the window
     components/titlebar.py Mac only: Listo's own title bar (ExpandedClientAreaHint; macOS moves the window;
-                   double-click fills the screen or goes to the smallest size, animated)
+                   double-click fills the screen or goes back to the compact WINDOW_SIZE, animated; the first
+                   launch opens at WINDOW_SIZE centred: center_compact)
     components/player.py   ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
                    result frame while paused (owners render it on `settled`); set_size() follows the panel's width
     window/main_window.py  the controller: Items, batches, the toolbar (the search hides while the list is empty),
@@ -286,7 +287,13 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   its original to the system Trash (ui/window/trash.py: QFile.moveToTrash, a JVC clip's .MOI with it;
   safe_to_trash checks the new file exists, isn't empty and isn't the original). Never delete outright; what
   the Trash can't take stays. It forces the Double-Check on. Joined clips go after the join, only if every
-  clip made it in. Item.gone = no preview for that row.
+  clip made it in. Item.gone = no preview for that row. Asked for after a batch too (the bar's Clean Up menu,
+  Edit, a converted row's right-click): MainWindow.trash_originals_now, after an alert, only rows _trashable
+  ("done", never a transcript, original not gone).
+- Convert Again (MainWindow.convert_again): rows in RAN with their original still there (_redoable) go back in
+  line with base = None (today's settings) and start() runs; the bar's Convert reads "Convert N Files Again"
+  when nothing is ready (_convert_pressed); a converted row's arrow (retry_item) does one. New files follow
+  Saves To's name-taken rule (number by default), never the old ones overwritten unless it says Replace.
 - A second launch hands its files to the open window over a QLocalServer (app.py) — needed for Windows "Send to" / Linux.
 - Don't add presets that need encoders missing from common static ffmpeg builds without gating on `caps.has_encoder`.
 

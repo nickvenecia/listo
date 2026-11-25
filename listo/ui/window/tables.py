@@ -196,7 +196,7 @@ class Row:
             "cc": bool(self.cc[0]) and s in ("ready", "waiting", "done", "warning"),
             "trim": s in ("ready", "waiting") and k in ("video", "audio"),
             "details": s in ("failed", "done", "skipped", "unsupported", "warning"),
-            "retry": s in ("failed", "canceled", "skipped", "warning"),
+            "retry": s in ("failed", "canceled", "skipped", "warning", "done"),
             "reveal": s in FINISHED_OK,
         }
         return [key for key, _i, _t in BUTTONS if shown[key]]
@@ -721,6 +721,8 @@ class FileList(QListView):
                     tip = "Change the format for just this file"
                 elif part == "grip":
                     tip = "Drag to change the order (joined videos and timecode follow it)"
+                elif part == "retry" and row.state in FINISHED_OK:
+                    tip = "Convert Again"
                 elif part in dict((k, t) for k, _i, t in BUTTONS):
                     tip = dict((k, t) for k, _i, t in BUTTONS)[part]
                 elif part == "row":

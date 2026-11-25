@@ -66,7 +66,10 @@ another in Settings › General.
   then its format chip, a trim and the new name; on the right its status word (colored by tone) and progress
   bar, and its buttons (captions, trim, details, try again, show the new file), shown while the pointer is over
   the row or it's picked. Under the list, the **bar**: what's in the list, with Check Captions and **Convert N
-  Files**, the one primary button. While converting: the title ("Converting 9 Files") with how far along beside
+  Files**, the one primary button. Once a batch has run, **Clean Up** (a menu: Clear Finished, Clear All…, Move N
+  Originals to the Trash…) sits beside Show Files, and with nothing new to convert the button reads **Convert N
+  Files Again** (the finished files, with the settings as they are now; a converted row's round arrow and its
+  right-click do it for one). While converting: the title ("Converting 9 Files") with how far along beside
   it ("3 of 9 done · About 2 min left"), the progress bar under both, and round icon buttons for Pause (Resume)
   and Stop. The time left is for the whole batch, rounded ("Less than a minute left", "About 4 min left"); it
   says nothing until there's enough to go on and never goes back to saying nothing (`core/progress.BatchClock`).
@@ -96,11 +99,12 @@ another in Settings › General.
   file only changes which clip the preview shows; it never opens or closes the panel, and neither do Esc or a
   click on empty space. Its ✕ closes it; then the toolbar's round sliders button or View › Convert Settings
   (⌥⌘I) brings it back. On a smaller window it narrows (to `INSPECTOR_MIN`).
-- **Size and place**: the first launch fills the screen (all but the menu bar and Dock); after that Listo opens
-  where and how big you left it, if that still fits a screen.
+- **Size and place**: Listo is a compact app you keep beside the Finder or your editor, so files drag straight in.
+  The first launch opens at `WINDOW_SIZE` (1360 × 820), centred, never bigger than the screen has room for; after
+  that Listo opens where and how big you left it, if that still fits a screen (else compact again).
 - **The Mac title bar is Listo's own** (`components/titlebar.py`): the traffic lights, the wordmark centred,
-  macOS drags the window. Double-click fills the screen, or (if it already does) goes to the smallest size,
-  centred, animated. Windows and Linux keep the system bar, which follows light / dark.
+  macOS drags the window. Double-click fills the screen, or (if it already does) goes back to the compact
+  `WINDOW_SIZE`, centred, animated. Windows and Linux keep the system bar, which follows light / dark.
 
 ---
 

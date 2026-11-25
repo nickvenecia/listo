@@ -69,7 +69,7 @@ TRACK_TITLE = -0.45  # page titles
 ICON_STROKE = 1.85  # the icon set's line width
 
 # ---------------------------------------------------------------- layout
-WINDOW_SIZE = (1600, 1000)
+WINDOW_SIZE = (1360, 820)  # the first launch: compact, centred (never more than the screen has room for)
 WINDOW_MIN = (1280, 700)  # the toolbar, the list and the right panel all fit
 GLASS_GAP = 0  # the columns (sidebar, right panel) sit flush with the window's edges and the work area
 SHADOW_STEPS = 16  # layers of a lifted thing's shadow (a toast, a dragged row): soft

@@ -211,3 +211,52 @@ def test_what_goes_with_an_original(tmp_path):
     new.write_bytes(b"x")
     assert safe_to_trash(mod, new)
     assert not safe_to_trash(mod, mod) and not safe_to_trash(tmp_path / "gone.mod", new)
+
+
+def test_after_a_batch_convert_again_and_move_the_originals_when_asked(qapp, clip, tmp_path, monkeypatch):
+    """Once a batch has run, the bar converts the same files again with today's settings (new files, the
+    originals untouched), and Clean Up moves the originals to the Trash only after an alert."""
+    from listo.ui.window import main_window
+
+    other = tmp_path / "A001_C002.mov"
+    shutil.copy(clip, other)
+    binned, asked = [], []
+    monkeypatch.setattr(main_window, "to_trash", lambda p: binned.append(str(p)) or True)
+    monkeypatch.setattr(main_window, "confirm", lambda *a, **k: asked.append(a[1]) or True)
+    w = _window()
+    try:
+        w.add_paths([str(clip), str(other)])
+        assert _wait(qapp, lambda: all(it.state == "ready" for it in w.items.values()))
+        w.start()
+        assert _wait(qapp, lambda: all(it.state == "done" for it in w.items.values()) and not w.running, 60)
+        w._refresh_now()
+        first = {it.id: it.result.output for it in w.items.values()}
+        assert w.btn_clean.isVisibleTo(w) and w.btn_start.isEnabled()
+        assert w.btn_start.text() == "Convert 2 Files Again"
+
+        w.btn_start.click()  # the bar's Convert: the finished files again
+        assert _wait(qapp, lambda: w.running or any(it.state != "done" for it in w.items.values()))
+        assert _wait(qapp, lambda: all(it.state == "done" for it in w.items.values()) and not w.running, 60)
+        for it in w.items.values():
+            assert it.result.output != first[it.id] and first[it.id].is_file()  # a new file, the old one kept
+        assert clip.is_file() and other.is_file() and not binned
+
+        one = next(iter(w.items.values()))
+        w.retry_item(one.id)  # a converted row's arrow: that one again, now
+        assert _wait(qapp, lambda: one.state == "done" and not w.running, 60)
+
+        m = main_window.QMenu()
+        w._fill_clean_menu(m)
+        trash = next(a for a in m.actions() if "Trash" in a.text())
+        assert trash.isEnabled() and trash.text().startswith("Move 2 Originals")
+        trash.trigger()
+        assert asked and "2 Originals" in asked[-1]  # asked first, naming how many
+        assert sorted(binned) == sorted([str(clip), str(other)])
+        assert all(it.gone for it in w.items.values())
+        w._refresh_now()
+        assert w.btn_start.text() == "Convert" and not w.btn_start.isEnabled()  # nothing left to redo
+        w._fill_clean_menu(m)
+        assert not next(a for a in m.actions() if "Trash" in a.text()).isEnabled()
+    finally:
+        w.shutdown()
+        w.close()
