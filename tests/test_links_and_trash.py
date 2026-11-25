@@ -216,6 +216,7 @@ def test_what_goes_with_an_original(tmp_path):
 def test_after_a_batch_convert_again_and_move_the_originals_when_asked(qapp, clip, tmp_path, monkeypatch):
     """Once a batch has run, the bar converts the same files again with today's settings (new files, the
     originals untouched), and Clean Up moves the originals to the Trash only after an alert."""
+    from listo.core.fileutil import TRASH  # the Recycle Bin on Windows
     from listo.ui.window import main_window
 
     other = tmp_path / "A001_C002.mov"
@@ -247,7 +248,7 @@ def test_after_a_batch_convert_again_and_move_the_originals_when_asked(qapp, cli
 
         m = main_window.QMenu()
         w._fill_clean_menu(m)
-        trash = next(a for a in m.actions() if "Trash" in a.text())
+        trash = next(a for a in m.actions() if TRASH in a.text())
         assert trash.isEnabled() and trash.text().startswith("Move 2 Originals")
         trash.trigger()
         assert asked and "2 Originals" in asked[-1]  # asked first, naming how many
@@ -256,7 +257,7 @@ def test_after_a_batch_convert_again_and_move_the_originals_when_asked(qapp, cli
         w._refresh_now()
         assert w.btn_start.text() == "Convert" and not w.btn_start.isEnabled()  # nothing left to redo
         w._fill_clean_menu(m)
-        assert not next(a for a in m.actions() if "Trash" in a.text()).isEnabled()
+        assert not next(a for a in m.actions() if TRASH in a.text()).isEnabled()
     finally:
         w.shutdown()
         w.close()
