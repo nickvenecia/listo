@@ -26,7 +26,7 @@ Not sure which Mac you have? Apple menu → About This Mac: "Chip: Apple M…" m
 
 ffmpeg and everything else comes bundled. There's no Homebrew, Python or terminal needed.
 
-**Updates:** every time Listo opens, it checks for a new version. When there is one, the update window opens by itself: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo (**Later** closes it; **Update to …** stays at the bottom of the sidebar). You can also check any time from the menu at the bottom of the sidebar (your name) → **Check for Updates…**, and turn the automatic check off in **Settings › General**.
+**Updates:** every time Listo opens, it checks for a new version. When there is one, the update window opens by itself: it shows what's new, downloads the right file for your computer, swaps it in and reopens Listo (**Later** closes it; **Update to …** stays in the toolbar). You can also check any time from the round button with your initials at the top right → **Check for Updates…**, and turn the automatic check off in **Settings › General**.
 
 **Your settings stay yours:** settings, recipes and checked captions are kept on your computer only, in Listo's folder (Settings › Your Data shows where, and **Back Up…** zips them). Undo (⌘Z / Ctrl+Z) takes back a change to the settings or the list.
 

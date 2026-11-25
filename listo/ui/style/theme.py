@@ -12,7 +12,6 @@ from PySide6.QtSvg import QSvgRenderer
 from listo.core.paths import ASSETS
 from listo.ui.style import tokens
 from listo.ui.style.tokens import (
-    AVATAR,
     BAR_H,
     CONTROL_H,
     HANDLE,
@@ -105,7 +104,7 @@ QToolTip {{ background: {tokens.POPUP}; color: {tokens.TEXT}; border: 1px solid 
 #Hint {{ color: {tokens.FAINT}; font-size: {TEXT_SM}px; }}
 #Muted {{ color: {tokens.MUTED}; }}
 
-/* ---------- areas: the frame (sidebar, toolbar, right panel) and the work area set into it */
+/* ---------- areas: the frame (toolbar, right panel) and the work area set into it */
 #PanelHeader {{ border: none; }}
 #PanelTitle {{ font-size: {TEXT_TITLE}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
 #Work {{ background: {tokens.WORK}; border: none;
@@ -126,10 +125,14 @@ QPushButton#Primary:pressed {{ background: {tokens.PRIMARY_PRESS}; }}
 QPushButton#Primary:disabled {{ background: {tokens.PRIMARY_OFF}; color: {tokens.PRIMARY_OFF_TEXT}; }}
 QPushButton#Ghost {{ background: transparent; color: {tokens.MUTED}; }}
 QPushButton#Ghost:hover {{ background: {tokens.FILL}; color: {tokens.TEXT}; }}
-QToolButton#SectionAdd {{ background: transparent; border: none; border-radius: {tokens.SECTION_ADD // 2}px;
-    min-width: {tokens.SECTION_ADD}px; max-width: {tokens.SECTION_ADD}px;
-    min-height: {tokens.SECTION_ADD}px; max-height: {tokens.SECTION_ADD}px; }}
-QToolButton#SectionAdd:hover {{ background: {tokens.FILL}; }}
+QToolButton#TitleMenu {{ background: transparent; border: 1px solid transparent; border-radius: {_INNER // 2}px;
+    padding: 0 {SPACE_2}px; min-height: {_INNER}px; max-height: {_INNER}px;
+    font-size: {TEXT_TITLE}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
+QToolButton#TitleMenu:hover, QToolButton#TitleMenu:open {{ background: {tokens.FILL}; }}
+QToolButton#Me {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border: 1px solid transparent; padding: 0;
+    border-radius: {_INNER // 2}px; min-width: {_INNER}px; max-width: {_INNER}px; min-height: {_INNER}px;
+    max-height: {_INNER}px; font-size: {TEXT_XS}px; font-weight: {WEIGHT_BOLD}; }}
+QToolButton#Me:hover, QToolButton#Me:open {{ background: {tokens.RAISED_HOVER}; }}
 *[capsule="true"] {{ border-radius: {_INNER // 2}px; padding-left: {SPACE_4}px; }}
 QPushButton#Disclosure {{ background: transparent; border: none; border-radius: 0; padding: 0; text-align: left;
     color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; min-height: {SMALL_H}px; max-height: {SMALL_H}px; }}
@@ -224,14 +227,9 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 #TotalLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #TotalValue {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_BOLD}; }}
 
-/* ---------- the window: sidebar, toolbar, the file list */
+/* ---------- the window: Settings' sections column, the toolbar, the file list */
 #Sidebar {{ background: transparent; border: none; }}
 #SidebarFoot {{ border: none; }}
-#ProfileCard {{ background: transparent; border-radius: {tokens.NAV_R}px; }}
-#ProfileCard:hover {{ background: {tokens.CARD_HOVER}; }}
-#Avatar {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border-radius: {AVATAR // 2}px;
-    font-size: {TEXT_XS}px; font-weight: {WEIGHT_BOLD}; }}
-#ProfileName {{ font-weight: {WEIGHT_SEMIBOLD}; }}
 #Nav {{ background: transparent; border-radius: {tokens.NAV_R}px; }}
 #Nav:hover {{ background: {tokens.ROW_HOVER}; }}
 #Nav[selected="true"] {{ background: {tokens.CARD_SELECTED}; }}
@@ -336,7 +334,6 @@ _SVG = {
     "sort": '<path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>',
     "stop": '<rect x="6" y="6" width="12" height="12" rx="2"/>',
     "trash": '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v6M14 11v6"/>',
-    "updown": '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/>',
     "x": '<path d="M18 6 6 18M6 6l12 12"/>',
 }

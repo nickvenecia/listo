@@ -122,6 +122,7 @@ KINDS: dict[str, tuple[str, str, str]] = {
     "photo": ("Photo", "Photos", "Photos"),
     "audio": ("Audio File", "Audio Files", "Audio"),
 }
+SCOPE_TITLES = {"video": "Video Settings", "photo": "Photo Settings", "audio": "Audio Settings"}
 DEINTERLACE_WORDS = {"film": "Film-Look Deinterlace", "off": "Leave Interlaced"}
 TIMECODE_WORDS = {"restart": "Restart Timecode", "record": "Match Record Time"}
 COLLISION_WORDS = {"skip": "Skip Taken Names", "replace": "Replace Old Copies"}
@@ -216,6 +217,10 @@ class ConvertSettings(QWidget):
         # a heading and settings for each kind of file in the list (set_kinds shows the ones there)
         self.kinds: dict[str, tuple[QWidget, GroupHeading]] = {}
         self._kind_key: tuple | None = None
+        self.scope: str | None = (
+            None  # one kind's settings only (Convert To's title menu), or None: every kind
+        )
+        self._counts: tuple[dict, dict] = ({}, {})
         self._build_video()
         self._build_photo()
         self._build_audio()
@@ -239,7 +244,10 @@ class ConvertSettings(QWidget):
     def set_kinds(self, counts: dict[str, int], own: dict[str, int]) -> None:
         """What's in the list: a heading with its count for each kind there ("9 Videos"), noting the files
         with their own format (changed on their row). With nothing in the list, all three show."""
-        key = (tuple(counts.get(k, 0) for k in KINDS), tuple(own.get(k, 0) for k in KINDS))
+        self._counts = (dict(counts), dict(own))
+        if self.scope is not None and counts.get(self.scope, 0) == 0 and any(counts.values()):
+            self.scope = None  # that kind left the list: every kind again
+        key = (tuple(counts.get(k, 0) for k in KINDS), tuple(own.get(k, 0) for k in KINDS), self.scope)
         if key == self._kind_key:
             return
         self._kind_key = key
@@ -247,10 +255,25 @@ class ConvertSettings(QWidget):
         for k, (one, many, bare) in KINDS.items():
             box, head = self.kinds[k]
             n, mine = counts.get(k, 0), own.get(k, 0)
-            box.setVisible(empty or n > 0)
+            box.setVisible((empty or n > 0) and self.scope in (None, k))
             title = bare if empty else f"{n} {one if n == 1 else many}"
             note = f"· {mine} with {'its' if mine == 1 else 'their'} own format" if mine else ""
             head.set_text(title, note)
+
+    def set_scope(self, kind: str | None) -> None:
+        """Show one kind's settings (Videos, Photos, Audio), or every kind's (None)."""
+        self.scope = kind if kind in KINDS else None
+        self.set_kinds(*self._counts)
+
+    def scope_choices(self) -> list[tuple[str | None, str, int]]:
+        """What Convert To's title menu offers: (kind or None, its name, how many) for the kinds in the list."""
+        counts = self._counts[0]
+        out: list[tuple[str | None, str, int]] = [(None, "Every File", sum(counts.values()))]
+        empty = not any(counts.values())
+        for k in KINDS:
+            if empty or counts.get(k, 0):
+                out.append((k, SCOPE_TITLES[k], counts.get(k, 0)))
+        return out
 
     def put_clips(self, w: QWidget) -> None:
         """Saves To's Clips choice (a file per clip, or one joined video) sits in the video card."""

@@ -1,8 +1,8 @@
-"""The window, full screen: the sidebar (where you are) | the files, with the progress under them | Convert To.
+"""The window: the files (their place is the title's menu), with the progress under them | Convert To.
 
-Drop files in (or + them), pick how they convert on the right, press Convert. The sidebar shows the files by
-kind and by how far along they are; the right panel slides away with its ✕ or Esc and comes back when you
-click a file (or View › Convert Settings).
+Drop files in (or + them), pick how they convert on the right, press Convert. The title's menu shows the files
+by kind and by how far along they are; the right panel slides away with its ✕ and comes back with the toolbar's
+sliders button (or View › Convert Settings).
 """
 
 from __future__ import annotations
@@ -85,6 +85,7 @@ from listo.ui.components.glass import Dock, GlassRoot, glass
 from listo.ui.components.player import space_plays
 from listo.ui.components.widgets import (
     ElidedLabel,
+    InitialsButton,
     SearchField,
     Toast,
     circle_button,
@@ -113,7 +114,7 @@ from listo.ui.window.jobs import (
     ProbeTask,
     TranscribeThread,
 )
-from listo.ui.window.sidebar import PLACES, Sidebar, in_place
+from listo.ui.window.places import PLACES, computer_user, in_place
 from listo.ui.window.tables import FileList, Row
 from listo.ui.window.trash import safe_to_trash, to_trash
 
@@ -229,7 +230,7 @@ class MainWindow(QMainWindow):
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
         self.selected: set[int] = set()
-        self.place = "all"  # the sidebar's choice: which files the list shows
+        self.place = "all"  # the title menu's choice: which files the list shows
         self.tx = None  # TranscribeThread while captions are being made in the background
         self._tx_pct: dict[int, float] = {}
         self._tx_failed: dict[int, str] = {}
@@ -297,17 +298,12 @@ class MainWindow(QMainWindow):
         self.titlebar = titlebar.install(self)  # Mac: Listo's own title bar (follows the look)
         if self.titlebar is not None:
             outer.addWidget(self.titlebar)
-        gap = tokens.GLASS_GAP
-        body = hbox(spacing=gap)
-        body.setContentsMargins(gap, 0 if self.titlebar is not None else gap, gap, gap)
-        self.sidebar = glass(Sidebar())
-        self.sidebar.picked.connect(self.go)
-        self.sidebar.profile_card.clicked.connect(self._app_menu)
-        self.btn_update = self.sidebar.btn_update
-        self.btn_update.clicked.connect(self.open_update)
-        root.float(self.sidebar)
-        body.addWidget(self.sidebar)
-        body.addWidget(self._build_center(), 1)
+        body = hbox(spacing=0)
+        body.setContentsMargins(
+            tokens.WORK_INSET, 0, tokens.WORK_INSET, 0
+        )  # (the right one: Dock's to change)
+        center = self._build_center()
+        body.addWidget(center, 1)
 
         self.panel = ConvertPanel(self.settings)
         self.convert = self.panel.settings_part  # what the files become
@@ -319,7 +315,7 @@ class MainWindow(QMainWindow):
         self.panel.btn_preview.clicked.connect(self.open_preview)
         self.panel.btn_reset.clicked.connect(self.reset_settings)
         self.panel.close_wanted.connect(lambda: self.show_panel(False))
-        self.dock = Dock(glass(self.panel), root, self.sidebar, body)  # the glass panel on the right, sliding
+        self.dock = Dock(glass(self.panel), root, center, body)  # the column on the right, sliding
         self.dock.follower = lambda: self.pages.currentWidget()
         outer.addLayout(body, 1)
         self.setCentralWidget(root)
@@ -336,13 +332,25 @@ class MainWindow(QMainWindow):
         bar.setFixedHeight(tokens.TOOLBAR_H)
         # three parts: the title on the left, the search centred, the + on the right
         grid = QGridLayout(bar)
-        grid.setContentsMargins(tokens.SPACE_4, 0, tokens.SPACE_2, 0)
+        grid.setContentsMargins(tokens.SPACE_1, 0, 0, 0)
         grid.setHorizontalSpacing(tokens.SPACE_4)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(2, 1)
         left = hbox(spacing=tokens.SPACE_2)
-        self.title = QLabel(PLACES["all"][0])
-        self.title.setObjectName("PageTitle")
+        # where you are: the title is the menu of places, as FeatureSoup's page titles are (Listo's name is
+        # the window's title bar's, never the toolbar's)
+        self.title = QToolButton()
+        self.title.setObjectName("TitleMenu")
+        self.title.setText(PLACES["all"][0])
+        self.title.setIcon(theme.icon("chevron", theme.MUTED, tokens.ICON_SM))
+        self.title.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.title.setLayoutDirection(Qt.LayoutDirection.RightToLeft)  # the chevron after the words
+        self.title.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.title.setToolTip("Show All Files, Videos, Photos, Audio, or Where They Are")
+        self.title.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.title.setMenu(QMenu(self.title))
+        self.title.menu().setLayoutDirection(Qt.LayoutDirection.LeftToRight)  # (not the button's mirroring)
+        self.title.menu().aboutToShow.connect(lambda: self._fill_place_menu(self.title.menu()))
         self.count = ElidedLabel()  # "12", or "3 selected": gives way before the search does
         self.count.setObjectName("PageCount")
         self.count.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -376,13 +384,29 @@ class MainWindow(QMainWindow):
         self.btn_add.setToolTip("Add Files, a Folder or a Link (or just drop them in)")
         self.btn_add.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.btn_add.setMenu(self._add_menu(self.btn_add))
-        self.sidebar.btn_add.setMenu(self._add_menu(self.sidebar.btn_add))
         right.addWidget(self.btn_add)
         keys = QKeySequence("Ctrl+Alt+I").toString(QKeySequence.SequenceFormat.NativeText)
         self.btn_panel = circle_button("sliders", f"Show Convert To ({keys})")  # where the panel's ✕ was
         self.btn_panel.clicked.connect(lambda: self.show_panel(True))
         self.btn_panel.hide()  # only while there are files and the panel is closed
         right.addWidget(self.btn_panel)
+        # a newer Listo, when there is one; then who's using it: Settings, Send Feedback, Check for Updates
+        self.btn_update = QPushButton()
+        self.btn_update.setIcon(theme.icon("arrow-down", theme.ACCENT))
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.setToolTip("A newer Listo is out. See what's new and update")
+        self.btn_update.clicked.connect(self.open_update)
+        self.btn_update.hide()
+        right.addWidget(self.btn_update)
+        self.btn_me = InitialsButton()
+        self.btn_me.setObjectName("Me")
+        self.btn_me.setText(_initials(computer_user()))
+        self.btn_me.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_me.setToolTip(f"{computer_user()}: Settings, Feedback and Updates")
+        self.btn_me.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_me.setMenu(QMenu(self.btn_me))
+        self.btn_me.menu().aboutToShow.connect(lambda: self._fill_me_menu(self.btn_me.menu()))
+        right.addWidget(self.btn_me)
         grid.addLayout(right, 0, 2)
         lay.addWidget(bar)
 
@@ -607,24 +631,46 @@ class MainWindow(QMainWindow):
         act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
         bar.setVisible(sys.platform == "darwin")
 
-    def _app_menu(self) -> None:
-        """The profile card's menu: feedback, updates and Settings (the way in on every system)."""
-        card = self.sidebar.profile_card
-        m = QMenu(card)
-        m.addAction(theme.menu_icon("message"), "Send Feedback…", self.open_feedback)
-        m.addAction(theme.menu_icon("arrow-down"), "Check for Updates…", self.check_updates)
+    def _fill_me_menu(self, m: QMenu) -> None:
+        """The initials' menu: Settings, feedback and updates (the way in on every system)."""
+        m.clear()
         s = m.addAction(theme.menu_icon("cog"), "Settings…", self.open_settings)
         s.setShortcut(QKeySequence.StandardKey.Preferences)  # shown for reference; the menu bar's runs it
         s.setShortcutVisibleInContextMenu(True)
-        at = card.mapToGlobal(QPoint(0, 0))
-        m.exec(QPoint(at.x(), at.y() - m.sizeHint().height() - tokens.MENU_GAP))
+        m.addAction(theme.menu_icon("message"), "Send Feedback…", self.open_feedback)
+        m.addAction(theme.menu_icon("arrow-down"), "Check for Updates…", self.check_updates)
 
     # ------------------------------------------------------------------ where you are
+    def _fill_place_menu(self, m: QMenu) -> None:
+        """The title's menu: the places with their counts, as FeatureSoup's page titles list their views.
+        The one showing is in bold."""
+        m.clear()
+        counts = getattr(self, "_place_counts", {})
+        for n, (section, heading) in enumerate((("files", "Files"), ("progress", "Progress"))):
+            if n:
+                m.addSeparator()
+            h = m.addAction(heading)
+            h.setEnabled(False)  # a heading, not a choice
+            for key, (name, icon, sec) in PLACES.items():
+                if sec != section:
+                    continue
+                k = counts.get(key, 0)
+                a = m.addAction(
+                    theme.menu_icon(icon, theme.TEXT if key == self.place else theme.MUTED),
+                    f"{name}\t{k}" if k else name,  # (the count sits at the row's right end)
+                    lambda _c=False, key=key: self.go(key),
+                )
+                if key == self.place:
+                    f = a.font()
+                    f.setBold(True)
+                    a.setFont(f)
+
     def go(self, place: str) -> None:
-        """Show the files in a place of the sidebar (All Files, Videos… To Convert, Done, Need a Look)."""
+        """Show the files in a place (All Files, Videos… To Convert, Done, Need a Look). A kind's place shows
+        that kind's settings in Convert To too."""
         self.place = place if place in PLACES else "all"
-        self.sidebar.select(self.place)
         self.title.setText(PLACES[self.place][0])
+        self.panel.set_scope(self.place if self.place in ("video", "photo", "audio") else None)
         self._apply_filter()
 
     def _shown(self, it: Item) -> bool:
@@ -715,7 +761,6 @@ class MainWindow(QMainWindow):
         current = getattr(QApplication.instance(), "_appearance", "system")
         for k, a in getattr(self, "look_actions", {}).items():
             a.setChecked(k == current)
-        self.sidebar.recolor()
         if self.titlebar is not None:
             self.titlebar.word.setText(theme.wordmark())
         self.table.viewport().update()
@@ -927,7 +972,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ updates (core/update.py)
     def _auto_check_updates(self) -> None:
         """Every launch, quietly, just after the window is up: if there's a newer Listo, the update window
-        says so (and a button stays at the bottom of the sidebar). Not when running from the code (that's
+        says so (and an Update button stays in the toolbar). Not when running from the code (that's
         updated with git) or when switched off in Settings."""
         if self._shut_down() or update.install_kind() == "source" or os.environ.get("LISTO_NO_UPDATE_CHECK"):
             return
@@ -2749,7 +2794,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ footer
     def _refresh_places(self) -> None:
-        """The sidebar's counts, and the list again if a file moved in or out of the place shown."""
+        """The places' counts, and the list again if a file moved in or out of the place shown."""
         counts = dict.fromkeys(PLACES, 0)
         own = dict.fromkeys(("video", "photo", "audio"), 0)  # files with their own format (from their row)
         for it in self.items.values():
@@ -2758,8 +2803,7 @@ class MainWindow(QMainWindow):
                     counts[key] += 1
             if it.override and it.kind in own:
                 own[it.kind] += 1
-        problems = counts["attention"] > 0
-        self.sidebar.set_counts(counts, self.running, problems)
+        self._place_counts = counts  # (the title's menu shows them)
         kinds = {k: counts[k] for k in own}
         kinds["video"] += sum(1 for it in self.items.values() if it.kind == "link")  # a link brings a video
         self.convert.set_kinds(kinds, own)  # "9 Videos", "2 Photos" in Convert To
@@ -3071,6 +3115,12 @@ class MainWindow(QMainWindow):
             self.qs.setValue("geometry", bytes(self.saveGeometry().toHex()).decode())
 
         self.qs.setValue("settings", self.settings.to_dict())
+
+
+def _initials(name: str) -> str:
+    """Up to two letters for the round button with your initials ("L" when there's nothing to go on)."""
+    words = [w for w in name.replace("&", " ").split() if w[:1].isalnum()]
+    return "".join(w[0] for w in words[:2]).upper() or "L"
 
 
 def _eta(sec: float) -> str:

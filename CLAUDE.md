@@ -79,7 +79,7 @@ listo/
                    PathCombo (every file / folder setting; DESIGN.md §6), SearchField, Toast (MainWindow.toast(text, tone):
                    "done" / "problem" / "" for news; floats over the list above the bar), TextBox, IconLabel,
                    circle_button / icon_button, FlowLayout, FitScroll, PanelHeader, ComboItemDelegate
-    components/panels.py   LeftPanel + NavRow (the sidebar, Settings' sections), SidePanel (the right panel)
+    components/panels.py   LeftPanel + NavRow (Settings' sections), SidePanel (the right panel)
     components/glass.py    GlassRoot (the frame: one flat color, the columns flush on it), Dock (the right column
                    sliding in/out), paint_shadow (things lifted off the page: toasts)
     components/empty.py    EmptyPage + StartTile: the empty list's start tiles (Add Files… / a Folder… / a Link…);
@@ -89,11 +89,13 @@ listo/
                    launch opens at WINDOW_SIZE centred: center_compact)
     components/player.py   ClipPlayer: Qt player + caption overlay (burnin.caption_still) + "still" layer for the exact
                    result frame while paused (owners render it on `settled`); set_size() follows the panel's width
-    window/main_window.py  the controller: Items, batches, the toolbar (the search hides while the list is empty),
+    window/main_window.py  the controller: Items, batches, the toolbar (no app name: the title menu of places with
+                   counts — _fill_place_menu —, the search, which hides while the list is empty, sort, +, Update,
+                   your initials — btn_me: Settings, Feedback, Updates),
                    the bar under the list (title + "3 of 9 done · About 2 min left" beside it, the bar under both;
                    Show Files, round Pause / Stop icons, Check Captions, Convert), menus, undo / redo, updates
-    window/sidebar.py      places: Files (All Files / Videos / Photos / Audio) and Progress (To Convert / Done /
-                   Need a Look) with counts (in_place() decides), the section +, ProfileCard (feedback, updates, Settings)
+    window/places.py       PLACES: Files (All Files / Videos / Photos / Audio) and Progress (To Convert / Done /
+                   Need a Look), in_place() (which files each holds), computer_user() (the initials' button)
     window/tables.py       FileList (QListView + RowPainter): one painted row per file, the rows one striped card
                    (_card_slice: only the first and last rounded); Row = it.card (set_state,
                    set_progress, set_output, set_format, set_trim, set_captions, set_name, set_meta, set_thumb)
@@ -220,14 +222,17 @@ packaging/                mac entitlements, Windows Inno Setup script, Linux .de
   (Conversion(target=hidden parts folder, conform=first clip's size/rate/48 kHz stereo; silent clips get a silent
   track; per-file format overrides don't apply), then _start_join() runs JoinThread (core/join.Join: concat demuxer,
   -c copy). Stop before gluing -> parts deleted and those clips back to ready.
-- Window (DESIGN.md §1): the sidebar (places filter the list: MainWindow.go(place) / _apply_filter with the search)
-  | the file list with the bar under it (Convert N Files lives there, so closing the panel never hides it)
+- Window (DESIGN.md §1): no left sidebar. The toolbar's title is the menu of places, as FeatureSoup's page titles
+  are (MainWindow.title, a #TitleMenu QToolButton; go(place) / _apply_filter with the search; a kind's place also
+  scopes Convert To to that kind: ConvertPanel.set_scope) | the file list with the bar under it (Convert N Files lives there, so closing the panel never hides it)
   | Convert To in the Dock. Convert To is about every file in the list, never the picked one: the Dock opens when
   the first file arrives and closes when the last one leaves (MainWindow._show_page); picking a file, Esc or a
   click on empty space never open or close it. Its ✕ closes it; MainWindow.btn_panel (the toolbar's round
   sliders button, faded in while closed with files) or ⌥⌘I bring it back. Inside: a heading per kind in the list
   with its count (ConvertSettings.set_kinds, fed by _refresh_places), never Video / Photo / Audio tabs (they read
-  as an export's picture / sound tabs). Folds (Picture / Burn-In / Captions, Saves To's Advanced) say what's on
+  as an export's picture / sound tabs); its title is a menu (ConvertPanel.title_menu: Every File, or one kind's
+  settings — ConvertSettings.scope). A #TitleMenu button is RightToLeft (the chevron after the words), so its
+  QMenu is set LeftToRight or it comes out mirrored. Folds (Picture / Burn-In / Captions, Saves To's Advanced) say what's on
   (convert.summary). Labels are Title Case (DESIGN.md §9).
 - Undo / redo (window/history.py): MainWindow._record_settings (SAVE_DELAY_MS after a settings change settles;
   a change taken straight back drops the step), _take_off / _put_back (files off the list, one step), _reordered /

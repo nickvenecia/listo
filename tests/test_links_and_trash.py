@@ -86,7 +86,7 @@ def test_a_link_downloads_only_when_convert_is_pressed(qapp, downloads):
         assert it.state == "linked" and not started and not w.downloads  # nothing fetched yet
         assert it.card.status == "Ready" and "Convert" in it.card.meta
         assert w.btn_start.isEnabled() and w.btn_start.text() == "Convert 1 File"
-        assert w.sidebar.rows["todo"].count.text() == "1"
+        assert w._place_counts["todo"] == 1
         assert w.dock.opened and w.convert._kind_key[0][0] == 1  # its settings can be changed first
 
         w.start()

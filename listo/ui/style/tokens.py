@@ -16,7 +16,6 @@ SPACE_5 = 24  # padding of dialogs and empty states
 # ---------------------------------------------------------------- control sizes
 CONTROL_H = 34  # EVERY button, dropdown, text field, segmented control and round icon button
 SMALL_H = 24  # small round icon buttons inside rows and cards, chips, naming tokens
-SECTION_ADD = 20  # a sidebar section's plain + (a gray glyph, the Mac's size)
 CHIP_SM_H = SMALL_H - 6  # a small status chip
 INDICATOR = 16  # checkbox box
 TOGGLE_ROW_H = 32  # an on/off setting: label left, switch right
@@ -69,23 +68,23 @@ TRACK_TITLE = -0.45  # page titles
 ICON_STROKE = 1.85  # the icon set's line width
 
 # ---------------------------------------------------------------- layout
-WINDOW_SIZE = (1360, 820)  # the first launch: compact, centred (never more than the screen has room for)
-WINDOW_MIN = (1280, 700)  # the toolbar, the list and the right panel all fit
-GLASS_GAP = 0  # the columns (sidebar, right panel) sit flush with the window's edges and the work area
+WINDOW_SIZE = (1200, 780)  # the first launch: compact, centred (never more than the screen has room for)
+WINDOW_MIN = (1080, 640)  # the toolbar, the list and the right panel all fit
+GLASS_GAP = 0  # the columns (the right panel, Settings' sections) sit flush with the window's edges
 SHADOW_STEPS = 16  # layers of a lifted thing's shadow (a toast, a dragged row): soft
 SHADOW_SPREAD = 24  # how far it reaches: wide and faint, never a dark smudge
 SHADOW_DROP = 3  # how far below it sits: barely
-SIDEBAR_W = 232  # the left panel: your files by kind
+WORK_INSET = 12  # the frame showing left of the work area (and right of it while Convert To is closed)
 INSPECTOR_W = 420  # the right panel: Convert To
 INSPECTOR_MIN = 360  # …on a smaller window
 INSPECTOR_SHARE = 0.27  # of the window's width, between those two
 TOOLBAR_H = 56  # the bar above the list: title, search, +
 TITLEBAR_H = 32  # Listo's own Mac title bar (fitted to the real one once the window shows)
-SEARCH_W = 440  # the search capsule asks for this much room…
+SEARCH_W = 300  # the search capsule asks for this much room (FeatureSoup keeps its search modest)…
 SEARCH_MIN = 160  # …and gives way down to this
-NAV_H = 34  # one row in the sidebar
-NAV_GAP = 2  # between rows in the sidebar
-NAV_INSET = SCROLL_GUTTER  # a sidebar row's gap from the column's edges (the scroll bar's room on the right)
+NAV_H = 34  # one row in Settings' list of sections
+NAV_GAP = 2  # between those rows
+NAV_INSET = SCROLL_GUTTER  # a row's gap from the column's edges (the scroll bar's room on the right)
 NAV_R = 9  # its corners
 MENU_GAP = 6  # between a button and the menu it opens
 # ---- every list of choices looks the same: menus, dropdown lists, pickers.
@@ -95,8 +94,6 @@ LIST_INSET = 5
 LIST_ROW_R = LIST_R - LIST_INSET
 LIST_ROW_H = NAV_H
 LIST_GAP = NAV_GAP
-AVATAR = 32  # the initials at the bottom of the sidebar
-PROFILE_CARD_H = 48
 TABLE_ROW_H = 76  # one file in the list: a 16:9 thumbnail with room above and below, three short lines
 ROW_INSET = 2  # a row's rounded highlight sits this far inside the row
 THUMB_W, THUMB_H = 96, 54  # a file's 16:9 thumbnail in the list
@@ -151,11 +148,11 @@ UPDATE_WAIT_MS = 1500  # a found update waits this long between looks while anot
 # Listo follows the system (or Settings › General › Appearance). Read colors as tokens.X when drawing,
 # never copy them into a constant at import: use() swaps them.
 # The look is FeatureSoup's (Listo's sister app; values from its stylesheet, src/app/globals.css --sf-m-*): cool
-# neutral graphite, the frame (sidebar, toolbar, right panel) in one material, the work area set into it as a canvas
+# neutral graphite, the frame (toolbar, right panel) in one material, the work area set into it as a canvas
 # (its top corners curved) with the content on cards, no outlines on controls, and one inverted primary button.
 # Color means something (progress, done, failed, on) and never fills a button.
 DARK = {
-    "BG": "#151518",  # the frame: sidebar, toolbar, right panel (FeatureSoup's "chrome")
+    "BG": "#151518",  # the frame: toolbar, right panel, round the work area (FeatureSoup's "chrome")
     "PANEL": "#151518",  # dialogs
     "WORK": "#0E0E11",  # the work area under the toolbar: a near-black canvas, the list sits on a card on it
     "CARD": "#1B1B1F",  # cards: the list (its rows alternate with ROW_ALT), the alert
@@ -163,7 +160,7 @@ DARK = {
     "TILE": "#1B1B1F",  # a start tile on the work area
     "TILE_HOVER": "#222226",
     "CARD_HOVER": "#2A2A2F",
-    "CARD_SELECTED": "#303036",  # a picked row, the current sidebar row: one neutral language, no accent
+    "CARD_SELECTED": "#303036",  # a picked row, Settings' current section: one neutral language, no accent
     "RAISED": "#26262B",  # buttons and round icon buttons
     "RAISED_HOVER": "#2E2E33",
     "RAISED_PRESS": "#222226",

@@ -1,5 +1,5 @@
 """The window's frame: one flat backdrop (the frame's material) behind everything, the columns on it (the
-sidebar, the right panel that slides in and out), and soft shadows for things lifted off the page.
+right panel that slides in and out, Settings' sections), and soft shadows for things lifted off the page.
 
 The look is FeatureSoup's: the columns sit flush with the window's edges, in the frame's own material, with
 no edge and no shadow; what sets the work area apart is its own fill and the curve of its top corners
@@ -122,7 +122,7 @@ class Dock(QWidget):
     def __init__(self, content: QWidget, root: GlassRoot, top_of: QWidget, body):
         super().__init__(root)
         self.root = root
-        self.top_of = top_of  # a panel in the same row (the sidebar): the dock lines up with it
+        self.top_of = top_of  # a widget in the same row (the list's column): the dock lines up with its top
         self.body = body  # the row's layout: its right margin is the room the dock takes
         self.follower = None  # () -> the widget beside it, if it can slide as pictures (freeze / thaw)
         root.dock = self
@@ -157,9 +157,9 @@ class Dock(QWidget):
         x = round(away + (rest.x() - away) * self._t)
         self.setGeometry(x, rest.y(), rest.width(), rest.height())
         self.content.setGeometry(0, 0, rest.width(), rest.height())
-        # the content beside it ends a gap before it
-        gap = tokens.GLASS_GAP
-        room = max(gap, self.root.width() - x + gap) if self.isVisible() or self.opened else gap
+        # the content beside it ends where it starts; with it closed, the frame shows a WORK_INSET there
+        inset = tokens.WORK_INSET
+        room = max(inset, self.root.width() - x) if self.isVisible() or self.opened else inset
         mg = self.body.contentsMargins()
         if mg.right() != room:
             self.body.setContentsMargins(mg.left(), mg.top(), room, mg.bottom())

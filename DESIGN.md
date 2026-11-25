@@ -9,7 +9,7 @@ If you need a value that doesn't exist, add a token, give it a comment, and add 
 
 **Listo belongs to the FeatureSoup family** (featuresoup.com, its sister app for film productions): it should feel
 made by the same hands, without copying it screen for screen. The family's look: cool neutral graphite, light and
-dark; a **frame** (the sidebar, the toolbar, the right panel) in one flat material, flush with the window's edges,
+dark; a **frame** (the toolbar, the right panel) in one flat material, flush with the window's edges,
 and the **work area** set into it as a canvas (its own fill, its top corners curved, `WORK_R`) with the content on
 **cards**; capsule buttons and round icon
 buttons that are fills with no outline; **one inverted primary button** (near-white on dark, near-black on light);
@@ -22,45 +22,43 @@ another in Settings › General.
 ## 1. The window
 
 ```
-┌───────────────┬────────────────────────────────────────────────────┬───────────────────┐
-│ listo.        │ All Files 12        ( Search            )      (+) │ Convert To   (◉)(✕)│
-│ Files ⌄    +  │ ⋮⋮ ▢ A001_C001.MOV                         Ready    │ ┌ preview ───────┐ │
-│ ▸ All Files 12│      0:02 · 3840×2160 · 23.976p · HEVC              │ └────────────────┘ │
-│   Videos    9 │      [ProRes 422 ▾]  → A001_C001.mov                │ Recipe             │
-│   Photos    2 │ ⋮⋮ ▢ A001_C002.MOV                         31% ▬▬   │ 9 Videos           │
-│   Audio     1 │ …                                                   │ ╭ Format… ╮        │
-│ Progress ⌄    │                                                     │ ╭ ▸ Picture ╮      │
-│   To Convert 9│                                                     │ ╭ ▸ Burn-In ╮      │
-│   Done      2 │ ─────────────────────────────────────────────────── │ ╭ ▸ Captions ╮     │
-│   Need a Look1│ 9 videos · 2 photos · 1 audio file   [Convert 12 Files]│ Saves To  ╭ … ╮ │
-│ (NV) Your Name│ 0:42 of media                                       │ ╭ ▸ Advanced ╮     │
-└───────────────┴────────────────────────────────────────────────────┴───────────────────┘
-  left column (the frame)   the files (the work area, curved corners)     right column (the frame)
+┌──────────────────────────────────────────────────────────────┬───────────────────────┐
+│ All Files ⌄ 12       ( Search      )       (⇅) (+) (NV)      │ Convert To ⌄  (↺)(◉)(✕)│
+│ ╭────────────────────────────────────────────────────────╮   │ ┌ preview ──────────┐ │
+│ │ ⋮⋮ ▢ A001_C001.MOV                            Ready     │   │ └───────────────────┘ │
+│ │      0:02 · 3840×2160 · 23.976p · HEVC                  │   │ Recipe                │
+│ │      [ProRes 422 ▾]  → A001_C001.mov                    │   │ 9 Videos              │
+│ │ ⋮⋮ ▢ A001_C002.MOV                            31% ▬▬    │   │ ╭ Format… ╮           │
+│ ╰────────────────────────────────────────────────────────╯   │ ╭ ▸ Picture ╮         │
+│                                                              │ ╭ ▸ Burn-In ╮         │
+│ 9 videos · 2 photos · 1 audio file        [Convert 12 Files] │ Saves To  ╭ ▸ Advanced ╮│
+└──────────────────────────────────────────────────────────────┴───────────────────────┘
+  the files: the work area (a canvas, curved top corners), the list a card on it   the right column (the frame)
 ```
 
-**Where you are (left) → your files (middle) → what they become (right).**
+**Where you are (the title's menu) → your files (middle) → what they become (right).** There is no left
+sidebar: as on FeatureSoup's pages, **the title is the menu** of the views of the same files.
 
 - **The frame** is one flat color (`WINDOW_TOP`, the same as `GLASS`), drawn once (`components/glass.GlassRoot`).
-  The sidebar, the toolbar and the right panel sit on it, flush with the window's edges (`GLASS_GAP` is 0): no
-  edges, no shadows between them. **The work area** (`#Work`, `WORK`) holds the file list and the bar under it:
+  The toolbar and the right panel sit on it, flush with the window's edges (`GLASS_GAP` is 0): no edges, no
+  shadows between them; the frame shows `WORK_INSET` left of the work area (and right of it while Convert To is
+  closed). **The work area** (`#Work`, `WORK`) holds the file list and the bar under it:
   a canvas a step deeper than the frame (near-black in the dark look, soft gray in the light one), its top
   corners curved (`WORK_R`) where it meets the toolbar and the columns. **The list is one card** on it,
   `SPACE_3` in from its edges: the rows alternate `CARD` / `ROW_ALT`, only the first and last rows are rounded
   (`RADIUS_LG`), a picked row fills its whole width (`CARD_SELECTED`). The bar under the list sits on the canvas.
   The colors are FeatureSoup's own (its stylesheet's `--sf-m-*` surfaces), so the two apps sit side by side.
-- **The left panel** (`window/sidebar.Sidebar`, a `components/panels.LeftPanel`, `SIDEBAR_W`): the wordmark on top
-  (`TOOLBAR_H` tall, level with the toolbar), then two sections with small headings that fold when clicked:
-  **Files** (All Files, Videos, Photos, Audio) and **Progress** (To Convert, Done, Need a Look), each row with its
-  count. Need a Look's count turns `BAD` when something failed. The **+** beside Files (Add Files / a Folder /
-  a Link) fades in only while the pointer is over that section (`FADE_MS`). At the bottom: "Update to …" when
-  there is one, and the **profile card** (the computer user's initials and name; click it for Send Feedback,
-  Check for Updates and Settings).
-- **The toolbar** (`TOOLBAR_H`): the place's large title and count ("12", or "3 selected") on the left, the
-  **search capsule** centred (it shrinks to `SEARCH_MIN` before anything collides), the primary round **+** on
-  the right (Add Files / a Folder / a Link). Before the +, with two or more files, a round sort button (**Sort
+- **The toolbar** (`TOOLBAR_H`): no app name (that's the window's title bar: the Mac's own, or the system's), just
+  **the title menu** (`#TitleMenu`, `MainWindow.title`): the place's name in the title's type with a chevron,
+  opening the places with their counts (`_fill_place_menu`, `window/places.py`): a **Files** heading (All Files,
+  Videos, Photos, Audio) and a **Progress** one (To Convert, Done, Need a Look); the one showing in bold, the
+  counts at the rows' right ends. Beside it the count ("12", or "3 selected"). The **search capsule** centred
+  (up to `SEARCH_W`, shrinking to `SEARCH_MIN` before anything collides), the primary round **+** on the right
+  (Add Files / a Folder / a Link). Before the +, with two or more files, a round sort button (**Sort
   By** › Date & Time Shot, Name; `MainWindow.btn_sort`). While there are files and the right panel is closed, a
   round sliders button after the + brings it back (`MainWindow.btn_panel`; it fades in where the panel's ✕ was).
-  Nothing else.
+  Then "Update to …" when there is one (`MainWindow.btn_update`), and last **your initials** in a round button
+  (`#Me`, `MainWindow.btn_me`): Settings, Send Feedback, Check for Updates. Nothing else.
 - **The file list** (`window/tables.FileList`): one painted row per file, `TABLE_ROW_H` tall (never a widget per
   row). Left to right: the grip (drag to reorder), a 16:9 thumbnail on `SCREEN`, the name, what the file is,
   then its format chip, a trim and the new name; on the right its status word (colored by tone) and progress
@@ -79,7 +77,11 @@ another in Settings › General.
   click, Space or Return picks it. No headline, no search (there's nothing to search). Files dragged over the
   window light the Add Files tile.
 - **The right panel** (`panels/convert_to.ConvertPanel`, a `SidePanel`, `INSPECTOR_W`): **Convert To**, one recipe
-  for every file in the list. On top, the live preview of the picked file, or the first one showing in the list:
+  for every file in the list. Its title is a menu too (`ConvertPanel.title_menu`): **Every File**, or one kind's
+  settings (**Video Settings**, **Photo Settings**, **Audio Settings**, for the kinds in the list), so a long panel
+  can show just what you're working on (`ConvertSettings.set_scope`). It follows the list: picking Videos in the
+  title's menu shows Video Settings, All Files shows every file's; a kind that leaves the list puts it back to
+  Every File. Saves To and Advanced are for every file and always show. On top, the live preview of the picked file, or the first one showing in the list:
   a video exactly as it will come out, a photo as it is (no play button or scrubber), an audio file as its
   waveform with a `PLAYHEAD_W` line in the accent where it's playing. Under it the file's name and where it is
   among the files showing, "1 of 9"; the sample test pattern when the list is empty. Then Recipe, then a **heading for each kind of file in the list** with how many there are ("9 Videos",
@@ -100,7 +102,7 @@ another in Settings › General.
   click on empty space. Its ✕ closes it; then the toolbar's round sliders button or View › Convert Settings
   (⌥⌘I) brings it back. On a smaller window it narrows (to `INSPECTOR_MIN`).
 - **Size and place**: Listo is a compact app you keep beside the Finder or your editor, so files drag straight in.
-  The first launch opens at `WINDOW_SIZE` (1360 × 820), centred, never bigger than the screen has room for; after
+  The first launch opens at `WINDOW_SIZE` (1200 × 780), centred, never bigger than the screen has room for; after
   that Listo opens where and how big you left it, if that still fits a screen (else compact again).
 - **The Mac title bar is Listo's own** (`components/titlebar.py`): the traffic lights, the wordmark centred,
   macOS drags the window. Double-click fills the screen, or (if it already does) goes back to the compact
@@ -115,12 +117,12 @@ another in Settings › General.
 | `CONTROL_H` | 34 | **Every** button, dropdown, text field, segmented control and round icon button |
 | `SMALL_H` | 24 | Small round icon buttons inside rows and cards, naming token buttons |
 | `CHIP_SM_H` | 18 | The format chip on a row |
-| `SECTION_ADD` | 20 | A sidebar section's + |
 | `TOGGLE_ROW_H` · `TOGGLE_W`×`TOGGLE_H` | 32 · 36×20 | An on/off row and its switch |
 | `BAR_H` · `TRACK_H` · `HANDLE` | 6 · 4 · 14 | Progress bars · slider groove · slider handle |
-| `NAV_H` · `NAV_GAP` | 34 · 2 | A sidebar row (and a menu row) and the gap between rows |
+| `NAV_H` · `NAV_GAP` | 34 · 2 | A row in Settings' sections (and a menu row) and the gap between rows |
 | `TABLE_ROW_H` · `THUMB_W`×`THUMB_H` · `GRIP_W` · `STATUS_W` | 76 · 96×54 · 20 · 200 | A file row, its thumbnail, grip and status column |
-| `SIDEBAR_W` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 232 · 420 / 360 · 56 | The window's parts |
+| `WORK_INSET` · `INSPECTOR_W` / `INSPECTOR_MIN` · `TOOLBAR_H` | 12 · 420 / 360 · 56 | The window's parts: the frame beside the work area, Convert To, the toolbar |
+| `WINDOW_SIZE` / `WINDOW_MIN` | 1200 × 780 / 1080 × 640 | The first launch (compact, centred) / the smallest the window goes |
 | `ICON_SM` · `ICON` · `ICON_LG` | 14 · 16 · 20 | Icons in small buttons · buttons and menus · placeholders and start tiles |
 | `START_TILE_W` · `START_BADGE` | 184 · 40 | A start tile on the empty list (three fit beside the open panel) · its icon's circle |
 | `NOTES_H` · `NOTES_LINE` | 320 · 140% | What's new in the update window: as tall as its words up to this, then it scrolls · its line height |
@@ -161,7 +163,7 @@ Titles are bold with tight letter spacing (`TRACK_TITLE`), like FeatureSoup's; e
 
 Corners: `RADIUS_XS` 4 (checkbox), `RADIUS_SM` 7 (chips, thumbnails), `RADIUS` 10 (fields, dropdowns), `RADIUS_LG`
 13 (cards, start tiles, pictures), `RADIUS_XL` 20 (the alert), `WORK_R` 16 (the work area's top corners), `NAV_R`
-9 (a sidebar row), `ROW_R` 9 (a row's highlight). Buttons, the search and segmented controls are capsules.
+9 (a row in Settings' sections), `ROW_R` 9 (a row's highlight). Buttons, the search and segmented controls are capsules.
 **Every list of choices looks the same** (menus, dropdown lists): rows `LIST_ROW_H` tall, inset `LIST_INSET` inside
 a list whose corners are `LIST_R`, so the corners run parallel. `app._RoundPopups`
 makes menus and dropdown lists see-through so those corners are what you see, opens a button's menu just below
@@ -177,12 +179,12 @@ the computer, also while it's open, unless Settings › General › Appearance p
 
 | Token | Use |
 |---|---|
-| `WINDOW_TOP` / `GLASS` / `BG` | The frame: the sidebar, the toolbar and the right panel, one flat color |
+| `WINDOW_TOP` / `GLASS` / `BG` | The frame: the toolbar, the right panel and round the work area, one flat color |
 | `WORK` | The work area set into the frame, a canvas: the list's card and the bar under it, Settings' pages |
 | `PANEL` | Dialogs |
 | `BLOCK` | A card inside the right panel or a dialog (a step off the frame, no outline) |
 | `CARD` / `ROW_ALT` | The list's card and every other row on it; the alert |
-| `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Hover; a picked row and the current sidebar row (neutral, never the accent); a row under the pointer |
+| `CARD_HOVER` / `CARD_SELECTED` / `ROW_HOVER` | Hover; a picked row and Settings' current section (neutral, never the accent); a row under the pointer |
 | `TILE` / `TILE_HOVER` | A start tile on the empty work area |
 | `FIELD` / `FIELD_HOVER` / `FIELD_BORDER` / `FOCUS` | Text fields and dropdowns: a fill, no outline (the border stays clear); the edge a field gets while it has the keyboard |
 | `SEG_TRACK` / `SEG_ON` | A segmented control's capsule track and its chosen part |
@@ -232,13 +234,14 @@ Use these; never build a control's look by hand.
 | Alert's yes | `DangerFill` | Only the destructive button inside an alert |
 | Round icon button | `widgets.circle_button(icon, tip)` (`CirclePrimary` for the +) | Every icon button in the toolbar or a panel header |
 | Small round icon button | `widgets.icon_button(icon, tip)` (`IconBtn`) | The player's play and ‹ › (the list's row buttons are painted with the row) |
-| Section + | `SectionAdd` | The plain gray + beside a sidebar heading |
+| Title menu | `TitleMenu` (a QToolButton with a menu, the chevron after the words) | A title that is the menu of its views: the list's places, Convert To's kinds. Its menu runs left to right whatever the button does |
+| Your initials | `Me` | The round button at the toolbar's right end: Settings, Send Feedback, Check for Updates |
 
 Every icon-only button has a tooltip. "…" when a button opens a window or a picker.
 
 | Component | Use |
 |---|---|
-| `panels.LeftPanel` + `NavRow` | Every list of places on the left (the sidebar, Settings' sections) |
+| `panels.LeftPanel` + `NavRow` | Settings' list of sections |
 | `panels.SidePanel` | Every panel on the right; `header_icon()` adds its round buttons, the ✕ is always last |
 | `widgets.Card` · `Disclosure` | Every group inside a panel. A Disclosure folds away and its header says what's on inside, in a few words ("Burn-In · Timecode, File Name"; `convert.summary`), so nothing that changes the output hides silently. Each remembers whether it's open |
 | `widgets.GroupHeading` | A heading over a run of cards in the right panel: a kind of file and how many ("9 Videos", with a muted note after it), Saves To |
@@ -249,7 +252,7 @@ Every icon-only button has a tooltip. "…" when a button opens a window or a pi
 | `widgets.Segmented` | 2–3 views of the same thing (Match System / Light / Dark) |
 | `widgets.AccentPicker` | The Accent Color circles in Settings › General |
 | `widgets.SearchField` | The toolbar's search capsule |
-| `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip (`full_text()` reads it). The sidebar's rows, the bar under the list, names, paths |
+| `widgets.ElidedLabel` | One line that may not fit: cut with "…", the whole text in its tooltip (`full_text()` reads it). The bar under the list, names, paths |
 | `widgets.Toast`, through `MainWindow.toast(text, tone)` | A short message, centred over the list just above the bar under it (`TOAST_LIFT`): it rises and fades in (`TOAST_IN_MS`, `TOAST_RISE`), stays `TOAST_MS` (longer for long ones, `TOAST_MS_PER_CHAR`), fades away (`TOAST_OUT_MS`). Resting the pointer on it keeps it; it never takes a click (what's under it still works). `tone`: "done" (a green check: Backed up, Undid), "problem" (a yellow alert on a yellow-tinted card: it didn't work, and the words say what to do), or "" for news (an info sign: Still making captions…). Never a question |
 | `dialogs/common.Alert` (`confirm`, `notice`, `ask_name`) | Every "are you sure" and every error that needs more than a toast |
 | `widgets.button_row()` | The bottom row of every dialog: right-aligned, the main button last |
@@ -295,7 +298,7 @@ subfolder's name) shows under it only for that choice.
   typing.
 - **Updates**: every launch (unless switched off in Settings › General), Listo checks for a newer version just
   after the window is up; if there is one, the update window opens by itself (never over another window, a menu
-  or a batch that's converting), and "Update to …" stays at the bottom of the sidebar. The update window shows
+  or a batch that's converting), and "Update to …" stays in the toolbar. The update window shows
   what's new in Listo's own type (`dialogs/update.Notes`): small section labels, a dot before each change, links in
   the accent, as tall as its words (up to `NOTES_H`). It's the version's CHANGELOG entries (the release's text, made
   by `scripts/release_notes.py`), without the download table or anything GitHub adds. A release's text is never
@@ -317,8 +320,8 @@ Listo talks like a helpful person, not like software.
 - **Few words.** Labels and headings 1–4 words, in plain language: "Double-Check Each File", not "Verify output
   integrity".
 - **Words are never cut off.** Text that might not fit wraps onto another line or ends in "…" with the whole text
-  in its tooltip; fonts are wider on a Mac. Inside anything with a fixed width (start tiles, cards, sidebars, the
-  right panel) words wrap. A place that must stay one line (a sidebar row, the bar under the list, a switch's
+  in its tooltip; fonts are wider on a Mac. Inside anything with a fixed width (start tiles, cards, Settings' sections, the
+  right panel) words wrap. A place that must stay one line (a row in Settings' sections, the bar under the list, a switch's
   label, a file's name) ends in "…" (`widgets.ElidedLabel`, or `ToggleRow`'s own). Never a smaller font to make
   it fit; if neither suits, give it more room or fewer words. A dialog can't be made shorter than its words
   (`widgets.keep_words_whole`, done for every dialog as it opens). `tests/cut_off.py` checks every screen; a new

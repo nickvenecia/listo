@@ -16,7 +16,7 @@ listo/
     style/       tokens.py (every size, color and timing), theme.py (stylesheet, icons, fonts)
     components/  shared pieces: widgets, panels (LeftPanel, SidePanel), glass (the backdrop, the sliding
                  panel), titlebar (the Mac's), player (ClipPlayer)
-    window/      main_window, sidebar, tables (the painted file list), lift (drag to reorder),
+    window/      main_window, places (the title menu's places), tables (the painted file list), lift (drag to reorder),
                  history (undo / redo), jobs (threads)
     panels/      the right panel: convert_to (Convert To), convert (what files become), export (where, names)
     dialogs/     common (alerts, About), settings, shortcuts, feedback, update, captions, preview, trim, storage
