@@ -196,7 +196,7 @@ class Row:
             "cc": bool(self.cc[0]) and s in ("ready", "waiting", "done", "warning"),
             "trim": s in ("ready", "waiting") and k in ("video", "audio"),
             "details": s in ("failed", "done", "skipped", "unsupported", "warning"),
-            "retry": s in ("failed", "canceled", "skipped", "warning"),
+            "retry": s in ("failed", "canceled", "skipped", "warning", "done"),
             "reveal": s in FINISHED_OK,
         }
         return [key for key, _i, _t in BUTTONS if shown[key]]
@@ -270,12 +270,29 @@ def fit_status(text: str, fm: QFontMetrics, width: int) -> str:
     return fm.elidedText(words, Qt.TextElideMode.ElideRight, width)
 
 
+def _card_slice(r: QRectF, first: bool, last: bool) -> QPainterPath:
+    """One row's piece of the list's card: square, with the card's round corners on top of the first row and
+    under the last."""
+    path = QPainterPath()
+    path.setFillRule(Qt.FillRule.WindingFill)
+    if not (first or last):
+        path.addRect(r)
+        return path
+    rad = tokens.RADIUS_LG
+    path.addRoundedRect(r, rad, rad)
+    half = r.height() / 2
+    if not first:
+        path.addRect(r.adjusted(0, 0, 0, -half))
+    if not last:
+        path.addRect(r.adjusted(0, half, 0, 0))
+    return path.simplified()
+
+
 class _Parts:
     """Where everything sits in one row (painting and clicking use the same numbers)."""
 
     def __init__(self, rect: QRect, row: Row, show_buttons: bool):
         i = tokens.ROW_INSET
-        self.shape = QRectF(rect.adjusted(1, i, -1, -i))
         inner = rect.adjusted(tokens.SPACE_1, i, -tokens.SPACE_2, -i)
         self.grip = QRect(inner.left(), inner.top(), tokens.GRIP_W, inner.height())
         th_y = inner.top() + (inner.height() - tokens.THUMB_H) // 2
@@ -362,11 +379,17 @@ class RowPainter(QStyledItemDelegate):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         pt = self.parts(option.rect, row)
         hover = self.view.hover_id == row.item_id
-        fill = tokens.CARD_SELECTED if row.selected else (tokens.ROW_HOVER if hover else "")
-        if fill:
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(theme.qcolor(fill))
-            p.drawRoundedRect(pt.shape, tokens.ROW_R, tokens.ROW_R)
+        # the rows make one card on the work area: they alternate, and only the first and last are rounded
+        n = index.row()
+        if row.selected:
+            fill = tokens.CARD_SELECTED
+        elif hover:
+            fill = tokens.ROW_HOVER
+        else:
+            fill = tokens.ROW_ALT if n % 2 else tokens.CARD
+        p.fillPath(
+            _card_slice(QRectF(option.rect), n == 0, n == index.model().rowCount() - 1), theme.qcolor(fill)
+        )
 
         # the grip you drag it by
         p.setPen(Qt.PenStyle.NoPen)
@@ -407,12 +430,10 @@ class RowPainter(QStyledItemDelegate):
         # third line: the format chip, a trim, then the new name
         x = pt.text.left()
         if not chip_r.isNull():
-            custom = row.fmt[1]
-            p.setPen(theme.qcolor(tokens.ACCENT_EDGE if custom else tokens.BORDER_STRONG))
-            p.setBrush(theme.qcolor(tokens.ACCENT_TINT) if custom else Qt.BrushStyle.NoBrush)
-            p.drawRoundedRect(
-                QRectF(chip_r).adjusted(0.5, 0.5, -0.5, -0.5), tokens.RADIUS_SM, tokens.RADIUS_SM
-            )
+            custom = row.fmt[1]  # a chip is a soft fill, no outline; a file's own format is tinted
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(theme.qcolor(tokens.ACCENT_TINT if custom else tokens.FILL))
+            p.drawRoundedRect(QRectF(chip_r), tokens.RADIUS_SM, tokens.RADIUS_SM)
             p.setFont(_font(tokens.TEXT_XS, tokens.WEIGHT_SEMIBOLD))
             p.setPen(theme.qcolor(tokens.ACCENT if custom else tokens.MUTED))
             p.drawText(chip_r, int(Qt.AlignmentFlag.AlignCenter), row.fmt[0] + ("  ▾" if row.fmt[2] else ""))
@@ -700,6 +721,8 @@ class FileList(QListView):
                     tip = "Change the format for just this file"
                 elif part == "grip":
                     tip = "Drag to change the order (joined videos and timecode follow it)"
+                elif part == "retry" and row.state in FINISHED_OK:
+                    tip = "Convert Again"
                 elif part in dict((k, t) for k, _i, t in BUTTONS):
                     tip = dict((k, t) for k, _i, t in BUTTONS)[part]
                 elif part == "row":

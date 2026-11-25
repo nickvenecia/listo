@@ -1,4 +1,4 @@
-"""The window: places in the sidebar filter the list, the right panel opens and closes, Settings and Feedback."""
+"""The window: places in the title's menu filter the list, the right panel opens and closes, Settings and Feedback."""
 
 from __future__ import annotations
 
@@ -45,12 +45,18 @@ def test_places_filter_the_list(qapp, clips):
         w.add_paths([str(p) for p in clips])
         assert _wait(qapp, lambda: all(it.state != "probing" for it in w.items.values()))
         w._refresh_now()
-        rows = w.sidebar.rows
-        assert rows["all"].count.text() == "4" and rows["video"].count.text() == "2"
-        assert rows["photo"].count.text() == "1" and rows["attention"].count.text() == "1"  # the .txt
+        c = w._place_counts
+        assert c["all"] == 4 and c["video"] == 2 and c["photo"] == 1 and c["attention"] == 1  # the .txt
+        from PySide6.QtWidgets import QMenu
 
-        w.go("video")
+        m = QMenu()
+        w._fill_place_menu(m)  # the title's menu: headings, then each place with its count
+        words = [a.text() for a in m.actions() if not a.isSeparator()]
+        assert words[:3] == ["Files", "All Files\t4", "Videos\t2"] and "Need a Look\t1" in words
+        next(a for a in m.actions() if a.text() == "Videos\t2").trigger()
         assert w.title.text() == "Videos" and len(w.table.shown_ids()) == 2
+        assert w.panel.title_menu.text() == "Video Settings"  # Convert To follows: the videos' settings
+        assert not w.convert.kinds["photo"][0].isVisibleTo(w.convert)
         w.search.setText("C002")
         assert [w.items[i].path.endswith("A001_C002.mov") for i in w.table.shown_ids()] == [True]
         w.search.setText("")
@@ -60,6 +66,12 @@ def test_places_filter_the_list(qapp, clips):
         assert w.pages.currentWidget() is w.nothing  # nothing finished yet: says so instead of a blank list
         w.go("all")
         assert w.pages.currentWidget() is w.table and len(w.table.shown_ids()) == 4
+        assert w.panel.title_menu.text() == "Convert To" and w.convert.kinds["photo"][0].isVisibleTo(
+            w.convert
+        )
+        w.panel.set_scope("photo")  # Convert To's own menu: one kind, the list stays as it is
+        assert w.panel.title_menu.text() == "Photo Settings" and len(w.table.shown_ids()) == 4
+        assert not w.convert.kinds["video"][0].isVisibleTo(w.convert)
     finally:
         w.close()
 
@@ -73,7 +85,9 @@ def test_the_empty_list_shows_the_ways_to_start(qapp, clips):
     try:
         assert w.pages.currentWidget() is w.empty and not w.search.isVisible()  # nothing to search yet
         tiles = w.empty.tiles
-        assert [t.findChild(type(w.title), "StartTitle").text() for t in tiles] == [
+        from PySide6.QtWidgets import QLabel
+
+        assert [t.findChild(QLabel, "StartTitle").text() for t in tiles] == [
             "Add Files…",
             "Add a Folder…",
             "Add a Link…",

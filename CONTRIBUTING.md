@@ -16,7 +16,7 @@ listo/
     style/       tokens.py (every size, color and timing), theme.py (stylesheet, icons, fonts)
     components/  shared pieces: widgets, panels (LeftPanel, SidePanel), glass (the backdrop, the sliding
                  panel), titlebar (the Mac's), player (ClipPlayer)
-    window/      main_window, sidebar, tables (the painted file list), lift (drag to reorder),
+    window/      main_window, places (the title menu's places), tables (the painted file list), lift (drag to reorder),
                  history (undo / redo), jobs (threads)
     panels/      the right panel: convert_to (Convert To), convert (what files become), export (where, names)
     dialogs/     common (alerts, About), settings, shortcuts, feedback, update, captions, preview, trim, storage
@@ -136,7 +136,7 @@ packaging/     Installer files per OS
   and fails on any words cut off (`tests/cut_off.py` finds them); a new screen or dialog gets a line there.
 - UI changes: check screenshots in both looks and a light accent
   (`QT_QPA_PLATFORM=offscreen LISTO_LOOK=light python tests/screenshot.py OUTDIR SAMPLES`, then `dark`, then
-  `LISTO_ACCENT=yellow`).
+  `LISTO_ACCENT=green`).
 - Before a release, the packaged app must pass `--smoke-test` (CI does this on every platform).
 
 ---

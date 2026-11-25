@@ -1,11 +1,11 @@
-"""The window's glass: a flat backdrop behind everything, floating rounded panels with a gentle shadow,
-and the right panel that slides in and out.
+"""The window's frame: one flat backdrop (the frame's material) behind everything, the columns on it (the
+right panel that slides in and out, Settings' sections), and soft shadows for things lifted off the page.
 
-In the spirit of Apple's Liquid Glass (macOS 26+): content sits on the window, tools float above it on
-rounded, lightly see-through panels with a bright hairline edge. Qt can't blur what's behind a widget, so
-the glass is a tinted, translucent fill over the backdrop; everything else (shape, edge, shadow) is the same.
+The look is FeatureSoup's: the columns sit flush with the window's edges, in the frame's own material, with
+no edge and no shadow; what sets the work area apart is its own fill and the curve of its top corners
+(`#Work` in the stylesheet), not a floating panel.
 
-Kept cheap so it stays smooth: the backdrop and each panel are drawn once into pictures and reused until the
+Kept cheap so it stays smooth: the backdrop and each column are drawn once into pictures and reused until the
 window size or the look changes, and the right panel slides as one solid sheet over the content (the file list
 makes room once, not on every frame of the slide).
 """
@@ -13,7 +13,7 @@ makes room once, not on every frame of the slide).
 from __future__ import annotations
 
 from PySide6.QtCore import QEasingCurve, QEvent, QPoint, QRect, QRectF, Qt, QVariantAnimation
-from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from listo.ui.style import theme, tokens
@@ -21,14 +21,7 @@ from listo.ui.style import theme, tokens
 
 def _look() -> tuple:
     """Everything the glass's colors depend on (a new look draws it again)."""
-    return (
-        tokens.WINDOW_TOP,
-        tokens.WINDOW_BOTTOM,
-        tokens.GLASS,
-        tokens.GLASS_STROKE,
-        tokens.GLASS_EDGE,
-        tokens.GLASS_SHADOW,
-    )
+    return (tokens.WINDOW_TOP, tokens.WINDOW_BOTTOM, tokens.GLASS)
 
 
 def _canvas(w: int, h: int, dpr: float) -> QPixmap:
@@ -46,12 +39,11 @@ def paint_backdrop(p: QPainter, rect: QRectF, size) -> None:
     p.fillRect(rect, g)
 
 
-def paint_shadow(p: QPainter, r: QRectF, rad: float = 0, color: str = "") -> None:
-    """A soft, wide, faint shadow all round a panel, so it floats (the Mac's, never a dark smudge). `rad` and
-    `color`: a smaller shape's corners, a deeper shadow (a toast's)."""
-    rad = rad or tokens.GLASS_R
-    base = theme.qcolor(color or tokens.GLASS_SHADOW)
-    steps, spread = tokens.GLASS_SHADOW_STEPS, tokens.GLASS_SHADOW_SPREAD
+def paint_shadow(p: QPainter, r: QRectF, rad: float, color: str = "") -> None:
+    """A soft, wide, faint shadow all round something lifted off the page (a toast), never a dark smudge.
+    `rad`: its corners; `color`: a deeper shadow (a toast's)."""
+    base = theme.qcolor(color or tokens.SHADOW)
+    steps, spread = tokens.SHADOW_STEPS, tokens.SHADOW_SPREAD
     p.setPen(Qt.PenStyle.NoPen)
     for i in range(steps, 0, -1):
         t = i / steps
@@ -60,7 +52,7 @@ def paint_shadow(p: QPainter, r: QRectF, rad: float = 0, color: str = "") -> Non
         grow = spread * t
         path = QPainterPath()
         path.addRoundedRect(  # even all round (Apple's shadows spread evenly), just a touch lower
-            r.adjusted(-grow, -grow + tokens.GLASS_SHADOW_DROP, grow, grow + tokens.GLASS_SHADOW_DROP),
+            r.adjusted(-grow, -grow + tokens.SHADOW_DROP, grow, grow + tokens.SHADOW_DROP),
             rad + grow,
             rad + grow,
         )
@@ -68,29 +60,17 @@ def paint_shadow(p: QPainter, r: QRectF, rad: float = 0, color: str = "") -> Non
 
 
 def paint_glass(p: QPainter, r: QRectF) -> None:
-    """The panel itself, like Apple's glass: one even tone (no gradient) and a single hairline edge, a touch
-    brighter along the top where the light catches it."""
-    rad = tokens.GLASS_R
-    path = QPainterPath()
-    path.addRoundedRect(r, rad, rad)
-    p.fillPath(path, theme.qcolor(tokens.GLASS))
-    line = QPainterPath()
-    line.addRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), rad - 0.5, rad - 0.5)
-    pen = QLinearGradient(r.topLeft(), r.bottomLeft())
-    pen.setColorAt(0, theme.qcolor(tokens.GLASS_EDGE))
-    pen.setColorAt(min(1.0, tokens.GLASS_EDGE_FADE / max(1.0, r.height())), theme.qcolor(tokens.GLASS_STROKE))
-    pen.setColorAt(1, theme.qcolor(tokens.GLASS_STROKE))
-    p.setBrush(Qt.BrushStyle.NoBrush)
-    p.setPen(QPen(pen, 1))
-    p.drawPath(line)
+    """A column itself: the frame's material, square, flush with what's beside it (no edge, no shadow)."""
+    p.fillRect(r, theme.qcolor(tokens.GLASS))
 
 
 def shadow_margin() -> int:
-    return tokens.GLASS_SHADOW_SPREAD + tokens.GLASS_SHADOW_DROP + 2
+    """The room a lifted thing's shadow needs around it."""
+    return tokens.SHADOW_SPREAD + tokens.SHADOW_DROP + 2
 
 
 class GlassRoot(QWidget):
-    """The window's backdrop: the backdrop color, the glass behind each floating panel, and the dock's shadow."""
+    """The window's backdrop: the frame's color and the column behind each panel."""
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -99,20 +79,18 @@ class GlassRoot(QWidget):
         self.dock: Dock | None = None
         self._pix: QPixmap | None = None
         self._pix_key = None
-        self._shadow: QPixmap | None = None
-        self._shadow_key = None
 
     def float(self, w: QWidget) -> None:
-        """Paint glass behind `w` (it must be a descendant)."""
+        """Paint a column behind `w` (it must be a descendant)."""
         self.panels.append(w)
 
     def _panel_rect(self, w: QWidget) -> QRectF | None:
         if not w.isVisible() or w.width() < 2:
             return None
-        return QRectF(w.mapTo(self, QPoint(0, 0)), w.size()).adjusted(0.5, 0.5, -0.5, -0.5)
+        return QRectF(w.mapTo(self, QPoint(0, 0)), w.size())
 
     def _backdrop(self) -> QPixmap:
-        """The backdrop and the panels' glass, drawn once per size and look."""
+        """The backdrop and the columns, drawn once per size and look."""
         rects = [self._panel_rect(w) for w in self.panels]
         dpr = self.devicePixelRatioF()
         key = (self.size(), tuple((r.getRect() if r else None) for r in rects), _look(), dpr)
@@ -123,39 +101,19 @@ class GlassRoot(QWidget):
             paint_backdrop(p, QRectF(self.rect()), self.size())
             for r in rects:
                 if r is not None:
-                    paint_shadow(p, r)
                     paint_glass(p, r)
             p.end()
             self._pix, self._pix_key = pix, key
         return self._pix
 
-    def dock_shadow(self) -> QPixmap:
-        """The dock's shadow, drawn once per size and look (it's reused at every step of the slide)."""
-        d = self.dock
-        dpr = self.devicePixelRatioF()
-        key = (d.size(), _look(), dpr)
-        if self._shadow is None or key != self._shadow_key:
-            m = shadow_margin()
-            pix = _canvas(d.width() + 2 * m, d.height() + 2 * m, dpr)
-            p = QPainter(pix)
-            p.setRenderHint(QPainter.RenderHint.Antialiasing)
-            paint_shadow(p, QRectF(m + 0.5, m + 0.5, d.width() - 1, d.height() - 1))
-            p.end()
-            self._shadow, self._shadow_key = pix, key
-        return self._shadow
-
     def paintEvent(self, e):
         p = QPainter(self)
         p.drawPixmap(0, 0, self._backdrop())
-        d = self.dock
-        if d is not None and d.isVisible():
-            m = shadow_margin()
-            p.drawPixmap(d.x() - m, d.y() - m, self.dock_shadow())
         p.end()
 
 
 class Dock(QWidget):
-    """The right panel's glass sheet: slides in from the right when opened, out when closed. It floats over the
+    """The right panel's column: slides in from the right when opened, out when closed. It floats over the
     window rather than sitting in the layout, so sliding it only moves a picture; the content beside it makes
     room by the window's right margin, step by step with the sheet. While it slides, the list beside it
     (`follower`) is shown as still pictures that move apart or together (a live list is too slow to redraw
@@ -164,7 +122,7 @@ class Dock(QWidget):
     def __init__(self, content: QWidget, root: GlassRoot, top_of: QWidget, body):
         super().__init__(root)
         self.root = root
-        self.top_of = top_of  # a panel in the same row (the sidebar): the dock lines up with it
+        self.top_of = top_of  # a widget in the same row (the list's column): the dock lines up with its top
         self.body = body  # the row's layout: its right margin is the room the dock takes
         self.follower = None  # () -> the widget beside it, if it can slide as pictures (freeze / thaw)
         root.dock = self
@@ -195,19 +153,13 @@ class Dock(QWidget):
 
     def _place(self) -> None:
         rest = self._rest()
-        away = self.root.width() + shadow_margin()  # just past the window's right edge
+        away = self.root.width()  # just past the window's right edge
         x = round(away + (rest.x() - away) * self._t)
-        old = self.geometry()
         self.setGeometry(x, rest.y(), rest.width(), rest.height())
         self.content.setGeometry(0, 0, rest.width(), rest.height())
-        # the shadow moves with it: redraw just around the old and new spots
-        m = shadow_margin()
-        if old.isValid():
-            self.root.update(old.adjusted(-m, -m, m, m))
-        self.root.update(self.geometry().adjusted(-m, -m, m, m))
-        # the content beside it ends a gap before it
-        gap = tokens.GLASS_GAP
-        room = max(gap, self.root.width() - x + gap) if self.isVisible() or self.opened else gap
+        # the content beside it ends where it starts; with it closed, the frame shows a WORK_INSET there
+        inset = tokens.WORK_INSET
+        room = max(inset, self.root.width() - x) if self.isVisible() or self.opened else inset
         mg = self.body.contentsMargins()
         if mg.right() != room:
             self.body.setContentsMargins(mg.left(), mg.top(), room, mg.bottom())
@@ -268,8 +220,8 @@ class Dock(QWidget):
 
     # ------------------------------------------------------------------ drawing
     def _sheet(self) -> QPixmap:
-        """The glass sheet as it looks in place (with the window's backdrop and shadow at its corners),
-        drawn once per size and look, then just copied at every step of the slide."""
+        """The column as it looks in place, drawn once per size and look, then just copied at every step of
+        the slide."""
         rest = self._rest()
         dpr = self.devicePixelRatioF()
         key = (rest, self.root.size(), _look(), dpr)
@@ -279,9 +231,7 @@ class Dock(QWidget):
             p.setRenderHint(QPainter.RenderHint.Antialiasing)
             p.translate(-rest.x(), -rest.y())  # draw in window coordinates
             paint_backdrop(p, QRectF(rest), self.root.size())
-            r = QRectF(rest).adjusted(0.5, 0.5, -0.5, -0.5)
-            paint_shadow(p, r)
-            paint_glass(p, r)
+            paint_glass(p, QRectF(rest))
             p.end()
             self._pix, self._pix_key = pix, key
         return self._pix
@@ -293,7 +243,7 @@ class Dock(QWidget):
 
 
 def glass(w: QWidget) -> QWidget:
-    """Style `w` as a floating glass panel."""
+    """Style `w` as a column on the frame."""
     w.setObjectName(w.objectName() or "Glass")
-    w.setProperty("glass", True)  # the backdrop paints the glass behind it; the widget stays clear
+    w.setProperty("glass", True)  # the backdrop paints the column behind it; the widget stays clear
     return w

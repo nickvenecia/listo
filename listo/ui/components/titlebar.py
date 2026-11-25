@@ -109,32 +109,43 @@ class TitleBar(QWidget):
         e.accept()
 
 
-def toggle_size(window: QWidget) -> None:
-    """Fill the screen, or (if it already does) go to the smallest size, centred. Animated on the Mac."""
+def compact_rect(window: QWidget, area):
+    """Listo's usual size (tokens.WINDOW_SIZE), centred in `area` and never bigger than it has room for."""
     from PySide6.QtCore import QRect
 
-    from listo.ui.style.tokens import WINDOW_MIN
+    from listo.ui.style.tokens import WINDOW_SIZE
 
+    w = max(min(WINDOW_SIZE[0], area.width()), window.minimumWidth())
+    h = max(min(WINDOW_SIZE[1], area.height()), window.minimumHeight())
+    # a screen smaller than the window can be: its top left corner, so the title bar stays on the screen
+    x = area.x() + max(0, (area.width() - w) // 2)
+    y = area.y() + max(0, (area.height() - h) // 2)
+    return QRect(x, y, w, h)
+
+
+def toggle_size(window: QWidget) -> None:
+    """Fill the screen, or (if it already does) go back to the usual compact size, centred. Animated on the Mac."""
     screen = window.screen()
     if screen is None:
         return
     area = screen.availableGeometry()
     g = window.frameGeometry()
     if g.width() >= area.width() - 4 and g.height() >= area.height() - 4:
-        w, h = max(WINDOW_MIN[0], window.minimumWidth()), max(WINDOW_MIN[1], window.minimumHeight())
-        to = QRect(area.x() + (area.width() - w) // 2, area.y() + (area.height() - h) // 2, w, h)
+        to = compact_rect(window, area)
     else:
         to = area
     if not animate_to(window, to):
         window.setGeometry(to)
 
 
-def fill_screen(window: QWidget) -> None:
-    """Fill the screen's free area (everything but the menu bar and Dock)."""
-    screen = window.screen()
+def center_compact(window: QWidget) -> None:
+    """Open at the usual compact size, centred in the screen's free area (everything but the menu bar and Dock)."""
+    from PySide6.QtGui import QGuiApplication
+
+    screen = window.screen() or QGuiApplication.primaryScreen()
     if screen is None:
         return
-    window.setGeometry(screen.availableGeometry())
+    window.setGeometry(compact_rect(window, screen.availableGeometry()))
 
 
 def _objc():

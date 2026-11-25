@@ -1,8 +1,8 @@
-"""The window, full screen: the sidebar (where you are) | the files, with the progress under them | Convert To.
+"""The window: the files (their place is the title's menu), with the progress under them | Convert To.
 
-Drop files in (or + them), pick how they convert on the right, press Convert. The sidebar shows the files by
-kind and by how far along they are; the right panel slides away with its ✕ or Esc and comes back when you
-click a file (or View › Convert Settings).
+Drop files in (or + them), pick how they convert on the right, press Convert. The title's menu shows the files
+by kind and by how far along they are; the right panel slides away with its ✕ and comes back with the toolbar's
+sliders button (or View › Convert Settings).
 """
 
 from __future__ import annotations
@@ -85,6 +85,7 @@ from listo.ui.components.glass import Dock, GlassRoot, glass
 from listo.ui.components.player import space_plays
 from listo.ui.components.widgets import (
     ElidedLabel,
+    InitialsButton,
     SearchField,
     Toast,
     circle_button,
@@ -113,7 +114,7 @@ from listo.ui.window.jobs import (
     ProbeTask,
     TranscribeThread,
 )
-from listo.ui.window.sidebar import PLACES, Sidebar, in_place
+from listo.ui.window.places import PLACES, computer_user, in_place
 from listo.ui.window.tables import FileList, Row
 from listo.ui.window.trash import safe_to_trash, to_trash
 
@@ -123,6 +124,13 @@ _ORPHANS: list = []
 SOON_MS = 60  # how long list-wide refreshes wait to gather changes
 SORTS = {"shot": "Date && Time Shot", "name": "Name"}  # Sort By (&& is a literal "&" in a menu)
 FINAL = ("done", "warning", "failed", "skipped", "canceled", "unsupported")
+RAN = (
+    "done",
+    "warning",
+    "failed",
+    "skipped",
+    "canceled",
+)  # converted, or tried to: Convert Again can redo these
 
 
 @dataclass
@@ -222,7 +230,7 @@ class MainWindow(QMainWindow):
         self.downloads: dict[int, DownloadThread] = {}
         self.caps = capabilities()
         self.selected: set[int] = set()
-        self.place = "all"  # the sidebar's choice: which files the list shows
+        self.place = "all"  # the title menu's choice: which files the list shows
         self.tx = None  # TranscribeThread while captions are being made in the background
         self._tx_pct: dict[int, float] = {}
         self._tx_failed: dict[int, str] = {}
@@ -290,17 +298,12 @@ class MainWindow(QMainWindow):
         self.titlebar = titlebar.install(self)  # Mac: Listo's own title bar (follows the look)
         if self.titlebar is not None:
             outer.addWidget(self.titlebar)
-        gap = tokens.GLASS_GAP
-        body = hbox(spacing=gap)
-        body.setContentsMargins(gap, 0 if self.titlebar is not None else gap, gap, gap)
-        self.sidebar = glass(Sidebar())
-        self.sidebar.picked.connect(self.go)
-        self.sidebar.profile_card.clicked.connect(self._app_menu)
-        self.btn_update = self.sidebar.btn_update
-        self.btn_update.clicked.connect(self.open_update)
-        root.float(self.sidebar)
-        body.addWidget(self.sidebar)
-        body.addWidget(self._build_center(), 1)
+        body = hbox(spacing=0)
+        body.setContentsMargins(
+            tokens.WORK_INSET, 0, tokens.WORK_INSET, 0
+        )  # (the right one: Dock's to change)
+        center = self._build_center()
+        body.addWidget(center, 1)
 
         self.panel = ConvertPanel(self.settings)
         self.convert = self.panel.settings_part  # what the files become
@@ -312,7 +315,7 @@ class MainWindow(QMainWindow):
         self.panel.btn_preview.clicked.connect(self.open_preview)
         self.panel.btn_reset.clicked.connect(self.reset_settings)
         self.panel.close_wanted.connect(lambda: self.show_panel(False))
-        self.dock = Dock(glass(self.panel), root, self.sidebar, body)  # the glass panel on the right, sliding
+        self.dock = Dock(glass(self.panel), root, center, body)  # the column on the right, sliding
         self.dock.follower = lambda: self.pages.currentWidget()
         outer.addLayout(body, 1)
         self.setCentralWidget(root)
@@ -329,13 +332,25 @@ class MainWindow(QMainWindow):
         bar.setFixedHeight(tokens.TOOLBAR_H)
         # three parts: the title on the left, the search centred, the + on the right
         grid = QGridLayout(bar)
-        grid.setContentsMargins(tokens.SPACE_4, 0, tokens.SPACE_2, 0)
+        grid.setContentsMargins(tokens.SPACE_1, 0, 0, 0)
         grid.setHorizontalSpacing(tokens.SPACE_4)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(2, 1)
         left = hbox(spacing=tokens.SPACE_2)
-        self.title = QLabel(PLACES["all"][0])
-        self.title.setObjectName("PageTitle")
+        # where you are: the title is the menu of places, as FeatureSoup's page titles are (Listo's name is
+        # the window's title bar's, never the toolbar's)
+        self.title = QToolButton()
+        self.title.setObjectName("TitleMenu")
+        self.title.setText(PLACES["all"][0])
+        self.title.setIcon(theme.icon("chevron", theme.MUTED, tokens.ICON_SM))
+        self.title.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.title.setLayoutDirection(Qt.LayoutDirection.RightToLeft)  # the chevron after the words
+        self.title.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.title.setToolTip("Show All Files, Videos, Photos, Audio, or Where They Are")
+        self.title.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.title.setMenu(QMenu(self.title))
+        self.title.menu().setLayoutDirection(Qt.LayoutDirection.LeftToRight)  # (not the button's mirroring)
+        self.title.menu().aboutToShow.connect(lambda: self._fill_place_menu(self.title.menu()))
         self.count = ElidedLabel()  # "12", or "3 selected": gives way before the search does
         self.count.setObjectName("PageCount")
         self.count.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -364,18 +379,34 @@ class MainWindow(QMainWindow):
         right.addWidget(self.btn_sort)
         self.btn_add = QToolButton()
         self.btn_add.setObjectName("CirclePrimary")
-        self.btn_add.setIcon(theme.icon("plus", theme.ON_ACCENT))
+        self.btn_add.setIcon(theme.icon("plus", theme.ON_PRIMARY))
         self.btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_add.setToolTip("Add Files, a Folder or a Link (or just drop them in)")
         self.btn_add.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.btn_add.setMenu(self._add_menu(self.btn_add))
-        self.sidebar.btn_add.setMenu(self._add_menu(self.sidebar.btn_add))
         right.addWidget(self.btn_add)
         keys = QKeySequence("Ctrl+Alt+I").toString(QKeySequence.SequenceFormat.NativeText)
         self.btn_panel = circle_button("sliders", f"Show Convert To ({keys})")  # where the panel's ✕ was
         self.btn_panel.clicked.connect(lambda: self.show_panel(True))
         self.btn_panel.hide()  # only while there are files and the panel is closed
         right.addWidget(self.btn_panel)
+        # a newer Listo, when there is one; then who's using it: Settings, Send Feedback, Check for Updates
+        self.btn_update = QPushButton()
+        self.btn_update.setIcon(theme.icon("arrow-down", theme.ACCENT))
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.setToolTip("A newer Listo is out. See what's new and update")
+        self.btn_update.clicked.connect(self.open_update)
+        self.btn_update.hide()
+        right.addWidget(self.btn_update)
+        self.btn_me = InitialsButton()
+        self.btn_me.setObjectName("Me")
+        self.btn_me.setText(_initials(computer_user()))
+        self.btn_me.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_me.setToolTip(f"{computer_user()}: Settings, Feedback and Updates")
+        self.btn_me.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.btn_me.setMenu(QMenu(self.btn_me))
+        self.btn_me.menu().aboutToShow.connect(lambda: self._fill_me_menu(self.btn_me.menu()))
+        right.addWidget(self.btn_me)
         grid.addLayout(right, 0, 2)
         lay.addWidget(bar)
 
@@ -417,12 +448,22 @@ class MainWindow(QMainWindow):
         self.nothing.setAlignment(Qt.AlignmentFlag.AlignCenter)
         for w in (self.empty, self.table, self.nothing):
             self.pages.addWidget(w)
-        lay.addWidget(self.pages, 1)
+        # the work area: the list and the bar under it, set into the frame (its own fill, its top corners curved)
+        work = QFrame()
+        work.setObjectName("Work")
+        self.work = work
+        work_lay = vbox(work, 0, 0)
+        inside = vbox(
+            margins=(tokens.SPACE_3, tokens.SPACE_3, tokens.SPACE_3, 0)
+        )  # the list's card on the canvas
+        inside.addWidget(self.pages)
+        work_lay.addLayout(inside, 1)
+        lay.addWidget(work, 1)
 
         footer = QFrame()
         footer.setObjectName("Totals")
         self.footer = footer
-        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_2, tokens.SPACE_3), tokens.SPACE_2)
+        f = hbox(footer, (tokens.SPACE_4, tokens.SPACE_3, tokens.SPACE_3, tokens.SPACE_3), tokens.SPACE_2)
         texts = QVBoxLayout()
         texts.setSpacing(tokens.SPACE_1)
         top = hbox(spacing=tokens.SPACE_3)
@@ -449,6 +490,12 @@ class MainWindow(QMainWindow):
         texts.addWidget(self.f_bar)
         f.addLayout(texts, 1)
         f.addSpacing(tokens.SPACE_3)
+        # once a batch has run: clearing the list, and the originals (always through a menu or an alert)
+        self.btn_clean = QPushButton("Clean Up")
+        self.btn_clean.setToolTip("Clear the list, or move the originals to the " + TRASH)
+        self.btn_clean.setMenu(QMenu(self.btn_clean))
+        self.btn_clean.menu().aboutToShow.connect(lambda: self._fill_clean_menu(self.btn_clean.menu()))
+        self.btn_clean.hide()
         self.btn_show = QPushButton("Show Files")
         self.btn_show.clicked.connect(self._show_outputs)
         self.btn_show.hide()
@@ -463,11 +510,18 @@ class MainWindow(QMainWindow):
         self.btn_check.hide()
         self.btn_start = QPushButton("Convert")
         self.btn_start.setObjectName("Primary")
-        self.btn_start.clicked.connect(self.start)
-        for b in (self.btn_show, self.btn_pause, self.btn_cancel, self.btn_check, self.btn_start):
+        self.btn_start.clicked.connect(self._convert_pressed)
+        for b in (
+            self.btn_clean,
+            self.btn_show,
+            self.btn_pause,
+            self.btn_cancel,
+            self.btn_check,
+            self.btn_start,
+        ):
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             f.addWidget(b)
-        lay.addWidget(footer)
+        work_lay.addWidget(footer)
         return center
 
     def _add_menu(self, owner: QWidget) -> QMenu:
@@ -535,6 +589,9 @@ class MainWindow(QMainWindow):
         act(e, "Clear Finished", self.clear_finished)
         act(e, "Clear All…", self.clear_all)
         e.addSeparator()
+        self.act_again = act(e, "Convert Finished Files Again", lambda: self.convert_again())
+        self.act_trash = act(e, f"Move Originals to the {TRASH}…", lambda: self.trash_originals_now())
+        e.addSeparator()
         e.addMenu(self._sort_menu(e))
         act(e, "Reset Settings to Defaults…", self.reset_settings)
         e.addSeparator()
@@ -574,24 +631,46 @@ class MainWindow(QMainWindow):
         act(h, f"About {APP_NAME}", self._about, role=QAction.MenuRole.AboutRole)
         bar.setVisible(sys.platform == "darwin")
 
-    def _app_menu(self) -> None:
-        """The profile card's menu: feedback, updates and Settings (the way in on every system)."""
-        card = self.sidebar.profile_card
-        m = QMenu(card)
-        m.addAction(theme.menu_icon("message"), "Send Feedback…", self.open_feedback)
-        m.addAction(theme.menu_icon("arrow-down"), "Check for Updates…", self.check_updates)
+    def _fill_me_menu(self, m: QMenu) -> None:
+        """The initials' menu: Settings, feedback and updates (the way in on every system)."""
+        m.clear()
         s = m.addAction(theme.menu_icon("cog"), "Settings…", self.open_settings)
         s.setShortcut(QKeySequence.StandardKey.Preferences)  # shown for reference; the menu bar's runs it
         s.setShortcutVisibleInContextMenu(True)
-        at = card.mapToGlobal(QPoint(0, 0))
-        m.exec(QPoint(at.x(), at.y() - m.sizeHint().height() - tokens.MENU_GAP))
+        m.addAction(theme.menu_icon("message"), "Send Feedback…", self.open_feedback)
+        m.addAction(theme.menu_icon("arrow-down"), "Check for Updates…", self.check_updates)
 
     # ------------------------------------------------------------------ where you are
+    def _fill_place_menu(self, m: QMenu) -> None:
+        """The title's menu: the places with their counts, as FeatureSoup's page titles list their views.
+        The one showing is in bold."""
+        m.clear()
+        counts = getattr(self, "_place_counts", {})
+        for n, (section, heading) in enumerate((("files", "Files"), ("progress", "Progress"))):
+            if n:
+                m.addSeparator()
+            h = m.addAction(heading)
+            h.setEnabled(False)  # a heading, not a choice
+            for key, (name, icon, sec) in PLACES.items():
+                if sec != section:
+                    continue
+                k = counts.get(key, 0)
+                a = m.addAction(
+                    theme.menu_icon(icon, theme.TEXT if key == self.place else theme.MUTED),
+                    f"{name}\t{k}" if k else name,  # (the count sits at the row's right end)
+                    lambda _c=False, key=key: self.go(key),
+                )
+                if key == self.place:
+                    f = a.font()
+                    f.setBold(True)
+                    a.setFont(f)
+
     def go(self, place: str) -> None:
-        """Show the files in a place of the sidebar (All Files, Videos… To Convert, Done, Need a Look)."""
+        """Show the files in a place (All Files, Videos… To Convert, Done, Need a Look). A kind's place shows
+        that kind's settings in Convert To too."""
         self.place = place if place in PLACES else "all"
-        self.sidebar.select(self.place)
         self.title.setText(PLACES[self.place][0])
+        self.panel.set_scope(self.place if self.place in ("video", "photo", "audio") else None)
         self._apply_filter()
 
     def _shown(self, it: Item) -> bool:
@@ -682,7 +761,6 @@ class MainWindow(QMainWindow):
         current = getattr(QApplication.instance(), "_appearance", "system")
         for k, a in getattr(self, "look_actions", {}).items():
             a.setChecked(k == current)
-        self.sidebar.recolor()
         if self.titlebar is not None:
             self.titlebar.word.setText(theme.wordmark())
         self.table.viewport().update()
@@ -888,11 +966,13 @@ class MainWindow(QMainWindow):
         h = self.history
         self.act_undo.setEnabled(self._text_can_undo() or h.can_undo() or self._settings_timer.isActive())
         self.act_redo.setEnabled(self._text_can_undo(redo=True) or h.can_redo())
+        self.act_again.setEnabled(any(self._redoable(it) for it in self.items.values()))
+        self.act_trash.setEnabled(any(self._trashable(it) for it in self.items.values()))
 
     # ------------------------------------------------------------------ updates (core/update.py)
     def _auto_check_updates(self) -> None:
         """Every launch, quietly, just after the window is up: if there's a newer Listo, the update window
-        says so (and a button stays at the bottom of the sidebar). Not when running from the code (that's
+        says so (and an Update button stays in the toolbar). Not when running from the code (that's
         updated with git) or when switched off in Settings."""
         if self._shut_down() or update.install_kind() == "source" or os.environ.get("LISTO_NO_UPDATE_CHECK"):
             return
@@ -1911,6 +1991,9 @@ class MainWindow(QMainWindow):
 
     def retry_item(self, iid: int) -> None:
         it = self.items.get(iid)
+        if it and it.state in ("done", "warning"):  # a converted row's arrow: convert it again, now
+            self.convert_again([iid])
+            return
         if it and it.url and not it.info and iid not in self.downloads:
             if self.running:  # the download itself failed: try it again
                 self._start_download(it)
@@ -2008,6 +2091,125 @@ class MainWindow(QMainWindow):
             return
         self._take_off(ids)
 
+    # ------------------------------------------------------------------ after a batch
+    def _redoable(self, it: Item) -> bool:
+        """It ran (converted, failed, skipped or stopped) and its original is still here to convert again."""
+        return it.state in RAN and it.info is not None and not it.gone and it.id not in self.active
+
+    def _convert_pressed(self) -> None:
+        """The bar's Convert: what's ready, else every finished file again (with the settings as they are now)."""
+        if any(it.state in ("ready", "probing", "downloading", "linked") for it in self.items.values()):
+            self.start()
+        else:
+            self.convert_again()
+
+    def convert_again(self, ids: list[int] | None = None) -> None:
+        """Put finished files back in line and convert them with today's settings (their new files are named
+        by Saves To's rules, so nothing is overwritten unless Advanced says Replace)."""
+        pick = [i for i in (self.order if ids is None else ids) if i in self.items]
+        redo = [self.items[i] for i in pick if self._redoable(self.items[i])]
+        missing = [it for it in redo if not os.path.isfile(it.path)]
+        redo = [it for it in redo if it not in missing]
+        if not redo:
+            gone = [self.items[i] for i in pick if self.items[i].gone]
+            if gone:
+                self.toast(f"The original is in the {TRASH}, so it can't be converted again.", "problem")
+            elif missing:
+                self.toast(
+                    "The original isn't where it was any more, so it can't be converted again.", "problem"
+                )
+            return
+        log.info("converting %d file%s again", len(redo), "s" if len(redo) != 1 else "")
+        for it in redo:
+            it.result, it.processed, it.message, it.base, it.clock = None, 0.0, "", None, None
+            it.state = "waiting" if self.running else "ready"
+            if self.running and it.id not in self.batch:
+                self.batch.append(it.id)
+            it.card.set_state(it.state)
+            it.card.set_progress(0)
+            self._update_output_name(it)
+        if missing:
+            n = len(missing)
+            self.toast(
+                f"{n} original{'s' if n != 1 else ''} moved or deleted, so left as {'it is' if n == 1 else 'they are'}."
+            )
+        if self.running:
+            self._refresh_footer()
+            self._kick()
+        else:
+            self.start()
+
+    def _trashable(self, it: Item) -> bool:
+        """Converted without a problem, its new file is there, and its original hasn't gone yet (never for a
+        transcript: the words aren't a copy of the clip)."""
+        r = it.result
+        return (
+            it.state == "done"
+            and not it.gone
+            and r is not None
+            and r.output is not None
+            and not self._words_only(it)
+            and it.id not in self.active
+        )
+
+    def trash_originals_now(self, ids: list[int] | None = None) -> None:
+        """Move Originals to the Trash, asked for after a batch (the Clean Up menu, Edit, a row's right-click):
+        after an alert, the originals of files that converted cleanly go to the Trash, never deleted outright."""
+        pick = self.order if ids is None else ids
+        its = [self.items[i] for i in pick if i in self.items and self._trashable(self.items[i])]
+        if not its:
+            return
+        n = len(its)
+        what = Path(its[0].path).name if n == 1 else f"{n} Originals"
+        if not confirm(
+            self,
+            f"Move {what} to the {TRASH}?",
+            f"The new files stay. You can put the original{'s' if n != 1 else ''} back from the {TRASH}.",
+            f"Move to {TRASH}",
+        ):
+            return
+        moved = kept = 0
+        for it in its:
+            if safe_to_trash(it.path, it.result.output) and to_trash(it.path):
+                it.gone = True
+                moved += 1
+                it.card.set_output(it.card.output + f"   ·   Original in the {TRASH}")
+            else:
+                kept += 1
+        log.info(
+            "moved %d original%s to the trash (asked for); %d stayed", moved, "s" if moved != 1 else "", kept
+        )
+        self._trashed = getattr(self, "_trashed", 0) + moved
+        if kept:
+            self.toast(
+                f"{kept} original{'s' if kept != 1 else ''} couldn't go to the {TRASH}. "
+                f"{'It is' if kept == 1 else 'They are'} still where {'it was' if kept == 1 else 'they were'}.",
+                "problem",
+            )
+        elif moved:
+            self.toast(f"{moved} original{'s' if moved != 1 else ''} moved to the {TRASH}", "done")
+        self._schedule_live()
+        self._refresh_footer()
+
+    def _fill_clean_menu(self, m: QMenu) -> None:
+        """The bar's Clean Up: clear what's finished or everything; move the originals to the Trash."""
+        m.clear()
+        finished = sum(1 for it in self.items.values() if it.state in FINAL)
+        a = m.addAction(theme.menu_icon("check"), "Clear Finished", self.clear_finished)
+        a.setEnabled(finished > 0)
+        a = m.addAction(theme.menu_icon("list-x"), "Clear All…", self.clear_all)
+        a.setEnabled(bool(self.items))
+        m.addSeparator()
+        n = sum(1 for it in self.items.values() if self._trashable(it))
+        a = m.addAction(
+            theme.menu_icon("trash"),
+            f"Move {n} Original{'s' if n != 1 else ''} to the {TRASH}…"
+            if n
+            else f"Move Originals to the {TRASH}…",
+            self.trash_originals_now,
+        )
+        a.setEnabled(n > 0)
+
     # ------------------------------------------------------------------ selection
     def _select(self, ids: set[int]) -> None:
         if {i for i in ids if i in self.items} != self.selected:
@@ -2093,7 +2295,25 @@ class MainWindow(QMainWindow):
                 m.addAction(theme.menu_icon("reveal"), "Show the New File", lambda: self.reveal_item(iid))
             if s in ("failed", "done", "skipped", "unsupported", "warning"):
                 m.addAction(theme.menu_icon("info"), "Details…", lambda: self.show_details(iid))
-            if s in ("failed", "canceled", "skipped", "warning"):
+            if s in ("done", "warning"):
+                picked = [i for i in self.order if i in self.selected and self._redoable(self.items[i])]
+                k = len(picked)
+                m.addAction(
+                    theme.menu_icon("retry"),
+                    f"Convert {k} Again" if k > 1 else "Convert Again",
+                    lambda: self.convert_again(picked or [iid]),
+                )
+                trash = [i for i in self.order if i in self.selected and self._trashable(self.items[i])]
+                if trash:
+                    k = len(trash)
+                    m.addAction(
+                        theme.menu_icon("trash"),
+                        f"Move {k} Originals to the {TRASH}…"
+                        if k > 1
+                        else f"Move the Original to the {TRASH}…",
+                        lambda: self.trash_originals_now(trash),
+                    )
+            if s in ("failed", "canceled", "skipped"):
                 m.addAction(theme.menu_icon("retry"), "Try Again", lambda: self.retry_item(iid))
             if not m.isEmpty():
                 m.addSeparator()
@@ -2574,7 +2794,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ footer
     def _refresh_places(self) -> None:
-        """The sidebar's counts, and the list again if a file moved in or out of the place shown."""
+        """The places' counts, and the list again if a file moved in or out of the place shown."""
         counts = dict.fromkeys(PLACES, 0)
         own = dict.fromkeys(("video", "photo", "audio"), 0)  # files with their own format (from their row)
         for it in self.items.values():
@@ -2583,8 +2803,7 @@ class MainWindow(QMainWindow):
                     counts[key] += 1
             if it.override and it.kind in own:
                 own[it.kind] += 1
-        problems = counts["attention"] > 0
-        self.sidebar.set_counts(counts, self.running, problems)
+        self._place_counts = counts  # (the title's menu shows them)
         kinds = {k: counts[k] for k in own}
         kinds["video"] += sum(1 for it in self.items.values() if it.kind == "link")  # a link brings a video
         self.convert.set_kinds(kinds, own)  # "9 Videos", "2 Photos" in Convert To
@@ -2661,6 +2880,8 @@ class MainWindow(QMainWindow):
         items = [self.items[i] for i in self.order]
         n = len(items)
         convertible = [it for it in items if it.state not in ("unsupported",)]
+        waiting = self._convert_after_captions or self._convert_after_links
+        self.btn_clean.setVisible(not self.running and not waiting and any(it.state in RAN for it in items))
         self.f_time.setVisible(self.running)
         self.f_sub.setVisible(not self.running)
         if self._convert_after_captions and not self.running:  # Convert was pressed; Stop calls it off
@@ -2722,11 +2943,14 @@ class MainWindow(QMainWindow):
         self.btn_cancel.hide()
         self.f_bar.hide()
         ready = [it for it in items if it.state in ("ready", "probing", "downloading", "linked")]
-        self.btn_start.setEnabled(bool(ready))
+        again = [] if ready else [it for it in items if self._redoable(it)]  # nothing new: the finished ones
+        self.btn_start.setEnabled(bool(ready or again))
         verb = "Convert && Join" if self.export_panel.joining() else "Convert"  # (&& shows one &)
-        self.btn_start.setText(
-            f"{verb} {len(ready)} File{'s' if len(ready) != 1 else ''}" if ready else "Convert"
-        )
+        if ready or again:
+            k = len(ready or again)
+            self.btn_start.setText(f"{verb} {k} File{'s' if k != 1 else ''}" + ("" if ready else " Again"))
+        else:
+            self.btn_start.setText("Convert")
         if finished and hasattr(self, "_last_summary"):
             d, f, sk, w = self._last_summary
             joined = getattr(self, "_last_joined", 0)
@@ -2818,19 +3042,17 @@ class MainWindow(QMainWindow):
             e.acceptProposedAction()
 
     def show(self) -> None:
-        """The first time: filling the screen (all of it but the menu bar and Dock). After that: the size
-        and place you left it, if it still fits a screen you have (else filling the screen again)."""
+        """The first time: the usual compact size (tokens.WINDOW_SIZE), centred, never bigger than the screen.
+        After that: the size and place you left it, if it still fits a screen you have (else compact again)."""
         if self._restored:
             super().show()
             return
         geo = self.qs.value("geometry")
-        if isinstance(geo, str) and geo and self._fits_after(QByteArray.fromHex(geo.encode())):
-            super().show()
-        elif self.titlebar is not None:  # the Mac: fill the free area ourselves (zooming is unreliable here)
-            titlebar.fill_screen(self)
-            super().show()
-        else:
-            self.showMaximized()
+        if not (isinstance(geo, str) and geo and self._fits_after(QByteArray.fromHex(geo.encode()))):
+            if self.isMaximized() or self.isFullScreen():
+                self.showNormal()
+            titlebar.center_compact(self)
+        super().show()
 
     def _fits_after(self, geo: QByteArray) -> bool:
         """Put the window back where it was; True if that lands wholly on a screen."""
@@ -2893,6 +3115,12 @@ class MainWindow(QMainWindow):
             self.qs.setValue("geometry", bytes(self.saveGeometry().toHex()).decode())
 
         self.qs.setValue("settings", self.settings.to_dict())
+
+
+def _initials(name: str) -> str:
+    """Up to two letters for the round button with your initials ("L" when there's nothing to go on)."""
+    words = [w for w in name.replace("&", " ").split() if w[:1].isalnum()]
+    return "".join(w[0] for w in words[:2]).upper() or "L"
 
 
 def _eta(sec: float) -> str:

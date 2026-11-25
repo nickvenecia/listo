@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.4.0
+- **A new look, from the FeatureSoup family.** Listo now looks like it was made alongside FeatureSoup, in FeatureSoup's own colors: cool graphite grays instead of warm charcoal, Convert To sitting flush with the window's edge, and your files on a card of softly striped rows, set on a work area with curved top corners. Light and dark both
+- **One clear main button.** Convert and the round + are now white on the dark look and near-black on the light one, so the thing to press next always stands out. Buttons, dropdowns and fields are soft fills with no outlines
+- **Color only where it means something**: how far along a file is, a switch that's on, what's done, what needs a look. Picked files and menu rows light up in a calm gray instead of the accent
+- **Marigold is a touch brighter**, FeatureSoup's golden yellow. The separate Yellow accent is gone, since it now looked the same; if you had picked it, Listo uses Marigold
+- **No more sidebar: the title is the menu.** Click **All Files ⌄** at the top for Videos, Photos, Audio, To Convert, Done or Need a Look, each with how many files it holds, the way FeatureSoup's pages work. Your files get the room the sidebar took. Settings, Send Feedback and Check for Updates are under the round button with your initials, top right
+- **Convert To's title is a menu too**: **Every File**, or just the **Video**, **Photo** or **Audio Settings**, so a long panel shows only what you're working on. It follows the list: pick Videos at the top and Convert To shows the video settings
+- Titles are bolder and tighter, and the toolbar is a little shorter
+- **Convert the same files again.** Once a batch is done, the button under the list reads **Convert 9 Files Again** and converts them with the settings as they are now: change a setting, press it, done. You get new files and the earlier ones stay. Right-click a file, or press the round arrow on its row, to convert just that one again
+- **Clean Up**, beside Show Files once a batch has run: **Clear Finished**, **Clear All…**, and **Move Originals to the Trash…**, which asks first and only takes the originals of files that converted without a problem. You can put them back from the Trash. Also in the Edit menu, and on a converted file's right-click. The automatic switch in Advanced is still there for every batch
+- **Listo opens as a compact window** (1200 × 780), centred, instead of filling the screen, so it sits beside the Finder or your editor and files drag straight in. Make it bigger and it remembers. On a Mac, double-clicking the title bar still fills the screen, and double-clicking again brings it back to the compact size
+
 ## 3.3.0
 - **A link downloads when you press Convert, not before.** Add a link and it waits in the list as Ready, so you can set the format, the name and where it's saved first. Convert then downloads it and converts it in one go. Stop puts it back to waiting. Joining, or captions on? The links download first and converting starts by itself once they're in
 - **Move Originals to the Trash** (Convert To › Advanced Options › After Converting, off unless you turn it on): once a file has converted and passed its check, its original goes to the Trash (the Recycle Bin on Windows), so only the new file is left. Nothing is deleted for good: you can put it back from the Trash. A file that failed, was skipped or needs a look keeps its original, and so does a clip you only made a transcript of. Joined clips go once the joined video is finished. The row says "Original in the Trash"

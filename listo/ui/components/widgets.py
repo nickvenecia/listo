@@ -938,6 +938,15 @@ def circle_button(name: str, tip: str, color: str = "") -> QToolButton:
     return b
 
 
+class InitialsButton(QToolButton):
+    """A round button with up to two letters in it (your initials, top right): a circle the height of every
+    control, wider only if its letters ever need more room."""
+
+    def sizeHint(self) -> QSize:
+        need = self.fontMetrics().horizontalAdvance(self.text()) + 2 * tokens.SPACE_2
+        return QSize(max(tokens.CONTROL_H, need), tokens.CONTROL_H)
+
+
 def icon_button(name: str, tip: str, color: str = "", size: int = tokens.ICON_SM) -> QToolButton:
     """A small icon button (the player's play and ‹ ›): round, no frame until you point at it.
     Always has a tooltip. Without a `color` it's the muted grey of the look in use; "" = set the icon later."""

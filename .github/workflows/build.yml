@@ -220,7 +220,14 @@ jobs:
           mkdir -p out dmg
           cp -R dist/Listo.app dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Listo" -srcfolder dmg -ov -format UDZO "out/Listo-${{ matrix.name }}.dmg"
+          # GitHub's Mac machines sometimes answer "Resource busy" while a background scanner (XProtect,
+          # Spotlight) still holds the new image: wait and try again before calling it a failure
+          for try in 1 2 3 4 5; do
+            hdiutil create -volname "Listo" -srcfolder dmg -ov -format UDZO "out/Listo-${{ matrix.name }}.dmg" && break
+            if [ "$try" -eq 5 ]; then exit 1; fi
+            echo "hdiutil couldn't make the image (try $try of 5); trying again"
+            sleep $((try * 10))
+          done
 
       - name: Package (Windows .zip)
         if: runner.os == 'Windows'

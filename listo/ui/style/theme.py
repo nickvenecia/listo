@@ -12,7 +12,6 @@ from PySide6.QtSvg import QSvgRenderer
 from listo.core.paths import ASSETS
 from listo.ui.style import tokens
 from listo.ui.style.tokens import (
-    AVATAR,
     BAR_H,
     CONTROL_H,
     HANDLE,
@@ -22,6 +21,7 @@ from listo.ui.style.tokens import (
     RADIUS,
     RADIUS_LG,
     RADIUS_SM,
+    RADIUS_XL,
     RADIUS_XS,
     SCROLL_INSET,
     SCROLL_MIN,
@@ -48,6 +48,7 @@ from listo.ui.style.tokens import (
     WEIGHT_MEDIUM,
     WEIGHT_REGULAR,
     WEIGHT_SEMIBOLD,
+    WORK_R,
 )
 
 FONT_FAMILY = "Inter"  # everything
@@ -82,112 +83,121 @@ def load_fonts() -> str:
 
 
 def _sheet() -> str:
-    """The app stylesheet in the current colors."""
+    """The app stylesheet in the current colors. The FeatureSoup family's rules: controls are fills with no
+    outline (the 1px edge stays, clear, so focus can show without moving anything), one inverted primary,
+    neutral hover and selection, and the accent only as ink and progress."""
     return f"""
 * {{ outline: none; }}
 QWidget {{ color: {tokens.TEXT}; font-size: {TEXT_MD}px; }}
 QMainWindow, #Root {{ background: {tokens.BG}; }}
 *[glass="true"] {{ background: transparent; border: none; }}
 QDialog {{ background: {tokens.PANEL}; }}
-QToolTip {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border: 1px solid {tokens.BORDER_STRONG};
+QToolTip {{ background: {tokens.POPUP}; color: {tokens.TEXT}; border: 1px solid {tokens.POPUP_EDGE};
     padding: {SPACE_1}px {SPACE_2}px; border-radius: {RADIUS_SM}px; font-size: {TEXT_SM}px; }}
 
 /* ---------- text styles */
 #Wordmark {{ font-size: {TEXT_BRAND}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_BRAND}px; }}
 #TitleBar {{ background: transparent; border: none; }}
 #TitleWordmark {{ font-size: {TEXT_TITLEBAR}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLEBAR}px; }}
-#DialogTitle {{ font-size: {TEXT_XL}px; font-weight: {WEIGHT_BOLD}; }}
+#DialogTitle {{ font-size: {TEXT_XL}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
 #SectionLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 #Hint {{ color: {tokens.FAINT}; font-size: {TEXT_SM}px; }}
 #Muted {{ color: {tokens.MUTED}; }}
 
-/* ---------- areas */
+/* ---------- areas: the frame (toolbar, right panel) and the work area set into it */
 #PanelHeader {{ border: none; }}
-#PanelTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#PanelTitle {{ font-size: {TEXT_TITLE}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
+#Work {{ background: {tokens.WORK}; border: none;
+    border-top-left-radius: {WORK_R}px; border-top-right-radius: {WORK_R}px; }}
+#Work[flat="true"] {{ border-radius: 0; }}
 
-/* ---------- buttons: capsules, all CONTROL_H tall */
+/* ---------- buttons: capsules, all CONTROL_H tall, a fill and no outline */
 QPushButton {{
-    background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {_INNER // 2}px;
-    padding: 0 {SPACE_4}px; min-height: {_INNER}px; max-height: {_INNER}px; font-weight: {WEIGHT_MEDIUM};
+    background: {tokens.RAISED}; border: 1px solid transparent; border-radius: {_INNER // 2}px;
+    padding: 0 {SPACE_4}px; min-height: {_INNER}px; max-height: {_INNER}px; font-weight: {WEIGHT_SEMIBOLD};
 }}
 QPushButton:hover {{ background: {tokens.RAISED_HOVER}; }}
 QPushButton:pressed {{ background: {tokens.RAISED_PRESS}; }}
-QPushButton:disabled {{ color: {tokens.FAINT}; background: {tokens.CARD}; border-color: {tokens.BORDER}; }}
-QPushButton#Primary {{ background: {tokens.ACCENT}; color: {tokens.ON_ACCENT}; border-color: {tokens.ACCENT};
-    font-weight: {WEIGHT_SEMIBOLD}; padding: 0 {SPACE_4}px; }}
-QPushButton#Primary:hover {{ background: {tokens.ACCENT_HOVER}; border-color: {tokens.ACCENT_HOVER}; }}
-QPushButton#Primary:pressed {{ background: {tokens.ACCENT_PRESS}; border-color: {tokens.ACCENT_PRESS}; }}
-QPushButton#Primary:disabled {{ background: {tokens.ACCENT_OFF}; border-color: {tokens.ACCENT_OFF}; color: {tokens.ACCENT_OFF_TEXT}; }}
-QPushButton#Ghost {{ background: transparent; border-color: transparent; color: {tokens.MUTED}; }}
-QPushButton#Ghost:hover {{ background: {tokens.CARD_HOVER}; color: {tokens.TEXT}; }}
-QToolButton#SectionAdd {{ background: transparent; border: none; border-radius: {tokens.SECTION_ADD // 2}px;
-    min-width: {tokens.SECTION_ADD}px; max-width: {tokens.SECTION_ADD}px;
-    min-height: {tokens.SECTION_ADD}px; max-height: {tokens.SECTION_ADD}px; }}
-QToolButton#SectionAdd:hover {{ background: {tokens.CARD_HOVER}; }}
+QPushButton:disabled {{ color: {tokens.FAINT}; background: {tokens.RAISED}; }}
+QPushButton#Primary {{ background: {tokens.PRIMARY}; color: {tokens.ON_PRIMARY}; padding: 0 {SPACE_4}px; }}
+QPushButton#Primary:hover {{ background: {tokens.PRIMARY_HOVER}; }}
+QPushButton#Primary:pressed {{ background: {tokens.PRIMARY_PRESS}; }}
+QPushButton#Primary:disabled {{ background: {tokens.PRIMARY_OFF}; color: {tokens.PRIMARY_OFF_TEXT}; }}
+QPushButton#Ghost {{ background: transparent; color: {tokens.MUTED}; }}
+QPushButton#Ghost:hover {{ background: {tokens.FILL}; color: {tokens.TEXT}; }}
+QToolButton#TitleMenu {{ background: transparent; border: 1px solid transparent; border-radius: {_INNER // 2}px;
+    padding: 0 {SPACE_2}px; min-height: {_INNER}px; max-height: {_INNER}px;
+    font-size: {TEXT_TITLE}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
+QToolButton#TitleMenu:hover, QToolButton#TitleMenu:open {{ background: {tokens.FILL}; }}
+QToolButton#Me {{ background: {tokens.RAISED}; color: {tokens.TEXT}; border: 1px solid transparent; padding: 0;
+    border-radius: {_INNER // 2}px; min-width: {_INNER}px; max-width: {_INNER}px; min-height: {_INNER}px;
+    max-height: {_INNER}px; font-size: {TEXT_XS}px; font-weight: {WEIGHT_BOLD}; }}
+QToolButton#Me:hover, QToolButton#Me:open {{ background: {tokens.RAISED_HOVER}; }}
 *[capsule="true"] {{ border-radius: {_INNER // 2}px; padding-left: {SPACE_4}px; }}
 QPushButton#Disclosure {{ background: transparent; border: none; border-radius: 0; padding: 0; text-align: left;
     color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; min-height: {SMALL_H}px; max-height: {SMALL_H}px; }}
 QPushButton#Disclosure:hover {{ color: {tokens.TEXT}; background: transparent; }}
 QPushButton#Danger {{ color: {tokens.BAD}; }}
-QPushButton#Danger:hover {{ background: {tokens.BAD_TINT}; border-color: {tokens.BAD_EDGE}; }}
+QPushButton#Danger:hover {{ background: {tokens.BAD_TINT}; }}
 QPushButton::menu-indicator, QToolButton::menu-indicator {{ image: none; width: 0; }}
 QPushButton#Token {{ border-radius: {_SMALL_INNER // 2}px; padding: 0 {SPACE_2}px; min-height: {_SMALL_INNER}px;
-    max-height: {_SMALL_INNER}px; font-size: {TEXT_SM}px; background: {tokens.FILL}; border: 1px solid {tokens.FIELD_BORDER}; }}
-QPushButton#Token:hover {{ color: {tokens.ON_ACCENT}; background: {tokens.ACCENT}; border-color: {tokens.ACCENT}; }}
+    max-height: {_SMALL_INNER}px; font-size: {TEXT_SM}px; font-weight: {WEIGHT_MEDIUM}; background: {tokens.RAISED}; }}
+QPushButton#Token:hover {{ background: {tokens.RAISED_HOVER}; }}
 
 /* ---------- round icon buttons */
 QToolButton#IconBtn {{ background: transparent; border: none; border-radius: {SMALL_H // 2}px;
     min-width: {SMALL_H}px; max-width: {SMALL_H}px; min-height: {SMALL_H}px; max-height: {SMALL_H}px; }}
 QToolButton#IconBtn:hover {{ background: {tokens.RAISED}; }}
 QToolButton#Circle, QToolButton#CirclePrimary {{ border-radius: {_INNER // 2}px; min-width: {_INNER}px; max-width: {_INNER}px;
-    min-height: {_INNER}px; max-height: {_INNER}px; }}
-QToolButton#Circle {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; }}
-QToolButton#Circle:hover {{ background: {tokens.RAISED_HOVER}; }}
-QToolButton#CirclePrimary {{ background: {tokens.ACCENT}; border: 1px solid {tokens.ACCENT}; }}
-QToolButton#CirclePrimary:hover {{ background: {tokens.ACCENT_HOVER}; border-color: {tokens.ACCENT_HOVER}; }}
-QToolButton#CirclePrimary:pressed {{ background: {tokens.ACCENT_PRESS}; }}
-#Alert {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {RADIUS_LG}px; }}
-#AlertTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
-QPushButton#DangerFill {{ background: {tokens.BAD}; border: 1px solid {tokens.BAD}; color: {tokens.ON_BAD}; font-weight: {WEIGHT_SEMIBOLD}; }}
-QPushButton#DangerFill:hover {{ background: {tokens.BAD}; border-color: {tokens.BAD}; }}
-#KeyCap {{ background: {tokens.CHIP}; color: {tokens.MUTED}; border-radius: {RADIUS_SM}px; padding: 2px {SPACE_2}px;
+    min-height: {_INNER}px; max-height: {_INNER}px; border: 1px solid transparent; }}
+QToolButton#Circle {{ background: {tokens.RAISED}; }}
+QToolButton#Circle:hover, QToolButton#Circle:open {{ background: {tokens.RAISED_HOVER}; }}
+QToolButton#Circle:pressed {{ background: {tokens.RAISED_PRESS}; }}
+QToolButton#CirclePrimary {{ background: {tokens.PRIMARY}; }}
+QToolButton#CirclePrimary:hover, QToolButton#CirclePrimary:open {{ background: {tokens.PRIMARY_HOVER}; }}
+QToolButton#CirclePrimary:pressed {{ background: {tokens.PRIMARY_PRESS}; }}
+#Alert {{ background: {tokens.CARD}; border: 1px solid {tokens.POPUP_EDGE}; border-radius: {RADIUS_XL}px; }}
+#AlertTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_BOLD}; }}
+QPushButton#DangerFill {{ background: {tokens.BAD}; color: {tokens.ON_BAD}; }}
+QPushButton#DangerFill:hover {{ background: {tokens.BAD}; }}
+#KeyCap {{ background: {tokens.RAISED}; color: {tokens.MUTED}; border-radius: {RADIUS_SM}px; padding: 2px {SPACE_2}px;
     font-weight: {WEIGHT_MEDIUM}; }}
 
-/* ---------- fields + dropdowns: all CONTROL_H tall */
+/* ---------- fields + dropdowns: all CONTROL_H tall, a fill and no outline */
 QComboBox {{ combobox-popup: 0; }}
 QComboBox, QLineEdit {{
     background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
     padding: 0 {SPACE_3}px; min-height: {_INNER}px; max-height: {_INNER}px;
     selection-background-color: {tokens.ACCENT}; selection-color: {tokens.ON_ACCENT};
 }}
-QComboBox:hover, QLineEdit:hover {{ border-color: {tokens.BORDER_HOVER}; }}
-QLineEdit:focus, QComboBox:focus {{ border-color: {tokens.ACCENT}; }}
+QComboBox:hover, QLineEdit:hover, QComboBox:on {{ background: {tokens.FIELD_HOVER}; }}
+QLineEdit:focus, QComboBox:focus {{ border-color: {tokens.FOCUS}; }}
 QComboBox::drop-down {{ border: none; width: {tokens.SPACE_5}px; }}
 QComboBox::down-arrow {{ image: url(__CHEVRON__); width: {SPACE_3}px; height: {SPACE_3}px; }}
 QComboBoxPrivateContainer {{ background: transparent; border: none; }}
 QComboBox QAbstractItemView {{
-    background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {tokens.LIST_R}px;
+    background: {tokens.POPUP}; border: 1px solid {tokens.POPUP_EDGE}; border-radius: {tokens.LIST_R}px;
     padding: {tokens.LIST_INSET - 1}px; outline: none;
-    selection-background-color: {tokens.ACCENT_TINT}; selection-color: {tokens.ACCENT_HOVER};
+    selection-background-color: {tokens.POPUP_HOVER}; selection-color: {tokens.TEXT};
 }}
 QComboBox QAbstractItemView::item {{
     padding: 0 {SPACE_2}px; min-height: {tokens.LIST_ROW_H}px; border-radius: {tokens.LIST_ROW_R}px;
     margin: {tokens.LIST_GAP // 2}px 0;
 }}
-QComboBox QAbstractItemView::item:hover {{ background: {tokens.CARD_HOVER}; }}
-QComboBox QAbstractItemView::item:selected {{ background: {tokens.ACCENT_TINT}; color: {tokens.ACCENT_HOVER}; }}
+QComboBox QAbstractItemView::item:hover {{ background: {tokens.POPUP_HOVER}; }}
+QComboBox QAbstractItemView::item:selected {{ background: {tokens.POPUP_HOVER}; color: {tokens.TEXT}; }}
 QComboBox QAbstractItemView::separator {{ height: 1px; background: {tokens.BORDER_STRONG}; margin: {SPACE_1}px {SPACE_2}px; }}
 
-/* ---------- segmented control: CONTROL_H tall overall */
-#Seg {{ background: {tokens.FILL}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px; }}
-#SegBtn {{ background: transparent; border: none; border-radius: {RADIUS_SM}px; padding: 0 {SPACE_2}px;
-    min-height: {_SEG_INNER}px; max-height: {_SEG_INNER}px; color: {tokens.MUTED}; font-weight: {WEIGHT_MEDIUM}; }}
+/* ---------- segmented control: CONTROL_H tall overall, a capsule track */
+#Seg {{ background: {tokens.SEG_TRACK}; border: 1px solid transparent; border-radius: {CONTROL_H // 2}px; }}
+#SegBtn {{ background: transparent; border: none; border-radius: {_SEG_INNER // 2}px; padding: 0 {SPACE_3}px;
+    min-height: {_SEG_INNER}px; max-height: {_SEG_INNER}px; color: {tokens.MUTED}; font-weight: {WEIGHT_SEMIBOLD}; }}
 #SegBtn:hover {{ color: {tokens.TEXT}; }}
-#SegBtn:checked {{ background: {tokens.RAISED}; border: 1px solid {tokens.FIELD_BORDER}; color: {tokens.TEXT}; font-weight: {WEIGHT_SEMIBOLD}; }}
+#SegBtn:checked {{ background: {tokens.SEG_ON}; color: {tokens.TEXT}; }}
 
-/* ---------- checkboxes, sliders, progress */
+/* ---------- checkboxes, sliders, progress: the accent is what's on and how far along */
 QCheckBox {{ spacing: {SPACE_2}px; min-height: {SMALL_H}px; }}
-QCheckBox::indicator {{ width: {INDICATOR}px; height: {INDICATOR}px; border-radius: {RADIUS_XS}px; border: 1px solid {tokens.BORDER_CHECK}; background: {tokens.CARD}; }}
+QCheckBox::indicator {{ width: {INDICATOR}px; height: {INDICATOR}px; border-radius: {RADIUS_XS}px; border: 1px solid {tokens.BORDER_CHECK}; background: {tokens.FIELD}; }}
 QCheckBox::indicator:checked {{ background: {tokens.ACCENT}; border-color: {tokens.ACCENT}; image: url(__CHECK__); }}
 QCheckBox:disabled {{ color: {tokens.FAINT}; }}
 QSlider {{ min-height: {SMALL_H}px; }}
@@ -210,45 +220,40 @@ QScrollBar::add-line, QScrollBar::sub-line, QScrollBar::add-page, QScrollBar::su
 
 /* ---------- cards in a panel */
 #CardTitle {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
-#GroupTitle {{ font-size: {TEXT_MD}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#GroupTitle {{ font-size: {TEXT_MD}px; font-weight: {WEIGHT_BOLD}; }}
 #GroupNote {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 #Card {{ background: {tokens.BLOCK}; border: none; border-radius: {RADIUS_LG}px; }}
-#Totals {{ background: transparent; border-top: 1px solid {tokens.BORDER}; }}
+#Totals {{ background: transparent; border: none; }}
 #TotalLabel {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
-#TotalValue {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#TotalValue {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_BOLD}; }}
 
-/* ---------- the window: sidebar, toolbar, the file list */
+/* ---------- the window: Settings' sections column, the toolbar, the file list */
 #Sidebar {{ background: transparent; border: none; }}
 #SidebarFoot {{ border: none; }}
-#ProfileCard {{ background: transparent; border-radius: {tokens.NAV_R}px; }}
-#ProfileCard:hover {{ background: {tokens.CARD_HOVER}; }}
-#Avatar {{ background: {tokens.ACCENT_TINT}; color: {tokens.ACCENT}; border-radius: {AVATAR // 2}px;
-    font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}
-#ProfileName {{ font-weight: {WEIGHT_SEMIBOLD}; }}
 #Nav {{ background: transparent; border-radius: {tokens.NAV_R}px; }}
-#Nav:hover {{ background: {tokens.CARD_HOVER}; }}
-#Nav[selected="true"] {{ background: {tokens.ACCENT_TINT}; }}
+#Nav:hover {{ background: {tokens.ROW_HOVER}; }}
+#Nav[selected="true"] {{ background: {tokens.CARD_SELECTED}; }}
 #NavLabel {{ color: {tokens.TEXT}; font-weight: {WEIGHT_MEDIUM}; }}
 #NavHead {{ background: transparent; }}
 #NavHead:hover #SectionLabel {{ color: {tokens.TEXT}; }}
-#Nav[selected="true"] #NavLabel {{ color: {tokens.ACCENT_HOVER}; }}
+#Nav[selected="true"] #NavLabel {{ color: {tokens.TEXT}; font-weight: {WEIGHT_SEMIBOLD}; }}
 #NavCount {{ color: {tokens.FAINT}; font-size: {TEXT_SM}px; }}
 #NavCount[tone="converting"] {{ color: {tokens.ACCENT}; font-weight: {WEIGHT_SEMIBOLD}; }}
 #NavCount[tone="failed"] {{ color: {tokens.BAD}; font-weight: {WEIGHT_SEMIBOLD}; }}
 #Toolbar {{ border: none; }}
 #PageTitle {{ font-size: {TEXT_TITLE}px; font-weight: {WEIGHT_BOLD}; letter-spacing: {TRACK_TITLE}px; }}
-#PageCount {{ color: {tokens.FAINT}; font-size: {TEXT_LG}px; }}
+#PageCount {{ color: {tokens.FAINT}; font-size: {TEXT_MD}px; }}
 #Center {{ background: transparent; }}
 QListView#FileList {{ background: transparent; border: none; outline: none; }}
 
 /* ---------- empty states */
 #EmptyText {{ color: {tokens.MUTED}; }}
-#StartBadge {{ background: {tokens.ACCENT_TINT}; border: none; border-radius: {tokens.START_BADGE // 2}px; }}
-#StartTile {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS_LG}px; }}
-#StartTile:hover {{ background: {tokens.RAISED_HOVER}; border-color: {tokens.BORDER_HOVER}; }}
-#StartTile:focus, #StartTile[hot="true"] {{ border-color: {tokens.ACCENT}; }}
-#StartTile[hot="true"] {{ background: {tokens.ACCENT_TINT}; }}
-#StartTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
+#StartBadge {{ background: {tokens.RAISED}; border: none; border-radius: {tokens.START_BADGE // 2}px; }}
+#StartTile {{ background: {tokens.TILE}; border: 1px solid transparent; border-radius: {RADIUS_LG}px; }}
+#StartTile:hover {{ background: {tokens.TILE_HOVER}; }}
+#StartTile:focus {{ border-color: {tokens.FOCUS}; }}
+#StartTile[hot="true"] {{ background: {tokens.ACCENT_TINT}; border-color: {tokens.ACCENT}; }}
+#StartTitle {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_BOLD}; }}
 #StartDetail {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; }}
 
 /* ---------- the right panel */
@@ -258,13 +263,13 @@ QListView#FileList {{ background: transparent; border: none; outline: none; }}
 #ExTo {{ font-size: {TEXT_LG}px; font-weight: {WEIGHT_SEMIBOLD}; }}
 
 /* ---------- pictures sit on black in both looks, like a monitor */
-#TrimPreview {{ background: {tokens.SCREEN}; border-radius: {RADIUS}px; }}
-#Player {{ background: {tokens.SCREEN}; border-radius: {RADIUS}px; }}
+#TrimPreview {{ background: {tokens.SCREEN}; border-radius: {RADIUS_LG}px; }}
+#Player {{ background: {tokens.SCREEN}; border-radius: {RADIUS_LG}px; }}
 
 /* ---------- Check the Captions */
 QPlainTextEdit#CaptionText {{ background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
     font-family: inherit; font-size: {TEXT_MD}px; padding: {SPACE_1}px {SPACE_2}px; }}
-QPlainTextEdit#CaptionText:focus {{ border-color: {tokens.ACCENT}; }}
+QPlainTextEdit#CaptionText:focus {{ border-color: {tokens.FOCUS}; }}
 QPlainTextEdit#CaptionText[current="true"] {{ background: {tokens.CARD_SELECTED}; border-color: {tokens.ACCENT_EDGE}; }}
 QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {tokens.ACCENT}; }}
 #CueTime {{ color: {tokens.MUTED}; padding-top: {SPACE_1}px; }}
@@ -275,15 +280,15 @@ QPlainTextEdit#CaptionText[current="true"]:focus {{ border-color: {tokens.ACCENT
 QTextBrowser#WhatsNew {{ background: {tokens.FILL}; color: {tokens.TEXT}; border: none; border-radius: {RADIUS_LG}px; }}
 QPlainTextEdit#Field {{ background: {tokens.FIELD}; border: 1px solid {tokens.FIELD_BORDER}; border-radius: {RADIUS}px;
     padding: {SPACE_1}px {SPACE_2}px; color: {tokens.TEXT}; font-size: {TEXT_MD}px; font-family: "{FONT_FAMILY}"; }}
-QPlainTextEdit#Field:hover {{ border-color: {tokens.BORDER_HOVER}; }}
-QPlainTextEdit#Field:focus {{ border-color: {tokens.ACCENT}; }}
-QPlainTextEdit {{ background: {tokens.WELL}; border: 1px solid {tokens.BORDER}; border-radius: {RADIUS}px;
+QPlainTextEdit#Field:hover {{ background: {tokens.FIELD_HOVER}; }}
+QPlainTextEdit#Field:focus {{ border-color: {tokens.FOCUS}; }}
+QPlainTextEdit {{ background: {tokens.WELL}; border: none; border-radius: {RADIUS}px;
     font-family: "{MONO_FAMILY}"; font-size: {TEXT_XS}px; color: {tokens.MUTED}; }}
-QMenu {{ background: {tokens.RAISED}; border: 1px solid {tokens.BORDER_STRONG}; border-radius: {tokens.LIST_R}px;
+QMenu {{ background: {tokens.POPUP}; border: 1px solid {tokens.POPUP_EDGE}; border-radius: {tokens.LIST_R}px;
     padding: {tokens.LIST_INSET - 1}px; }}
 QMenu::item {{ padding: 0 {SPACE_4}px 0 {SPACE_2}px; min-height: {tokens.LIST_ROW_H}px; border-radius: {tokens.LIST_ROW_R}px;
     margin: {tokens.LIST_GAP // 2}px 0; }}
-QMenu::item:selected {{ background: {tokens.ACCENT_TINT}; color: {tokens.ACCENT_HOVER}; }}
+QMenu::item:selected {{ background: {tokens.POPUP_HOVER}; color: {tokens.TEXT}; }}
 QMenu::item:disabled {{ color: {tokens.FAINT}; }}
 QMenu::icon {{ padding-left: {SPACE_2}px; }}
 QMenu::separator {{ height: 1px; background: {tokens.BORDER_STRONG}; margin: {SPACE_1}px {SPACE_2}px; }}
@@ -291,7 +296,7 @@ QMenu::section {{ color: {tokens.FAINT}; padding: {SPACE_2}px {SPACE_2}px 0 {SPA
 """
 
 
-# Line icons on a 24×24 grid, stroke 2, round caps and joins (original drawings, no company's marks).
+# Line icons on a 24×24 grid, stroke ICON_STROKE, round caps and joins (original drawings, no company's marks).
 _SVG = {
     "alert": '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
     "arrow-down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
@@ -328,7 +333,7 @@ _SVG = {
     "sliders": '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
     "sort": '<path d="m3 16 4 4 4-4M7 20V4M21 8l-4-4-4 4M17 4v16"/>',
     "stop": '<rect x="6" y="6" width="12" height="12" rx="2"/>',
-    "updown": '<path d="m8 9 4-4 4 4M8 15l4 4 4-4"/>',
+    "trash": '<path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="m6 7 1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12"/><path d="M10 11v6M14 11v6"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a6 6 0 0 1 6-6h2a6 6 0 0 1 6 6v1"/>',
     "x": '<path d="M18 6 6 18M6 6l12 12"/>',
 }
@@ -362,8 +367,8 @@ def pixmap(
 
 # icons are asked for by color value (theme.MUTED); remember which token that was, so they follow a switch
 _ICON_TOKENS = (
-    "TEXT", "MUTED", "FAINT", "ACCENT", "ON_ACCENT", "BAD", "WARN", "GOOD", "ACCENT_HOVER", "SCREEN_TEXT",
-    "SCREEN_FAINT",
+    "TEXT", "MUTED", "FAINT", "ACCENT", "ON_ACCENT", "ON_PRIMARY", "BAD", "WARN", "GOOD", "ACCENT_HOVER",
+    "SCREEN_TEXT", "SCREEN_FAINT",
 )  # fmt: skip
 
 
@@ -383,7 +388,7 @@ class _Themed(QIconEngine):
 
     def _color(self, mode) -> str:
         if self.menu and mode in (QIcon.Mode.Active, QIcon.Mode.Selected):
-            return tokens.ACCENT_HOVER
+            return tokens.TEXT
         if mode == QIcon.Mode.Disabled:
             return tokens.FAINT
         return getattr(tokens, self.key) if self.key else self.color
@@ -405,7 +410,7 @@ def icon(name: str, color: str = "", size: int = ICON) -> QIcon:
 
 
 def menu_icon(name: str, color: str = "", size: int = ICON) -> QIcon:
-    """For menu rows: on the highlighted row (the accent's tint) the icon takes the accent, like its words."""
+    """For menu rows: on the highlighted row the icon brightens to the words' color, like its words."""
     color = color or tokens.MUTED
     return QIcon(_Themed(name, _token_of(color), color, size, True))
 
